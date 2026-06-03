@@ -1,0 +1,126 @@
+[defaults]
+document_parser = "auto_document_parser"
+embedding = "bge_m3_local"
+vector_store = "qdrant_local"
+ocr = "aliyun_ocr"
+search = "talent_source_catalog"
+mcp = "disabled_mcp"
+structured_output = "outlines_structured_output"
+database = "disabled_database"
+llm = "token_plan_anthropic"
+
+[services.auto_document_parser]
+type = "document_parser"
+provider = "auto"
+description = "Route Markdown/TXT to plain text and rich documents to Docling."
+
+[services.docling_document_parser]
+type = "document_parser"
+provider = "docling"
+description = "Parse PDF/DOCX/image documents through Docling."
+
+[services.plain_text_document_parser]
+type = "document_parser"
+provider = "plain_text"
+description = "Read Markdown/TXT files directly."
+
+[services.bge_m3_local]
+type = "embedding"
+provider = "sentence_transformers"
+model_name = "BAAI/bge-m3"
+device = "auto"
+batch_size = 8
+vector_size = 1024
+show_progress_bar = true
+description = "Local multilingual embedding model, optimized for the 4090 MVP."
+
+[services.qdrant_local]
+type = "vector_store"
+provider = "qdrant_local"
+path = "./qdrant_mvp_store"
+collection_name = "robot_talents"
+distance = "cosine"
+embedding_service = "bge_m3_local"
+vector_size = 1024
+description = "Local file-backed Qdrant store for MVP private data."
+
+[services.docling_ocr]
+type = "ocr"
+provider = "docling"
+description = "Default OCR/multimodal document extraction backend."
+
+[services.aliyun_ocr]
+type = "ocr"
+provider = "aliyun_ocr"
+access_key_id_env = "ALIBABA_CLOUD_ACCESS_KEY_ID"
+access_key_secret_env = "ALIBABA_CLOUD_ACCESS_KEY_SECRET"
+region_id = "cn-hangzhou"
+endpoint = "ocr-api.cn-hangzhou.aliyuncs.com"
+description = "Alibaba Cloud OCR RecognizeGeneral provider for image/document text extraction."
+
+[services.disabled_search]
+type = "search"
+provider = "disabled"
+description = "Placeholder. Configure a concrete search provider before use."
+
+[services.talent_source_catalog]
+type = "search"
+provider = "source_catalog"
+skill_name = "search_data_sources"
+description = "Local search source catalog for recruiting, company, academic, patent, funding, and conference intelligence."
+
+[services.disabled_mcp]
+type = "mcp"
+provider = "disabled"
+description = "Placeholder. Configure MCP servers/tools before use."
+
+[services.outlines_structured_output]
+type = "structured_output"
+provider = "outlines"
+model_service = "token_plan_anthropic"
+description = "Structured generation facade using Outlines. Requires a configured model service before live generation."
+
+[services.token_plan_anthropic]
+type = "llm"
+provider = "anthropic_compatible"
+base_url = "https://token-plan-cn.xiaomimimo.com/anthropic"
+api_key_env = "ANTHROPIC_COMPATIBLE_API_KEY"
+model = "mimo-v2.5-pro"
+anthropic_version = "2023-06-01"
+timeout_seconds = 60
+description = "Anthropic-compatible token-plan endpoint."
+
+[services.disabled_llm]
+type = "llm"
+provider = "disabled"
+description = "Placeholder. Configure a local or API LLM before structured generation."
+
+[services.disabled_database]
+type = "database"
+provider = "disabled"
+description = "Placeholder. Configure PostgreSQL DATABASE_URL before writing metadata."
+
+[skills.robot_role_metadata]
+module = "app.skills.tech_space"
+entrypoint = "ROBOT_ROLES_METADATA"
+description = "Static 12-role home robotics metadata dictionary."
+
+[skills.robot_team_profiles]
+module = "app.skills.tech_space"
+entrypoint = "ROBOT_TEAM_PROFILES"
+description = "Six cross-disciplinary team profiles for embodied AI commercialization."
+
+[skills.robot_capability_standards]
+module = "app.skills.tech_space"
+entrypoint = "CAPABILITY_STANDARDS"
+description = "Canonical capability IDs, keywords, and evaluation nodes."
+
+[skills.search_data_sources]
+module = "app.skills.search_sources"
+entrypoint = "SEARCH_DATA_SOURCES"
+description = "Search source catalog and compliant access patterns for talent intelligence."
+
+[skills.home_robot_recruiting_scenarios]
+module = "app.skills.recruiting_scenarios"
+entrypoint = "HOME_ROBOT_RECRUITING_SCENARIOS"
+description = "Scenario A/B/C/D workflows for home robot job profiling, talent mapping, candidate evaluation, and weekly reports."
