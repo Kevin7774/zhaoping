@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import ProjectBase
@@ -64,4 +65,41 @@ class JobCandidate(ProjectBase):
     __table_args__ = (
         CheckConstraint("match_score >= 0 AND match_score <= 100", name="ck_job_candidates_match_score_range"),
         UniqueConstraint("job_id", "candidate_id", name="uq_job_candidates_job_candidate"),
+    )
+
+
+class CandidateSearchSchedule(ProjectBase):
+    __tablename__ = "candidate_search_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=360)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_task_id: Mapped[str | None] = mapped_column(String(64))
+    last_status: Mapped[str | None] = mapped_column(String(32))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint("interval_minutes >= 15 AND interval_minutes <= 10080", name="ck_candidate_search_schedule_interval"),
+        UniqueConstraint("project_id", "job_id", name="uq_candidate_search_schedule_project_job"),
     )

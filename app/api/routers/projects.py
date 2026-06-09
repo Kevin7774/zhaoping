@@ -8,7 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_project_session
-from app.models import Candidate, Job, JobCandidate, Project
+from app.models import Candidate, CandidateSearchSchedule, Job, JobCandidate, Project
+from app.schemas.candidate_search_schedule import (
+    CandidateSearchScheduleListResponse,
+    CandidateSearchScheduleRequest,
+    CandidateSearchScheduleResponse,
+)
 from app.schemas.candidate import CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
 from app.schemas.project import ProjectResponse
@@ -165,11 +170,105 @@ def get_project_unique_candidates(
     ]
 
 
+@router.get(
+    "/{project_id}/candidate-search-schedules",
+    response_model=CandidateSearchScheduleListResponse,
+    response_model_exclude_none=True,
+)
+def list_candidate_search_schedules(
+    project_id: str,
+    session: Session = Depends(get_project_session),
+) -> CandidateSearchScheduleListResponse:
+    _require_project(session, project_id)
+    rows = session.execute(
+        select(CandidateSearchSchedule, Job)
+        .join(Job, Job.id == CandidateSearchSchedule.job_id)
+        .where(CandidateSearchSchedule.project_id == project_id)
+        .order_by(Job.id)
+    ).all()
+    return CandidateSearchScheduleListResponse(
+        items=[_candidate_search_schedule_response(schedule, job) for schedule, job in rows]
+    )
+
+
+@router.put(
+    "/{project_id}/jobs/{job_id}/candidate-search-schedule",
+    response_model=CandidateSearchScheduleResponse,
+    response_model_exclude_none=True,
+)
+def upsert_candidate_search_schedule(
+    project_id: str,
+    job_id: str,
+    request: CandidateSearchScheduleRequest,
+    session: Session = Depends(get_project_session),
+) -> CandidateSearchScheduleResponse:
+    _require_project(session, project_id)
+    job = session.get(Job, job_id)
+    if job is None or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Job not found in project: {job_id}")
+    schedule = session.scalar(
+        select(CandidateSearchSchedule).where(
+            CandidateSearchSchedule.project_id == project_id,
+            CandidateSearchSchedule.job_id == job_id,
+        )
+    )
+    now = _dt_now()
+    if schedule is None:
+        schedule = CandidateSearchSchedule(project_id=project_id, job_id=job_id)
+        session.add(schedule)
+    was_enabled = bool(schedule.enabled)
+    schedule.enabled = request.enabled
+    schedule.interval_minutes = request.interval_minutes
+    if request.enabled and (not was_enabled or schedule.next_run_at is None):
+        schedule.next_run_at = now
+    if not request.enabled:
+        schedule.next_run_at = None
+    schedule.updated_at = now
+    session.commit()
+    session.refresh(schedule)
+    return _candidate_search_schedule_response(schedule, job)
+
+
 def _require_project(session: Session, project_id: str) -> Project:
     project = session.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return project
+
+
+def _candidate_search_schedule_response(
+    schedule: CandidateSearchSchedule,
+    job: Job,
+) -> CandidateSearchScheduleResponse:
+    last_status = _schedule_task_status(schedule) or schedule.last_status
+    return CandidateSearchScheduleResponse(
+        id=schedule.id,
+        project_id=schedule.project_id,
+        job_id=schedule.job_id,
+        job_title=job.title,
+        enabled=schedule.enabled,
+        interval_minutes=schedule.interval_minutes,
+        next_run_at=_utc_datetime(schedule.next_run_at),
+        last_run_at=_utc_datetime(schedule.last_run_at),
+        last_task_id=schedule.last_task_id,
+        last_status=last_status,
+        last_error=schedule.last_error,
+    )
+
+
+def _schedule_task_status(schedule: CandidateSearchSchedule) -> str | None:
+    if not schedule.last_task_id:
+        return None
+    try:
+        from app.core import orchestrator
+
+        snapshot = orchestrator.task_store.snapshot(schedule.last_task_id)
+    except Exception:
+        return None
+    if not snapshot:
+        return None
+    status = snapshot.get("status")
+    return str(status) if status else None
 
 
 def _set_pagination_headers(response: Response, *, total_count: int, skip: int, limit: int) -> None:
@@ -297,7 +396,13 @@ def _rounded_score(value: object | None) -> int:
     return int(round(float(value)))
 
 
-def _utc_datetime(value: datetime) -> datetime:
+def _dt_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)

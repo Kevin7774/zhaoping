@@ -138,6 +138,8 @@ describe("ProjectDetailPage backend hardening", () => {
   function mockBackend(options: {
     candidates?: unknown[];
     candidateResponses?: unknown[][];
+    schedules?: unknown[];
+    updatedSchedule?: unknown;
     projectStatus?: number;
     integrations?: Record<string, string>;
     latestReport?: unknown;
@@ -149,6 +151,25 @@ describe("ProjectDetailPage backend hardening", () => {
       if (url === "/api/integrations/status") return jsonResponse(integrationsPayload(options.integrations));
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload, options.projectStatus ?? 200);
       if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
+      if (url === "/api/projects/project_2026_ai_team/candidate-search-schedules") {
+        return jsonResponse({ items: options.schedules ?? [] });
+      }
+      if (url === "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/candidate-search-schedule") {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse(
+          options.updatedSchedule ?? {
+            id: 1,
+            projectId: "project_2026_ai_team",
+            jobId: "job_vla_algorithm",
+            jobTitle: "VLA / 具身智能算法工程师",
+            enabled: body.enabled,
+            intervalMinutes: body.intervalMinutes,
+            nextRunAt: body.enabled ? "2026-06-09T12:00:00Z" : null,
+            lastTaskId: null,
+            lastStatus: null,
+          },
+        );
+      }
       if (url === "/api/projects/project_2026_ai_team/reports/latest") {
         return options.latestReport
           ? jsonResponse(options.latestReport)
@@ -371,6 +392,46 @@ describe("ProjectDetailPage backend hardening", () => {
       String(url).startsWith("/api/projects/project_2026_ai_team/candidates"),
     );
     expect(candidateApiCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("configures automatic candidate search through backend schedule API", async () => {
+    mockBackend({
+      schedules: [
+        {
+          id: 1,
+          projectId: "project_2026_ai_team",
+          jobId: "job_vla_algorithm",
+          jobTitle: "VLA / 具身智能算法工程师",
+          enabled: false,
+          intervalMinutes: 360,
+          nextRunAt: null,
+          lastTaskId: null,
+          lastStatus: null,
+        },
+      ],
+    });
+
+    renderProjectPage();
+
+    expect(await screen.findByText("自动搜候选人")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "开启自动搜索 VLA / 具身智能算法工程师" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/candidate-search-schedule",
+        expect.objectContaining({ method: "PUT" }),
+      ),
+    );
+    const updateCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        url === "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/candidate-search-schedule" &&
+        init?.method === "PUT",
+    );
+    expect(JSON.parse(String(updateCall?.[1]?.body))).toMatchObject({
+      enabled: true,
+      intervalMinutes: 360,
+    });
+    expect(await screen.findByText("自动搜候选人已开启")).toBeTruthy();
   });
 
   it("starts candidate evaluation and weekly report through backend scenarios", async () => {

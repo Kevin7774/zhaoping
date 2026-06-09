@@ -9,6 +9,7 @@ import {
   createSegment,
   confirmTask,
   cancelTask,
+  getCandidateSearchSchedules,
   getIntegrationsStatus,
   getLatestWeeklyReport,
   getOutreachHistory,
@@ -24,6 +25,8 @@ import {
   runWeeklyReport,
   saveWeeklyReport,
   sendOutreachDraft,
+  updateCandidateSearchSchedule,
+  type CandidateSearchSchedule,
   type IntegrationsStatusResponse,
   type JobMatchResponse,
   type OutreachDraft,
@@ -99,6 +102,12 @@ function summaryFrom(jobs: JobProfile[], candidates: Candidate[]) {
     pendingEmailCount: null,
     weeklyInterviewCount: null,
   };
+}
+
+function upsertSchedule(items: CandidateSearchSchedule[], updated: CandidateSearchSchedule) {
+  const exists = items.some((item) => item.jobId === updated.jobId);
+  if (!exists) return [...items, updated];
+  return items.map((item) => (item.jobId === updated.jobId ? updated : item));
 }
 
 function workflowStatus(
@@ -303,6 +312,8 @@ export function ProjectDetailPage() {
   const [persistedWeeklyReport, setPersistedWeeklyReport] = useState<WeeklyReport | null>(null);
   const [matchResult, setMatchResult] = useState<{ jobName: string; response: JobMatchResponse } | null>(null);
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
+  const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
+  const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeTaskAction, setActiveTaskAction] = useState<RunProjectScenarioAction | "weekly_report" | null>(null);
@@ -381,6 +392,19 @@ export function ProjectDetailPage() {
     loadLatestReport();
   }, [loadLatestReport]);
 
+  const loadCandidateSearchSchedules = useCallback(async () => {
+    try {
+      const response = await getCandidateSearchSchedules(projectId);
+      setCandidateSearchSchedules(response.items);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "自动搜索配置加载失败");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadCandidateSearchSchedules();
+  }, [loadCandidateSearchSchedules]);
+
   useEffect(() => {
     let cancelled = false;
     setIntegrations(null);
@@ -424,6 +448,8 @@ export function ProjectDetailPage() {
     setPersistedWeeklyReport(null);
     setMatchResult(null);
     setMatchingJobId(null);
+    setCandidateSearchSchedules([]);
+    setScheduleBusyJobId(null);
   }, [projectId]);
 
   useEffect(() => {
@@ -690,6 +716,44 @@ export function ProjectDetailPage() {
       setToast(error instanceof Error ? error.message : "岗位匹配失败");
     } finally {
       setMatchingJobId(null);
+    }
+  };
+
+  const handleUpdateCandidateSearchSchedule = async (job: JobProfile, enabled: boolean) => {
+    if (!searchGate.enabled) {
+      setToast(searchGate.reason || "搜索服务不可用");
+      return;
+    }
+    const current = candidateSearchSchedules.find((item) => item.jobId === job.jobProfileId);
+    setScheduleBusyJobId(job.jobProfileId);
+    try {
+      const updated = await updateCandidateSearchSchedule(projectId, job.jobProfileId, {
+        enabled,
+        intervalMinutes: current?.intervalMinutes ?? 360,
+      });
+      setCandidateSearchSchedules((items) => upsertSchedule(items, updated));
+      setToast(enabled ? "自动搜候选人已开启" : "自动搜候选人已关闭");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "自动搜索配置保存失败");
+    } finally {
+      setScheduleBusyJobId(null);
+    }
+  };
+
+  const handleCandidateSearchIntervalChange = async (job: JobProfile, intervalMinutes: number) => {
+    const current = candidateSearchSchedules.find((item) => item.jobId === job.jobProfileId);
+    setScheduleBusyJobId(job.jobProfileId);
+    try {
+      const updated = await updateCandidateSearchSchedule(projectId, job.jobProfileId, {
+        enabled: current?.enabled ?? false,
+        intervalMinutes,
+      });
+      setCandidateSearchSchedules((items) => upsertSchedule(items, updated));
+      setToast("自动搜索频率已更新");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "自动搜索频率保存失败");
+    } finally {
+      setScheduleBusyJobId(null);
     }
   };
 
@@ -1002,6 +1066,15 @@ export function ProjectDetailPage() {
         </div>
 
         <aside className="space-y-5 xl:sticky xl:top-[84px] xl:self-start">
+          <CandidateAutoSearchCard
+            jobs={jobs}
+            schedules={candidateSearchSchedules}
+            busyJobId={scheduleBusyJobId}
+            canUpdate={searchGate.enabled}
+            disabledReason={searchGate.reason}
+            onToggle={handleUpdateCandidateSearchSchedule}
+            onIntervalChange={handleCandidateSearchIntervalChange}
+          />
           <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">筛选条件</h2>
@@ -1296,5 +1369,87 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function CandidateAutoSearchCard({
+  jobs,
+  schedules,
+  busyJobId,
+  canUpdate,
+  disabledReason,
+  onToggle,
+  onIntervalChange,
+}: {
+  jobs: JobProfile[];
+  schedules: CandidateSearchSchedule[];
+  busyJobId: string | null;
+  canUpdate: boolean;
+  disabledReason?: string;
+  onToggle: (job: JobProfile, enabled: boolean) => void;
+  onIntervalChange: (job: JobProfile, intervalMinutes: number) => void;
+}) {
+  const scheduleByJobId = new Map(schedules.map((schedule) => [schedule.jobId, schedule]));
+  return (
+    <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">自动搜候选人</h2>
+        <span className={canUpdate ? "text-[12px] text-[#16A34A]" : "text-[12px] text-[#EF4444]"}>
+          {canUpdate ? "可用" : "不可用"}
+        </span>
+      </div>
+      <div className="mt-4 space-y-3">
+        {jobs.map((job) => {
+          const schedule = scheduleByJobId.get(job.jobProfileId);
+          const enabled = Boolean(schedule?.enabled);
+          const busy = busyJobId === job.jobProfileId;
+          return (
+            <div key={job.jobProfileId} className="rounded-[10px] border border-[#EEF2F7] px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
+                  <div className="mt-1 text-[12px] text-[#6B7280]">
+                    {enabled ? "已开启" : "未开启"} · 下次：{schedule?.nextRunAt ? formatDateTime(schedule.nextRunAt) : "—"}
+                  </div>
+                  {schedule?.lastTaskId ? (
+                    <div className="mt-1 text-[11px] text-[#9CA3AF]">
+                      最近任务：{schedule.lastTaskId} · {schedule.lastStatus || "unknown"}
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggle(job, !enabled)}
+                  disabled={busy || !canUpdate}
+                  title={!canUpdate ? disabledReason : undefined}
+                  aria-label={`${enabled ? "关闭" : "开启"}自动搜索 ${job.roleName}`}
+                  className={
+                    enabled
+                      ? "h-8 shrink-0 rounded-[9px] border border-[#D1D5DB] bg-white px-3 text-[12px] font-medium text-[#374151] disabled:cursor-not-allowed disabled:opacity-50"
+                      : "h-8 shrink-0 rounded-[9px] bg-[#2563EB] px-3 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  }
+                >
+                  {busy ? "保存中" : enabled ? "关闭" : "开启"}
+                </button>
+              </div>
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-[12px] text-[#6B7280]">频率</span>
+                <select
+                  value={schedule?.intervalMinutes ?? 360}
+                  onChange={(event) => onIntervalChange(job, Number(event.target.value))}
+                  disabled={busy || !canUpdate}
+                  className="h-9 w-full rounded-[9px] border border-[#E5E7EB] bg-white px-2.5 text-[13px] text-[#111827] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value={60}>每 1 小时</option>
+                  <option value={180}>每 3 小时</option>
+                  <option value={360}>每 6 小时</option>
+                  <option value={1440}>每天</option>
+                </select>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

@@ -130,6 +130,24 @@ export type JobMatchResponse = {
   [key: string]: unknown;
 };
 
+export type CandidateSearchSchedule = {
+  id: number;
+  projectId: string;
+  jobId: string;
+  jobTitle: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  nextRunAt?: string | null;
+  lastRunAt?: string | null;
+  lastTaskId?: string | null;
+  lastStatus?: string | null;
+  lastError?: string | null;
+};
+
+export type CandidateSearchScheduleListResponse = {
+  items: CandidateSearchSchedule[];
+};
+
 type ProjectBackendResponse = {
   id?: string;
   name?: string;
@@ -329,6 +347,23 @@ export function runJobMatch(query: string, topK = 5) {
     query,
     top_k: topK,
   });
+}
+
+export function getCandidateSearchSchedules(projectId: string) {
+  return apiClient.get<CandidateSearchScheduleListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/candidate-search-schedules`,
+  );
+}
+
+export function updateCandidateSearchSchedule(
+  projectId: string,
+  jobId: string,
+  request: { enabled: boolean; intervalMinutes: number },
+) {
+  return apiClient.put<CandidateSearchSchedule>(
+    `/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}/candidate-search-schedule`,
+    request,
+  );
 }
 
 function scenarioForAction(action: RunProjectScenarioAction) {

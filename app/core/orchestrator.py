@@ -3119,6 +3119,17 @@ class AgentRunner(threading.Thread):
                         "prompt": payload.get("prompt", "请确认"),
                         "draft": payload.get("draft", {}),
                     }
+                    if _should_auto_confirm_human_gate(ctx):
+                        decision = {"decision": "approve", "edits": "scheduler auto approve"}
+                        ctx["human"] = decision
+                        self._store.complete_step(
+                            task_id,
+                            step,
+                            idx,
+                            {"人工决策": "approve", "修改意见": decision["edits"], "auto_confirmed": True},
+                            "自动搜候选人任务已自动通过人工门控，继续执行入库。",
+                        )
+                        continue
                     self._store.set_awaiting(task_id, step, idx, awaiting)
                     decision = self._store._wait_for_human(task_id)
                     if decision.get("decision") == "cancelled":
@@ -3162,6 +3173,16 @@ class AgentRunner(threading.Thread):
             chunk = min(0.1, remaining)
             time.sleep(chunk)
             remaining -= chunk
+
+
+def _should_auto_confirm_human_gate(ctx: Dict[str, Any]) -> bool:
+    state = ctx.get("frontend_state") or {}
+    return bool(
+        ctx.get("scenario") == "B"
+        and state.get("source") == "CandidateSearchScheduler"
+        and state.get("action") == "find_candidates"
+        and state.get("auto_confirm_human_gate") is True
+    )
 
 
 def start_task(

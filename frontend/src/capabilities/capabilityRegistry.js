@@ -13,6 +13,7 @@ export const ARTIFACT_TYPES = [
   'outreach_history',
   'segment',
   'weekly_report',
+  'candidate_search_schedule',
 ]
 
 export const PATH_PRODUCTIZATION = {
@@ -25,9 +26,11 @@ export const PATH_PRODUCTIZATION = {
   '/outreach/history': 'productized',
   '/outreach/send': 'productized',
   '/projects/{project_id}': 'productized',
+  '/projects/{project_id}/candidate-search-schedules': 'productized',
   '/projects/{project_id}/candidates': 'productized',
   '/projects/{project_id}/candidates/unique': 'productized',
   '/projects/{project_id}/jobs': 'productized',
+  '/projects/{project_id}/jobs/{job_id}/candidate-search-schedule': 'productized',
   '/projects/{project_id}/reports/latest': 'productized',
   '/reports/weekly': 'productized',
   '/reports/{report_id}': 'productized',
@@ -208,6 +211,27 @@ export const CAPABILITY_REGISTRY = [
     riskLevel: 'medium',
     writeScope: 'none',
     intentTags: ['candidate', 'match', 'job'],
+  },
+  {
+    id: 'candidate_auto_search_schedule',
+    title: '自动搜候选人计划',
+    workspace: 'candidate',
+    description: '读取和保存项目岗位级自动候选人搜索计划；后端 scheduler 启动 scenario B 并复用候选人入库链路。',
+    inputs: [
+      { name: 'projectId', label: 'projectId', type: 'text', required: true },
+      { name: 'jobId', label: 'jobId', type: 'text', required: true },
+      { name: 'enabled', label: '开启', type: 'boolean', defaultValue: true },
+      { name: 'intervalMinutes', label: '间隔分钟', type: 'number', defaultValue: 360 },
+    ],
+    apiCalls: [
+      { method: 'GET', path: '/projects/{project_id}/candidate-search-schedules', client: 'getCandidateSearchSchedules' },
+      { method: 'PUT', path: '/projects/{project_id}/jobs/{job_id}/candidate-search-schedule', client: 'updateCandidateSearchSchedule' },
+    ],
+    artifacts: ['candidate_search_schedule'],
+    requiresConfirmation: true,
+    riskLevel: 'medium',
+    writeScope: 'candidate_search_schedule',
+    intentTags: ['candidate', 'search', 'schedule'],
   },
   {
     id: 'outreach_loop',

@@ -179,6 +179,7 @@ class FakeRouter:
 @pytest.fixture
 def isolated_task_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("TASK_DATABASE_URL", f"sqlite:///{tmp_path / 'tasks.sqlite3'}")
+    monkeypatch.setenv("WORKFLOW_ARTIFACT_DIR", str(tmp_path / "workflow_artifacts"))
     store = orchestrator.DBTaskStore()
     monkeypatch.setattr(orchestrator, "task_store", store)
     monkeypatch.setattr(api_main, "task_store", store)
@@ -491,7 +492,7 @@ def test_workflows_validate_api_reports_invalid_workflow() -> None:
     assert "Unresolved template variable" in body["errors"][0]["message"]
 
 
-def test_workflows_run_api_creates_task() -> None:
+def test_workflows_run_api_creates_task(isolated_task_store) -> None:
     client = TestClient(app)
     response = client.post(
         "/workflows/run",

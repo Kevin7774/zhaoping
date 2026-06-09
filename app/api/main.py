@@ -22,6 +22,7 @@ from app.models import Candidate, Job, JobCandidate
 from app.core.env_store import save_env_values
 from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
+from app.core.candidate_search_scheduler import CandidateSearchScheduler, candidate_search_scheduler_enabled
 from app.core.orchestrator import (
     cancel_task,
     create_workflow_session,
@@ -69,6 +70,21 @@ app.include_router(projects_router)
 app.include_router(outreach_router)
 app.include_router(segments_router)
 app.include_router(reports_router)
+
+
+@app.on_event("startup")
+def start_candidate_search_scheduler() -> None:
+    if candidate_search_scheduler_enabled():
+        scheduler = CandidateSearchScheduler()
+        app.state.candidate_search_scheduler = scheduler
+        scheduler.start_once()
+
+
+@app.on_event("shutdown")
+def stop_candidate_search_scheduler() -> None:
+    scheduler = getattr(app.state, "candidate_search_scheduler", None)
+    if scheduler is not None:
+        scheduler.stop()
 
 
 @app.middleware("http")
