@@ -433,7 +433,7 @@ def workflows_run(request: WorkflowRunRequest) -> WorkflowRunResponse:
     task_id = WorkflowTaskRunner().start(
         workflow,
         request.input,
-        auto_run=False,
+        auto_run=request.auto_run,
         conversation_id=request.conversation_id,
     )
     snapshot = task_store.snapshot(task_id)

@@ -13,6 +13,7 @@ class WorkflowRunRequest(BaseModel):
     workflow: dict[str, Any]
     input: dict[str, Any] = Field(default_factory=dict)
     conversation_id: str | None = None
+    auto_run: bool = False
 
 
 class WorkflowValidateResponse(BaseModel):
