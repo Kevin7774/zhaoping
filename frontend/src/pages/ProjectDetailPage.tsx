@@ -7,7 +7,7 @@ import type { JobProfile, StepStatus } from "../features/jobs/types";
 import {
   confirmTask,
   getProject,
-  getProjectCandidates,
+  getProjectCandidatesPage,
   getProjectJobs,
   getTask,
   runCandidateEvaluation,
@@ -112,6 +112,7 @@ export function ProjectDetailPage() {
   const [jobs, setJobs] = useState<JobProfile[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [visibleCandidates, setVisibleCandidates] = useState<Candidate[]>([]);
+  const [candidateTotalCount, setCandidateTotalCount] = useState<number | null>(null);
   const [hasMoreCandidates, setHasMoreCandidates] = useState(false);
   const [loadingMoreCandidates, setLoadingMoreCandidates] = useState(false);
   const [filterCriteria, setFilterCriteria] = useState<FilterCriteria>(defaultFilterCriteria);
@@ -142,17 +143,19 @@ export function ProjectDetailPage() {
       setLoadError(null);
 
       try {
-        const [projectData, jobsData, candidatesData] = await Promise.all([
+        const [projectData, jobsData, candidatesPage] = await Promise.all([
           getProject(projectId),
           getProjectJobs(projectId),
-          getProjectCandidates(projectId, { skip: 0, limit: CANDIDATE_PAGE_SIZE }),
+          getProjectCandidatesPage(projectId, { skip: 0, limit: CANDIDATE_PAGE_SIZE }),
         ]);
+        const candidatesData = candidatesPage.candidates;
 
         setProject(projectData);
         setJobs(jobsData);
         setCandidates(candidatesData);
         setVisibleCandidates(filterCandidates(candidatesData, criteria));
-        setHasMoreCandidates(candidatesData.length === CANDIDATE_PAGE_SIZE);
+        setCandidateTotalCount(candidatesPage.total);
+        setHasMoreCandidates(candidatesPage.hasMore);
         setLoadingMoreCandidates(false);
         setLoadingState("ready");
       } catch (error) {
@@ -173,6 +176,7 @@ export function ProjectDetailPage() {
     setJobs([]);
     setProject(null);
     setVisibleCandidates([]);
+    setCandidateTotalCount(null);
     setHasMoreCandidates(false);
     setLoadingMoreCandidates(false);
     setHumanGateRequest(null);
@@ -233,14 +237,18 @@ export function ProjectDetailPage() {
     if (loadingMoreCandidates || !hasMoreCandidates) return;
     setLoadingMoreCandidates(true);
     try {
-      const nextCandidates = await getProjectCandidates(projectId, {
+      const nextPage = await getProjectCandidatesPage(projectId, {
         skip: candidates.length,
         limit: CANDIDATE_PAGE_SIZE,
       });
+      const nextCandidates = nextPage.candidates;
       const mergedCandidates = [...candidates, ...nextCandidates];
       setCandidates(mergedCandidates);
       setVisibleCandidates(filterCandidates(mergedCandidates, filterCriteria));
-      setHasMoreCandidates(nextCandidates.length === CANDIDATE_PAGE_SIZE);
+      if (nextPage.total !== null) {
+        setCandidateTotalCount(nextPage.total);
+      }
+      setHasMoreCandidates(nextPage.hasMore);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "候选人加载失败");
     } finally {
@@ -494,7 +502,9 @@ export function ProjectDetailPage() {
             evaluatingCandidateId={runningCandidateId}
             hasMore={hasMoreCandidates}
             isLoadingMore={loadingMoreCandidates}
+            loadedCount={candidates.length}
             onLoadMore={handleLoadMoreCandidates}
+            totalCount={candidateTotalCount}
           />
         </div>
 

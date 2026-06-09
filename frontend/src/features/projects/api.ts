@@ -42,6 +42,12 @@ export type ListQueryOptions = {
   limit?: number;
 };
 
+export type CandidatePage = {
+  candidates: Candidate[];
+  total: number | null;
+  hasMore: boolean;
+};
+
 type ProjectBackendResponse = {
   id: string;
   name: string;
@@ -88,9 +94,24 @@ export function getProjectJobs(projectId: string, options: ListQueryOptions = {}
 }
 
 export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {
-  return apiClient
-    .get<CandidateBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/candidates`, { query: options })
-    .then((candidates) => candidates.map(mapCandidate));
+  return getProjectCandidatesPage(projectId, options).then((page) => page.candidates);
+}
+
+export async function getProjectCandidatesPage(
+  projectId: string,
+  options: ListQueryOptions = {},
+): Promise<CandidatePage> {
+  const response = await apiClient.getWithMeta<CandidateBackendResponse[]>(
+    `/projects/${encodeURIComponent(projectId)}/candidates`,
+    { query: options },
+  );
+  const candidates = response.data.map(mapCandidate);
+  const headerHasMore = readBooleanHeader(response.headers, "X-Has-More");
+  return {
+    candidates,
+    total: readNumberHeader(response.headers, "X-Total-Count"),
+    hasMore: headerHasMore ?? (typeof options.limit === "number" && candidates.length === options.limit),
+  };
 }
 
 export function getScenariosMeta() {
@@ -191,6 +212,21 @@ function mapProject(project: ProjectBackendResponse): ProjectRecord {
       nextActions: [],
     },
   };
+}
+
+function readNumberHeader(headers: Headers, name: string): number | null {
+  const raw = headers.get(name);
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+function readBooleanHeader(headers: Headers, name: string): boolean | null {
+  const raw = headers.get(name);
+  if (!raw) return null;
+  if (raw.toLowerCase() === "true") return true;
+  if (raw.toLowerCase() === "false") return false;
+  return null;
 }
 
 function mapJob(job: JobBackendResponse): JobProfile {

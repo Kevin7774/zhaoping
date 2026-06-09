@@ -7,6 +7,12 @@ export type ApiRequestConfig = Omit<RequestInit, "body"> & {
   body?: unknown;
 };
 
+export type ApiResponseMeta<T> = {
+  data: T;
+  headers: Headers;
+  status: number;
+};
+
 export type RequestInterceptor = (
   path: string,
   config: ApiRequestConfig,
@@ -96,7 +102,7 @@ async function applyResponseInterceptors(response: Response) {
   return next;
 }
 
-async function request<T>(path: string, config: ApiRequestConfig = {}): Promise<T> {
+async function fetchResponse(path: string, config: ApiRequestConfig = {}): Promise<Response> {
   const intercepted = await applyRequestInterceptors(path, config);
   const { body, query, ...fetchOptions } = intercepted;
   const headers = normalizeHeaders(fetchOptions.headers);
@@ -119,12 +125,28 @@ async function request<T>(path: string, config: ApiRequestConfig = {}): Promise<
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-  return parseResponse<T>(await applyResponseInterceptors(response));
+  return applyResponseInterceptors(response);
+}
+
+async function request<T>(path: string, config: ApiRequestConfig = {}): Promise<T> {
+  return parseResponse<T>(await fetchResponse(path, config));
+}
+
+async function requestWithMeta<T>(path: string, config: ApiRequestConfig = {}): Promise<ApiResponseMeta<T>> {
+  const response = await fetchResponse(path, config);
+  return {
+    data: await parseResponse<T>(response),
+    headers: response.headers,
+    status: response.status,
+  };
 }
 
 export const apiClient = {
   request,
+  requestWithMeta,
   get: <T>(path: string, config?: ApiRequestConfig) => request<T>(path, { ...config, method: "GET" }),
+  getWithMeta: <T>(path: string, config?: ApiRequestConfig) =>
+    requestWithMeta<T>(path, { ...config, method: "GET" }),
   post: <T>(path: string, body?: unknown, config?: ApiRequestConfig) =>
     request<T>(path, { ...config, method: "POST", body }),
   put: <T>(path: string, body?: unknown, config?: ApiRequestConfig) =>

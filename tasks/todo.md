@@ -60,8 +60,8 @@
   - Compile: `.venv/bin/python -m compileall app tests` passed.
   - Full backend/contracts: `.venv/bin/python -m pytest -q` passed with 123 tests.
   - Frontend unit tests: `pnpm test` passed with 20 tests after aligning `frontend/src/features/projects/state.test.ts` with the current `FilterCriteria` shape.
-- Known unrelated blocker:
-  - `pnpm build` fails because `frontend/src/app/router.tsx` imports `../pages/ProjectDetailPage`, while `frontend/src/pages/ProjectDetailPage.tsx` is currently deleted in the working tree. This appears unrelated to the projects API route change and was not restored or rerouted in this task.
+- Previously resolved blocker:
+  - `frontend/src/pages/ProjectDetailPage.tsx` has been restored in later frontend work, and `pnpm build` now passes.
 - Deferred risks:
   - Project authorization still needs a real user/member model and dependency.
   - Redis/materialized-view caching should wait for measured route latency and data volume.
@@ -96,3 +96,90 @@ Use the backend `skip` / `limit` support from `GET /projects/{project_id}/candid
   - Frontend full: `pnpm test` passed with 23 tests.
   - Frontend build: `pnpm build` passed.
   - Backend/contracts: `.venv/bin/python -m pytest -q` passed with 123 tests.
+
+---
+
+# pagination metadata plan
+
+## Goal
+
+Expose exact pagination metadata without changing existing list JSON arrays.
+
+## Decisions
+
+- Use response headers `X-Total-Count` and `X-Has-More` instead of wrapping responses in an object.
+- Add a frontend `getProjectCandidatesPage()` helper that reads headers, while keeping `getProjectCandidates()` as an array-returning compatibility API.
+- Expose the custom headers through CORS so local Vite/frontend calls can read them.
+
+## Task checklist
+
+- [x] Add failing backend tests for candidate list pagination headers.
+- [x] Add failing frontend tests for `getProjectCandidatesPage()` reading pagination headers.
+- [x] Add response header helpers to `app/api/routers/projects.py`.
+- [x] Set headers on `/jobs`, `/candidates`, and `/candidates/unique`.
+- [x] Expose pagination headers in `app/api/main.py` CORS config.
+- [x] Update `frontend/src/shared/api/client.ts` to support response metadata.
+- [x] Update `frontend/src/features/projects/api.ts` and `ProjectDetailPage.tsx` to use exact `hasMore`.
+- [x] Run focused backend/frontend tests.
+- [x] Run full backend tests plus frontend test/build.
+
+## Review
+
+- Status: implemented.
+- Diff summary:
+  - `app/api/routers/projects.py`: added `X-Total-Count` and `X-Has-More` headers to `/jobs`, `/candidates`, and `/candidates/unique`.
+  - `app/api/main.py`: exposed the custom pagination headers through CORS.
+  - `frontend/src/shared/api/client.ts`: added `requestWithMeta` / `getWithMeta` while preserving existing body-only request APIs.
+  - `frontend/src/features/projects/api.ts`: added `getProjectCandidatesPage()` and kept `getProjectCandidates()` array-compatible.
+  - `frontend/src/pages/ProjectDetailPage.tsx`: switched candidate pagination from page-size guessing to backend `hasMore`.
+  - `tests/test_projects_api.py` and `frontend/src/features/projects/api.test.ts`: covered pagination headers and metadata parsing.
+- Test evidence:
+  - RED backend: focused pagination-header tests failed before implementation with missing `x-total-count`.
+  - RED frontend: `pnpm vitest run src/features/projects/api.test.ts` failed before implementation because `getProjectCandidatesPage` was missing.
+  - Focused backend: `.venv/bin/python -m pytest tests/test_projects_api.py -q` passed with 13 tests.
+  - Focused frontend: `pnpm vitest run src/features/projects/api.test.ts` passed with 7 tests.
+  - Full backend: `.venv/bin/python -m pytest -q` passed with 124 tests.
+  - Full frontend: `pnpm test` passed with 24 tests.
+  - Frontend build: `pnpm build` passed.
+- Deferred risks:
+  - Exact totals add one count query per paginated list endpoint. Query count remains constant, but large production tables may later need indexes or cached counts.
+
+---
+
+# candidate table count footer plan
+
+## Goal
+
+Show users how many candidate rows are visible, loaded, and available in total while preserving the current load-more pagination flow.
+
+## Decisions
+
+- Keep CandidateTable as the presentation component and pass counts from ProjectDetailPage.
+- Display `已显示 N · 已加载 L / 共 T 条关联` when total metadata is available.
+- Use association-row wording because `/projects/{project_id}/candidates` intentionally returns job-candidate matches, not unique people.
+- Fall back to `已显示 N` when total metadata is unavailable.
+
+## Task checklist
+
+- [x] Add a failing CandidateTable test for the count footer.
+- [x] Add CandidateTable props for `loadedCount` and `totalCount`.
+- [x] Store candidate total metadata in `ProjectDetailPage`.
+- [x] Pass visible, loaded, and total counts into CandidateTable.
+- [x] Run focused frontend tests.
+- [x] Run frontend test/build and backend regression.
+
+## Review
+
+- Status: implemented.
+- Diff summary:
+  - `frontend/src/features/candidates/components/CandidateTable.tsx`: added a compact footer summary showing visible, loaded, and total association-row counts.
+  - `frontend/src/pages/ProjectDetailPage.tsx`: stores candidate total metadata from `getProjectCandidatesPage()` and passes loaded/total counts into CandidateTable.
+  - `frontend/src/features/candidates/components/CandidateTable.test.tsx`: added coverage for the count footer.
+- Test evidence:
+  - RED: `pnpm vitest run src/features/candidates/components/CandidateTable.test.tsx` failed before implementation because the count footer text was absent.
+  - Focused: `pnpm vitest run src/features/candidates/components/CandidateTable.test.tsx` passed with 5 tests.
+  - Full frontend: `pnpm test` passed with 25 tests.
+  - Frontend build: `pnpm build` passed.
+  - Full backend: `.venv/bin/python -m pytest -q` passed with 124 tests.
+- Deferred risks:
+  - When filters hide every loaded candidate, the current table still uses the existing empty-state copy. A later pass can split "no backend candidates" from "no candidates match current filters".

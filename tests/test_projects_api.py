@@ -97,6 +97,8 @@ def test_get_project_jobs_supports_pagination(client: TestClient) -> None:
     response = client.get("/projects/project_2026_ai_team/jobs?skip=1&limit=1")
 
     assert response.status_code == 200
+    assert response.headers["x-total-count"] == "2"
+    assert response.headers["x-has-more"] == "false"
     assert response.json() == [
         {
             "id": "job_robot_data_platform",
@@ -147,7 +149,7 @@ def test_get_project_jobs_uses_bounded_queries(
 
     assert response.status_code == 200
     assert len(response.json()) == 6
-    assert len(select_statements) <= 4
+    assert len(select_statements) <= 5
 
 
 def test_get_project_candidates_returns_joined_candidate_matches(client: TestClient) -> None:
@@ -198,6 +200,8 @@ def test_get_project_candidates_supports_pagination(client: TestClient) -> None:
     response = client.get("/projects/project_2026_ai_team/candidates?skip=1&limit=1")
 
     assert response.status_code == 200
+    assert response.headers["x-total-count"] == "3"
+    assert response.headers["x-has-more"] == "true"
     assert response.json() == [
         {
             "id": "cand_zhou_han",
@@ -212,6 +216,15 @@ def test_get_project_candidates_supports_pagination(client: TestClient) -> None:
             "pipelineStatus": "awaiting_human",
         }
     ]
+
+
+def test_get_project_candidates_marks_last_page_in_pagination_headers(client: TestClient) -> None:
+    response = client.get("/projects/project_2026_ai_team/candidates?skip=2&limit=1")
+
+    assert response.status_code == 200
+    assert response.headers["x-total-count"] == "3"
+    assert response.headers["x-has-more"] == "false"
+    assert [candidate["id"] for candidate in response.json()] == ["cand_wang_ke"]
 
 
 def test_get_project_unique_candidates_deduplicates_candidates(
@@ -261,6 +274,8 @@ def test_get_project_unique_candidates_supports_pagination(client: TestClient) -
     response = client.get("/projects/project_2026_ai_team/candidates/unique?skip=1&limit=1")
 
     assert response.status_code == 200
+    assert response.headers["x-total-count"] == "3"
+    assert response.headers["x-has-more"] == "true"
     assert response.json() == [
         {
             "id": "cand_wang_ke",

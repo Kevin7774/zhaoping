@@ -86,4 +86,17 @@ describe("CandidateTable", () => {
 
     expect(screen.getByRole("button", { name: "加载中..." })).toHaveProperty("disabled", true);
   });
+
+  it("shows visible, loaded, and total candidate match counts", () => {
+    render(
+      <CandidateTable
+        candidates={[candidate]}
+        onSendEmail={() => undefined}
+        loadedCount={50}
+        totalCount={137}
+      />,
+    );
+
+    expect(screen.getByText("已显示 1 · 已加载 50 / 共 137 条关联")).toBeTruthy();
+  });
 });

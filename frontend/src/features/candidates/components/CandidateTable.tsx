@@ -7,7 +7,9 @@ type CandidateTableProps = {
   evaluatingCandidateId?: string | null;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  loadedCount?: number;
   onLoadMore?: () => void;
+  totalCount?: number | null;
 };
 
 const statusTone: Record<Candidate["stepStatus"], string> = {
@@ -58,8 +60,17 @@ export function CandidateTable({
   evaluatingCandidateId = null,
   hasMore = false,
   isLoadingMore = false,
+  loadedCount,
   onLoadMore,
+  totalCount = null,
 }: CandidateTableProps) {
+  const visibleCount = candidates.length;
+  const normalizedLoadedCount = loadedCount ?? visibleCount;
+  const countSummary =
+    typeof totalCount === "number"
+      ? `已显示 ${visibleCount} · 已加载 ${normalizedLoadedCount} / 共 ${totalCount} 条关联`
+      : `已显示 ${visibleCount}`;
+
   return (
     <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
@@ -148,8 +159,9 @@ export function CandidateTable({
               })}
             </tbody>
           </table>
-          {hasMore ? (
-            <div className="border-t border-[#EEF2F7] bg-[#FCFCFD] px-5 py-3 text-center">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EEF2F7] bg-[#FCFCFD] px-5 py-3">
+            <div className="text-[12px] font-medium text-[#6B7280]">{countSummary}</div>
+            {hasMore ? (
               <button
                 type="button"
                 onClick={onLoadMore}
@@ -158,8 +170,8 @@ export function CandidateTable({
               >
                 {isLoadingMore ? "加载中..." : "加载更多"}
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       )}
     </section>

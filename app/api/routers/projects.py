@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TypedDict
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -43,11 +43,14 @@ def get_project(project_id: str, session: Session = Depends(get_project_session)
 @router.get("/{project_id}/jobs", response_model=list[JobResponse])
 def get_project_jobs(
     project_id: str,
+    response: Response,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     session: Session = Depends(get_project_session),
 ) -> list[JobResponse]:
     _require_project(session, project_id)
+    total_count = _project_job_count(session, project_id)
+    _set_pagination_headers(response, total_count=total_count, skip=skip, limit=limit)
     jobs = session.execute(select(Job).where(Job.project_id == project_id).offset(skip).limit(limit)).scalars().all()
     stats_by_job_id = _job_stats_by_job_id(session, [job.id for job in jobs])
     return [
@@ -69,11 +72,14 @@ def get_project_jobs(
 @router.get("/{project_id}/candidates", response_model=list[CandidateResponse])
 def get_project_candidates(
     project_id: str,
+    response: Response,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     session: Session = Depends(get_project_session),
 ) -> list[CandidateResponse]:
     _require_project(session, project_id)
+    total_count = _project_candidate_match_count(session, project_id)
+    _set_pagination_headers(response, total_count=total_count, skip=skip, limit=limit)
     rows = session.execute(
         select(JobCandidate, Candidate, Job)
         .join(Candidate, Candidate.id == JobCandidate.candidate_id)
@@ -103,11 +109,14 @@ def get_project_candidates(
 @router.get("/{project_id}/candidates/unique", response_model=list[UniqueCandidateResponse])
 def get_project_unique_candidates(
     project_id: str,
+    response: Response,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     session: Session = Depends(get_project_session),
 ) -> list[UniqueCandidateResponse]:
     _require_project(session, project_id)
+    total_count = _project_unique_candidate_count(session, project_id)
+    _set_pagination_headers(response, total_count=total_count, skip=skip, limit=limit)
     candidates = (
         session.execute(
             select(Candidate)
@@ -139,6 +148,37 @@ def _require_project(session: Session, project_id: str) -> Project:
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return project
+
+
+def _set_pagination_headers(response: Response, *, total_count: int, skip: int, limit: int) -> None:
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Has-More"] = "true" if skip + limit < total_count else "false"
+
+
+def _project_job_count(session: Session, project_id: str) -> int:
+    return int(session.scalar(select(func.count(Job.id)).where(Job.project_id == project_id)) or 0)
+
+
+def _project_candidate_match_count(session: Session, project_id: str) -> int:
+    return int(
+        session.scalar(
+            select(func.count(JobCandidate.id))
+            .join(Job, Job.id == JobCandidate.job_id)
+            .where(Job.project_id == project_id)
+        )
+        or 0
+    )
+
+
+def _project_unique_candidate_count(session: Session, project_id: str) -> int:
+    return int(
+        session.scalar(
+            select(func.count(func.distinct(JobCandidate.candidate_id)))
+            .join(Job, Job.id == JobCandidate.job_id)
+            .where(Job.project_id == project_id)
+        )
+        or 0
+    )
 
 
 def _project_stats(session: Session, project_id: str) -> dict[str, int]:

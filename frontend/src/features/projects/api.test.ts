@@ -1,12 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Candidate } from "../candidates/types";
-import { confirmTask, getProject, getProjectCandidates, getProjectJobs, runCandidateEvaluation } from "./api";
+import {
+  confirmTask,
+  getProject,
+  getProjectCandidates,
+  getProjectCandidatesPage,
+  getProjectJobs,
+  runCandidateEvaluation,
+} from "./api";
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+function jsonResponseWithHeaders(payload: unknown, headers: Record<string, string>, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
 
@@ -132,6 +146,37 @@ describe("projects api", () => {
       "/api/projects/project_2026_ai_team/candidates?skip=50&limit=25",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("reads candidate pagination metadata from response headers", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponseWithHeaders(
+        [
+          {
+            id: "cand_lin_chen",
+            jobCandidateId: 1,
+            jobId: "job_vla_algorithm",
+            jobTitle: "VLA / 具身智能算法工程师",
+            name: "Alex Chen",
+            currentCompany: "Embodied AI Lab",
+            city: "深圳",
+            email: "alex.chen@example.com",
+            matchScore: 92,
+            pipelineStatus: "processing",
+          },
+        ],
+        {
+          "X-Total-Count": "51",
+          "X-Has-More": "true",
+        },
+      ),
+    );
+
+    await expect(getProjectCandidatesPage("project_2026_ai_team", { skip: 0, limit: 50 })).resolves.toMatchObject({
+      total: 51,
+      hasMore: true,
+      candidates: [expect.objectContaining({ candidateId: "cand_lin_chen" })],
+    });
   });
 
   it("confirms a human gate task using the action/data payload contract", async () => {

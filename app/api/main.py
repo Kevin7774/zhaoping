@@ -47,6 +47,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count", "X-Has-More"],
 )
 
 app.include_router(projects_router)
