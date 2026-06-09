@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.schemas.common import CamelModel
+
 
 class CapabilityEvidence(BaseModel):
     capability_id: str = Field(description="对应标准能力库中的ID，例如 cap_vla_imitation")
@@ -36,3 +38,23 @@ class CandidateProfileEvaluation(BaseModel):
         default=None,
         description="按 capability_id 索引的能力证据，便于写入 candidate_profile.parsed_capabilities",
     )
+
+
+class CandidateRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=128)
+    current_company: str | None = Field(default=None, max_length=128)
+    city: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=256)
+
+
+class CandidateCreate(CandidateRequest):
+    id: str = Field(min_length=1, max_length=64)
+
+
+class CandidateResponse(CandidateRequest):
+    id: str
+    job_candidate_id: int
+    job_id: str
+    job_title: str
+    match_score: int = Field(ge=0, le=100)
+    pipeline_status: str

@@ -11,6 +11,7 @@ task so the UI behaves like an agent runtime dashboard instead of a video player
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -24,7 +25,9 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 
+from app.db.session import project_session_factory
 from app.db.task_models import AgentEventModel, TaskModel, make_task_session_factory
+from app.models import Candidate, Job, JobCandidate, Project
 from app.providers.common import RetryPolicy, call_with_retries, friendly_error
 from app.core.router import get_router
 from app.schemas.tasks import AgentEventCreate, AgentEventRead
@@ -2733,8 +2736,233 @@ class DBTaskStore:
 
 task_store = DBTaskStore()
 
-_active_runners: dict[str, "AgentRunner"] = {}
+CANDIDATE_EVALUATION_APPROVED_SCORE = 92
+CANDIDATE_EVALUATION_APPROVED_STATUS = "pending_outreach"
+PROJECT_CANDIDATE_EVALUATION_STEP_COUNT = 3
+
+_active_runners: dict[str, threading.Thread] = {}
 _active_runners_lock = threading.Lock()
+
+
+def _frontend_state_value(frontend_state: Optional[Dict[str, Any]], *keys: str) -> str | None:
+    if not frontend_state:
+        return None
+    for key in keys:
+        value = frontend_state.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _project_candidate_evaluation_ids(frontend_state: Optional[Dict[str, Any]]) -> tuple[str, str] | None:
+    candidate_id = _frontend_state_value(frontend_state, "candidate_id", "candidateId")
+    job_id = _frontend_state_value(frontend_state, "job_id", "jobId", "targetJobProfileId", "job_profile_id")
+    if candidate_id and job_id:
+        return candidate_id, job_id
+    return None
+
+
+def _project_team_label(project_name: str | None) -> str:
+    name = (project_name or "").strip()
+    if name.endswith("招聘"):
+        name = name.removesuffix("招聘").strip()
+    return name or "2026 AI 团队"
+
+
+class ProjectCandidateEvaluationRunner(threading.Thread):
+    """Scenario C runner for real project/job/candidate rows."""
+
+    def __init__(
+        self,
+        store: DBTaskStore,
+        task: TaskState,
+        candidate_id: str,
+        job_id: str,
+    ) -> None:
+        super().__init__(daemon=True)
+        self._store = store
+        self._task = task
+        self._candidate_id = candidate_id
+        self._job_id = job_id
+
+    def run(self) -> None:
+        task_id = self._task.task_id
+        try:
+            context = self._load_context()
+            self._emit_step(
+                0,
+                Step("candidate_eval", "简历特征提取", "正在提取候选人简历特征...", "compute"),
+                {
+                    "candidate_id": self._candidate_id,
+                    "candidate_name": context["candidate_name"],
+                    "current_company": context["current_company"],
+                    "city": context["city"],
+                },
+            )
+            self._delay(0.15)
+
+            team_label = _project_team_label(context["project_name"])
+            self._emit_step(
+                1,
+                Step("candidate_eval", "岗位向量匹配", f"正在与【{team_label}】岗位要求进行向量匹配...", "compute"),
+                {
+                    "candidate_id": self._candidate_id,
+                    "job_id": self._job_id,
+                    "job_title": context["job_title"],
+                    "project_id": context["project_id"],
+                },
+            )
+            self._delay(_candidate_evaluation_delay_seconds())
+
+            report = (
+                f"该候选人匹配度 {CANDIDATE_EVALUATION_APPROVED_SCORE} 分，"
+                "具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？"
+            )
+            awaiting_step = Step("human_expert", "人工网闸", "等待 HR 确认 AI 候选评估报告", "hitl")
+            self._store.set_awaiting(
+                task_id,
+                awaiting_step,
+                2,
+                {
+                    "agent": "candidate_eval",
+                    "prompt": f"AI 已为候选人 {context['candidate_name']} 生成评估报告，请确认是否批准推进。",
+                    "draft": {
+                        "candidate_id": self._candidate_id,
+                        "candidate_name": context["candidate_name"],
+                        "job_id": self._job_id,
+                        "job_title": context["job_title"],
+                        "body": report,
+                        "report": report,
+                    },
+                    "match_score": CANDIDATE_EVALUATION_APPROVED_SCORE,
+                    "pipeline_status": CANDIDATE_EVALUATION_APPROVED_STATUS,
+                },
+            )
+            decision = self._store._wait_for_human(task_id)
+            if decision.get("decision") == "cancelled":
+                raise TaskCancelled("任务已取消")
+
+            if decision.get("decision") == "reject":
+                self._store.complete_step(
+                    task_id,
+                    awaiting_step,
+                    2,
+                    {
+                        "decision": "reject",
+                        "candidate_id": self._candidate_id,
+                        "job_id": self._job_id,
+                        "database_updated": False,
+                    },
+                    "HR 已拒绝自动推进，未更新候选人状态。",
+                    final=True,
+                )
+                self._store.mark_done(task_id)
+                return
+
+            database_update = self._apply_approved_result()
+            self._store.complete_step(
+                task_id,
+                awaiting_step,
+                2,
+                {
+                    "decision": decision.get("decision", "approve"),
+                    "evaluation_report": report,
+                    "database_update": database_update,
+                },
+                "HR 已批准评估结论，候选人匹配分与 pipeline 状态已写回数据库。",
+                final=True,
+            )
+            self._store.mark_done(task_id)
+        except TaskCancelled:
+            self._store.cancel(task_id, "用户取消任务")
+        except Exception as exc:  # noqa: BLE001 - task failures must be visible to SSE clients.
+            message = friendly_error(exc, provider="candidate_eval")
+            self._store.set_error(task_id, "candidate_eval", message)
+        finally:
+            with _active_runners_lock:
+                _active_runners.pop(task_id, None)
+
+    def _load_context(self) -> dict[str, Any]:
+        with project_session_factory()() as session:
+            row = session.execute(
+                select(Candidate, Job, Project, JobCandidate)
+                .join(JobCandidate, JobCandidate.candidate_id == Candidate.id)
+                .join(Job, Job.id == JobCandidate.job_id)
+                .join(Project, Project.id == Job.project_id)
+                .where(Candidate.id == self._candidate_id, Job.id == self._job_id)
+            ).first()
+            if row is None:
+                raise ValueError(
+                    f"Candidate/job link not found: candidate_id={self._candidate_id}, job_id={self._job_id}"
+                )
+            candidate, job, project, link = row
+            return {
+                "candidate_id": candidate.id,
+                "candidate_name": candidate.name,
+                "current_company": candidate.current_company,
+                "city": candidate.city,
+                "job_id": job.id,
+                "job_title": job.title,
+                "project_id": project.id,
+                "project_name": project.name,
+                "existing_match_score": link.match_score,
+                "existing_pipeline_status": link.pipeline_status,
+            }
+
+    def _apply_approved_result(self) -> dict[str, Any]:
+        with project_session_factory()() as session:
+            with session.begin():
+                link = session.scalar(
+                    select(JobCandidate).where(
+                        JobCandidate.job_id == self._job_id,
+                        JobCandidate.candidate_id == self._candidate_id,
+                    )
+                )
+                if link is None:
+                    raise ValueError(
+                        f"Candidate/job link not found: candidate_id={self._candidate_id}, job_id={self._job_id}"
+                    )
+                link.match_score = CANDIDATE_EVALUATION_APPROVED_SCORE
+                link.pipeline_status = CANDIDATE_EVALUATION_APPROVED_STATUS
+        return {
+            "candidate_id": self._candidate_id,
+            "job_id": self._job_id,
+            "match_score": CANDIDATE_EVALUATION_APPROVED_SCORE,
+            "pipeline_status": CANDIDATE_EVALUATION_APPROVED_STATUS,
+        }
+
+    def _emit_step(self, index: int, step: Step, output: dict[str, Any]) -> None:
+        self._raise_if_cancelled()
+        self._store.start_step(self._task.task_id, index, step)
+        self._store.complete_step(
+            self._task.task_id,
+            step,
+            index,
+            output,
+            step.message,
+        )
+
+    def _delay(self, seconds: float) -> None:
+        remaining = max(seconds, 0.0)
+        while remaining > 0:
+            self._raise_if_cancelled()
+            chunk = min(0.1, remaining)
+            time.sleep(chunk)
+            remaining -= chunk
+
+    def _raise_if_cancelled(self) -> None:
+        if self._store.is_cancelled(self._task.task_id):
+            raise TaskCancelled("任务已取消")
+
+
+def _candidate_evaluation_delay_seconds() -> float:
+    raw = os.environ.get("CANDIDATE_EVALUATION_DELAY_SECONDS")
+    if raw is None:
+        return 1.2
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 1.2
 
 
 class AgentRunner(threading.Thread):
@@ -2844,6 +3072,7 @@ def start_task(
 ) -> TaskState:
     if scenario not in SCENARIO_PLANS:
         raise KeyError(scenario)
+    project_candidate_ids = _project_candidate_evaluation_ids(frontend_state) if scenario == "C" else None
     task = task_store.create(
         scenario,
         user_input,
@@ -2851,7 +3080,17 @@ def start_task(
         aperture_weight=aperture_weight,
         frontend_state=frontend_state,
     )
-    runner = AgentRunner(task_store, task)
+    if project_candidate_ids:
+        task_store.update(task.task_id, total_steps=PROJECT_CANDIDATE_EVALUATION_STEP_COUNT)
+        task = task_store.get(task.task_id) or task
+        runner: threading.Thread = ProjectCandidateEvaluationRunner(
+            task_store,
+            task,
+            candidate_id=project_candidate_ids[0],
+            job_id=project_candidate_ids[1],
+        )
+    else:
+        runner = AgentRunner(task_store, task)
     with _active_runners_lock:
         _active_runners[task.task_id] = runner
     runner.start()

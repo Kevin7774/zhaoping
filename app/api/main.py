@@ -10,8 +10,9 @@ from typing import Any, Literal, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from app.api.routers.projects import router as projects_router
 from app.core.env_store import save_env_values
 from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
@@ -47,6 +48,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(projects_router)
 
 
 @app.middleware("http")
@@ -124,6 +127,23 @@ class AtomicNodeSkipRequest(BaseModel):
 class ConfirmRequest(BaseModel):
     decision: Literal["approve", "edit", "reject"]
     edits: Optional[str] = None
+    action: Optional[Literal["approve", "edit", "reject"]] = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_action_payload(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        if "decision" not in normalized and "action" in normalized:
+            normalized["decision"] = normalized["action"]
+        if "edits" not in normalized and isinstance(normalized.get("data"), dict):
+            data = normalized["data"]
+            edits = data.get("draft") or data.get("body") or data.get("edits")
+            if edits is not None:
+                normalized["edits"] = edits if isinstance(edits, str) else json.dumps(edits, ensure_ascii=False)
+        return normalized
 
 
 class ProbeFeedbackRequest(BaseModel):
