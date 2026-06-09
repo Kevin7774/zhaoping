@@ -1,3 +1,91 @@
+import {
+  capabilityStatusLabel,
+  capabilityTitle,
+  DataError,
+  DataLoading,
+  isCapabilityConnected,
+  MetricStrip,
+  PageHeader,
+  SectionPanel,
+  useWorkspaceData,
+} from "./projectWorkspace";
+
 export function IntegrationsPage() {
-  return <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">集成</div>;
+  const data = useWorkspaceData({ includeIntegrations: true });
+
+  if (data.loading) return <DataLoading />;
+  if (data.error) return <DataError message={data.error} onRetry={data.reload} />;
+
+  const capabilities = data.integrations?.capabilities ?? [];
+  const connectedCount = capabilities.filter((capability) => isCapabilityConnected(capability)).length;
+  const missingKeyCount = capabilities.filter((capability) => capability.status === "missing_key").length;
+
+  return (
+    <div className="pb-8">
+      <PageHeader
+        title="系统设置"
+        subtitle="查看后端能力接入状态。页面只展示能力名、连接状态和代码路径，不展示任何密钥。"
+      />
+
+      <MetricStrip
+        items={[
+          { label: "能力数量", value: capabilities.length, helper: "GET /integrations/status" },
+          { label: "已接入", value: connectedCount, helper: "active / available", tone: "text-[#16A34A]" },
+          { label: "缺少 Key", value: missingKeyCount, helper: "需要配置环境变量", tone: "text-[#F59E0B]" },
+          { label: "服务记录", value: data.integrations?.services?.length ?? 0, helper: "后端 services 数组" },
+        ]}
+      />
+
+      {data.optionalErrors.integrations ? (
+        <div className="mb-5 rounded-[12px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[13px] text-[#EF4444]">
+          集成状态读取失败：{data.optionalErrors.integrations}
+        </div>
+      ) : null}
+
+      <SectionPanel title="能力接入状态" subtitle="这些状态会影响岗位分析、找候选人、评估、触达和周报按钮是否可用。">
+        {capabilities.length === 0 ? (
+          <div className="text-[13px] text-[#6B7280]">后端没有返回能力状态。</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[840px] w-full text-left text-[13px] leading-5">
+              <thead className="h-11 bg-[#F9FAFB] text-[12px] font-semibold text-[#6B7280]">
+                <tr>
+                  <th className="w-[220px] px-4">能力</th>
+                  <th className="w-[160px] px-3">服务类型</th>
+                  <th className="w-[120px] px-3">状态</th>
+                  <th className="w-[180px] px-3">连接名称</th>
+                  <th className="px-4">代码路径</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EEF2F7]">
+                {capabilities.map((capability) => (
+                  <tr key={capability.id}>
+                    <td className="px-4 py-4">
+                      <div className="font-semibold text-[#111827]">{capabilityTitle(capability)}</div>
+                      <div className="mt-1 text-[12px] text-[#9CA3AF]">{capability.id}</div>
+                    </td>
+                    <td className="px-3 py-4 text-[#374151]">{capability.service_type}</td>
+                    <td className="px-3 py-4">
+                      <span
+                        className={[
+                          "inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium leading-[18px]",
+                          isCapabilityConnected(capability)
+                            ? "bg-[#ECFDF3] text-[#16A34A]"
+                            : "bg-[#FFFBEB] text-[#F59E0B]",
+                        ].join(" ")}
+                      >
+                        {capabilityStatusLabel(capability.status)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 text-[#374151]">{capability.connected_name_zh ?? "—"}</td>
+                    <td className="px-4 py-4 text-[#374151]">{capability.code_path ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionPanel>
+    </div>
+  );
 }

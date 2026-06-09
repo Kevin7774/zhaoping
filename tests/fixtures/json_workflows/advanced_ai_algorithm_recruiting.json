@@ -1,0 +1,102 @@
+{
+  "id": "advanced_ai_algorithm_recruiting",
+  "name": "高级 AI 算法岗候选人评估管线",
+  "version": "2026-06-09",
+  "description": "Search GitHub/project signals, evaluate technical depth, extract candidate profile, pause for HR review, then save an artifact.",
+  "inputs": {
+    "search_query": {
+      "type": "string"
+    }
+  },
+  "steps": [
+    {
+      "id": "candidate_signal_search",
+      "type": "search",
+      "input": "{{ search_query }}",
+      "limit": 3,
+      "output_key": "candidate_signals",
+      "metadata": {
+        "business_meaning": "搜索 GitHub / 技术项目 / 候选人线索"
+      }
+    },
+    {
+      "id": "project_quality_review",
+      "type": "llm_prompt",
+      "prompt": "评估以下候选人线索的项目质量、技术深度、机器人/具身智能相关性。只输出评估摘要。\n{{ candidate_signals }}",
+      "max_tokens": 1200,
+      "output_key": "project_review",
+      "metadata": {
+        "business_meaning": "评估候选人项目质量、技术深度、机器人/具身智能相关性"
+      }
+    },
+    {
+      "id": "candidate_profile_extract",
+      "type": "structured_extract",
+      "input": "{{ project_review }}",
+      "schema": {
+        "type": "object",
+        "required": [
+          "name",
+          "current_company",
+          "project_evidence",
+          "core_capabilities",
+          "risks",
+          "recommended_level"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "current_company": {
+            "type": "string"
+          },
+          "project_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "core_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommended_level": {
+            "type": "string"
+          }
+        }
+      },
+      "max_retries": 2,
+      "on_failure": "error",
+      "output_key": "candidate_profile",
+      "metadata": {
+        "business_meaning": "提取结构化候选人画像"
+      }
+    },
+    {
+      "id": "hr_screen_gate",
+      "type": "human_gate",
+      "prompt": "请 HR 决定是否推进面谈：\n{{ candidate_profile }}",
+      "output_key": "hr_decision",
+      "metadata": {
+        "business_meaning": "让 HR 决定是否推进面谈"
+      }
+    },
+    {
+      "id": "candidate_summary_artifact",
+      "type": "save_artifact",
+      "input": "候选人评估摘要：\n{{ candidate_profile }}\n\nHR 决策：\n{{ hr_decision }}",
+      "output_key": "candidate_artifact",
+      "metadata": {
+        "business_meaning": "保存候选人评估摘要或触达草稿"
+      }
+    }
+  ]
+}

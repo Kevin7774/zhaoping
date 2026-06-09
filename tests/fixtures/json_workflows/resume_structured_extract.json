@@ -1,0 +1,77 @@
+{
+  "id": "resume_structured_extract",
+  "name": "简历结构化解析",
+  "version": "2026-06-09",
+  "inputs": {
+    "resume_text": {
+      "type": "string"
+    }
+  },
+  "steps": [
+    {
+      "id": "resume_profile_extract",
+      "type": "structured_extract",
+      "input": "{{ resume_text }}",
+      "schema": {
+        "type": "object",
+        "required": [
+          "name",
+          "current_company",
+          "location",
+          "work_history",
+          "education",
+          "skills",
+          "robotics_experience",
+          "llm_experience",
+          "evidence",
+          "risks",
+          "recommended_level"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "current_company": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "work_history": {
+            "type": "array"
+          },
+          "education": {
+            "type": "array"
+          },
+          "skills": {
+            "type": "array"
+          },
+          "robotics_experience": {
+            "type": "array"
+          },
+          "llm_experience": {
+            "type": "array"
+          },
+          "evidence": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          },
+          "recommended_level": {
+            "type": "string"
+          }
+        }
+      },
+      "max_retries": 2,
+      "on_failure": "error",
+      "output_key": "resume_profile"
+    },
+    {
+      "id": "resume_profile_artifact",
+      "type": "save_artifact",
+      "input": "结构化简历画像：\n{{ resume_profile }}",
+      "output_key": "resume_artifact"
+    }
+  ]
+}

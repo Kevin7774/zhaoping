@@ -1,10 +1,14 @@
 import json
+import time
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+import app.api.main as api_main
+import app.core.orchestrator as orchestrator
 from app.api.main import app
+from app.core.orchestrator import SCENARIO_PLANS, get_meta
 from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
 from app.core.workflow_context import render_template, render_value
 from app.core.workflow_executor import (
@@ -13,6 +17,13 @@ from app.core.workflow_executor import (
     WorkflowRuntimeState,
 )
 from app.core.workflow_runner import WorkflowTaskRunner
+
+
+WORKFLOW_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "json_workflows"
+
+
+def workflow_fixture(filename: str) -> dict:
+    return json.loads((WORKFLOW_FIXTURE_DIR / filename).read_text(encoding="utf-8"))
 
 
 def valid_workflow() -> dict:
@@ -69,9 +80,12 @@ def test_workflow_definition_rejects_future_dependency() -> None:
 class FakeSearchProvider:
     def __init__(self) -> None:
         self.calls = []
+        self.results = None
 
     def search(self, query: str, limit: int = 10):
         self.calls.append({"query": query, "limit": limit})
+        if self.results is not None:
+            return self.results
         return [{"title": "Result", "snippet": query}]
 
 
@@ -82,6 +96,8 @@ class FakeLLMProvider:
 
     def text(self, prompt: str, max_tokens: int = 256) -> str:
         self.prompts.append({"prompt": prompt, "max_tokens": max_tokens})
+        if not self.outputs:
+            raise AssertionError("Unexpected LLM call")
         return self.outputs.pop(0)
 
 
@@ -98,6 +114,28 @@ class FakeRouter:
 
     def structured_output(self, service_name: str | None = None):
         raise RuntimeError("structured output backend unavailable in unit test")
+
+
+@pytest.fixture
+def isolated_task_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setenv("TASK_DATABASE_URL", f"sqlite:///{tmp_path / 'tasks.sqlite3'}")
+    store = orchestrator.DBTaskStore()
+    monkeypatch.setattr(orchestrator, "task_store", store)
+    monkeypatch.setattr(api_main, "task_store", store)
+    return store
+
+
+def wait_for_task_status(client: TestClient, task_id: str, expected: str, timeout: float = 2.0) -> dict:
+    deadline = time.monotonic() + timeout
+    latest: dict | None = None
+    while time.monotonic() < deadline:
+        response = client.get(f"/tasks/{task_id}")
+        assert response.status_code == 200
+        latest = response.json()
+        if latest["status"] == expected:
+            return latest
+        time.sleep(0.02)
+    pytest.fail(f"Task {task_id} did not reach {expected}; latest={latest}")
 
 
 def test_render_value_uses_json_for_non_strings() -> None:
@@ -132,6 +170,24 @@ def test_step_executor_uses_service_router_for_llm_prompt() -> None:
     result = StepExecutor(router=router).execute_step(workflow.steps[1], state)
     assert router.llm_provider.prompts[0]["max_tokens"] == 256
     assert result.value == "summary"
+
+
+def test_step_executor_limits_llm_prompt_context_without_mutating_runtime_context() -> None:
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    state = WorkflowRuntimeState.from_definition(workflow, {"user_input": "robotics"})
+    state.context["search_results"] = [
+        {"title": f"Result {index}", "snippet": f"important-{index} " + ("x" * 1400)}
+        for index in range(8)
+    ]
+    router = FakeRouter(llm_outputs=["summary"])
+
+    StepExecutor(router=router).execute_step(workflow.steps[1], state)
+
+    prompt = router.llm_provider.prompts[0]["prompt"]
+    assert "important-0" in prompt
+    assert "important-7" not in prompt
+    assert len(prompt) < 4500
+    assert state.context["search_results"][7]["snippet"].startswith("important-7")
 
 
 def test_step_executor_does_not_import_concrete_providers() -> None:
@@ -224,6 +280,62 @@ def test_runner_runs_to_done_and_writes_task_result() -> None:
     assert snapshot["result"]["workflow_id"] == "research_report"
     assert snapshot["result"]["final_output"] == "summary"
     json.dumps(snapshot["result"], ensure_ascii=False)
+
+
+def test_workflow_artifact_output_storage_keeps_large_payload_out_of_context(
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("WORKFLOW_ARTIFACT_DIR", str(tmp_path / "workflow_artifacts"))
+    tail_marker = "RAW_ARTIFACT_TAIL_SHOULD_NOT_BE_IN_SNAPSHOT"
+    long_snippet = "raw-search-result " + ("x" * 6000) + tail_marker
+    payload = {
+        "id": "artifact_search_flow",
+        "inputs": {"query": {"type": "string"}},
+        "steps": [
+            {
+                "id": "raw_search",
+                "type": "search",
+                "input": "{{ query }}",
+                "limit": 1,
+                "output_key": "search_results",
+                "metadata": {"output_storage": "artifact"},
+            },
+            {
+                "id": "summarize_ref",
+                "type": "llm_prompt",
+                "prompt": "Summarize the artifact reference only: {{ search_results }}",
+                "output_key": "summary",
+            },
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    router = FakeRouter(llm_outputs=["summary"])
+    router.search_provider.results = [{"title": "Huge Result", "snippet": long_snippet}]
+    runner = WorkflowTaskRunner(router=router)
+
+    task_id = runner.start(workflow, {"query": "robotics"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+    snapshot = runner.snapshot(task_id)
+
+    assert snapshot["status"] == "done"
+    result = snapshot["result"]
+    artifact_ref = result["context"]["search_results"]
+    assert artifact_ref["type"] == "artifact_ref"
+    assert artifact_ref["artifact_key"] in result["artifacts"]
+    artifact_metadata = result["artifacts"][artifact_ref["artifact_key"]]
+    artifact_path = Path(artifact_metadata["path"])
+    assert artifact_path.exists()
+    stored_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert stored_payload[0]["snippet"] == long_snippet
+    assert artifact_metadata["size_chars"] > 6000
+
+    serialized_snapshot = json.dumps(snapshot, ensure_ascii=False)
+    assert tail_marker not in serialized_snapshot
+    assert tail_marker in artifact_path.read_text(encoding="utf-8")
+    assert "artifact_ref" in router.llm_provider.prompts[0]["prompt"]
+    assert tail_marker not in router.llm_provider.prompts[0]["prompt"]
 
 
 def test_runner_human_gate_checkpoints_without_waiting() -> None:
@@ -344,3 +456,329 @@ def test_confirm_route_checks_json_workflow_before_legacy_confirm() -> None:
     json_runtime_check = source.index("json_workflow_runtime", confirm_start)
     legacy_confirm = source.index("task_store.confirm", confirm_start)
     assert json_runtime_check < legacy_confirm
+
+
+def test_recruiting_custom_pipeline_json_fixture_validates_runs_and_resumes(
+    isolated_task_store,
+) -> None:
+    workflow_payload = workflow_fixture("advanced_ai_algorithm_recruiting.json")
+    workflow = WorkflowDefinition.model_validate(workflow_payload)
+    assert [step.type for step in workflow.steps] == [
+        "search",
+        "llm_prompt",
+        "structured_extract",
+        "human_gate",
+        "save_artifact",
+    ]
+
+    client = TestClient(app)
+    validate_response = client.post("/workflows/validate", json={"workflow": workflow_payload})
+    assert validate_response.status_code == 200
+    validate_body = validate_response.json()
+    assert validate_body["valid"] is True
+    assert validate_body["workflow_id"] == "advanced_ai_algorithm_recruiting"
+    assert validate_body["step_count"] == 5
+
+    run_response = client.post(
+        "/workflows/run",
+        json={
+            "workflow": workflow_payload,
+            "input": {"search_query": "GitHub VLA robot manipulation diffusion policy candidate"},
+        },
+    )
+    assert run_response.status_code == 200
+    task_id = run_response.json()["task_id"]
+
+    candidate_profile = {
+        "name": "Lin Chen",
+        "current_company": "Intrinsic AI",
+        "project_evidence": ["github.com/linchen/vla-robot-policy", "Mobile manipulation benchmark"],
+        "core_capabilities": ["VLA policy learning", "robot manipulation", "large-scale evaluation"],
+        "risks": ["No production deployment evidence yet"],
+        "recommended_level": "strong_recommend",
+    }
+    router = FakeRouter(
+        llm_outputs=[
+            "Lin Chen has strong robotics project evidence and relevant VLA depth.",
+            json.dumps(candidate_profile, ensure_ascii=False),
+        ]
+    )
+    runner = WorkflowTaskRunner(router=router)
+    runner.run_until_blocked_or_done(task_id)
+
+    awaiting = client.get(f"/tasks/{task_id}").json()
+    assert awaiting["status"] == "awaiting_human"
+    assert awaiting["awaiting"]["json_workflow"] is True
+    assert awaiting["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 3
+    assert "Lin Chen" in json.dumps(awaiting["awaiting"], ensure_ascii=False)
+    assert task_id not in isolated_task_store._wait_events
+
+    runtime = awaiting["frontend_state"]["json_workflow_runtime"]
+    assert runtime["context"]["candidate_signals"][0]["snippet"] == "GitHub VLA robot manipulation diffusion policy candidate"
+    assert runtime["context"]["project_review"].startswith("Lin Chen")
+    assert runtime["context"]["candidate_profile"] == candidate_profile
+    assert "hr_decision" not in runtime["context"]
+
+    events = awaiting["audit_events"]
+    event_pairs = {(event["type"], event["step_label"]) for event in events}
+    for step in workflow.steps[:4]:
+        assert ("step_start", step.id) in event_pairs
+        assert ("tool_call", step.id) in event_pairs
+    for step in workflow.steps[:3]:
+        assert ("summary", step.id) in event_pairs
+    assert ("human_gate", "hr_screen_gate") in event_pairs
+
+    confirm_response = client.post(
+        f"/tasks/{task_id}/confirm",
+        json={"action": "approve", "data": {"note": "推进面谈"}},
+    )
+    assert confirm_response.status_code == 200
+    done = wait_for_task_status(client, task_id, "done")
+
+    result = done["result"]
+    assert result["workflow_id"] == "advanced_ai_algorithm_recruiting"
+    for key in [
+        "candidate_signals",
+        "project_review",
+        "candidate_profile",
+        "hr_decision",
+        "candidate_artifact",
+    ]:
+        assert key in result["context"]
+    assert result["context"]["hr_decision"]["decision"] == "approve"
+    assert "candidate_artifact" in result["artifacts"]
+    assert result["final_output"] == result["context"]["candidate_artifact"]
+    assert "Lin Chen" in result["final_output"]
+
+    done_pairs = {(event["type"], event["step_label"]) for event in done["audit_events"]}
+    assert ("step_start", "candidate_summary_artifact") in done_pairs
+    assert ("summary", "candidate_summary_artifact") in done_pairs
+
+    assert set(SCENARIO_PLANS) == {"A", "B", "C", "D"}
+    assert {scenario["id"] for scenario in get_meta()["scenarios"]} == {"A", "B", "C", "D"}
+
+
+def test_json_workflow_human_gate_survives_store_restart_and_api_confirm_resumes(
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "id": "long_running_hr_checkpoint",
+        "inputs": {"candidate_summary": {"type": "string"}},
+        "steps": [
+            {
+                "id": "candidate_search",
+                "type": "search",
+                "input": "{{ candidate_summary }}",
+                "limit": 1,
+                "output_key": "search_hits",
+            },
+            {
+                "id": "hr_gate",
+                "type": "human_gate",
+                "prompt": "HR review: {{ search_hits }}",
+                "output_key": "hr_decision",
+            },
+            {
+                "id": "resume_after_gate",
+                "type": "llm_prompt",
+                "prompt": "Next interview action from {{ hr_decision }} and {{ search_hits }}",
+                "output_key": "final_note",
+            },
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    first_router = FakeRouter()
+    runner = WorkflowTaskRunner(router=first_router)
+    task_id = runner.start(workflow, {"candidate_summary": "robot VLA candidate"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+
+    awaiting = isolated_task_store.snapshot(task_id)
+    assert awaiting is not None
+    assert awaiting["status"] == "awaiting_human"
+    assert awaiting["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 1
+    assert awaiting["awaiting"]["workflow_id"] == "long_running_hr_checkpoint"
+    assert awaiting["awaiting"]["json_workflow"] is True
+    assert task_id not in isolated_task_store._wait_events
+
+    restarted_store = orchestrator.DBTaskStore()
+    monkeypatch.setattr(orchestrator, "task_store", restarted_store)
+    monkeypatch.setattr(api_main, "task_store", restarted_store)
+    after_restart = restarted_store.snapshot(task_id)
+    assert after_restart is not None
+    assert after_restart["status"] == "awaiting_human"
+    assert after_restart["error"] is None
+    assert after_restart["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 1
+    assert not any(
+        event["type"] == "error" and event["data"].get("recovery") == "json_workflow_interrupted"
+        for event in after_restart["audit_events"]
+    )
+
+    resume_router = FakeRouter(llm_outputs=["面谈推进：安排机器人项目深挖面。"])
+    monkeypatch.setattr(api_main, "WorkflowTaskRunner", lambda: WorkflowTaskRunner(router=resume_router))
+    client = TestClient(app)
+    confirm_response = client.post(
+        f"/tasks/{task_id}/confirm",
+        json={"action": "approve", "data": {"note": "HR approved after delay"}},
+    )
+    assert confirm_response.status_code == 200
+    done = wait_for_task_status(client, task_id, "done")
+    assert done["result"]["final_output"] == "面谈推进：安排机器人项目深挖面。"
+    assert done["result"]["context"]["hr_decision"]["decision"] == "approve"
+    assert [step["label"] for step in done["steps_done"]].count("candidate_search") == 1
+    assert first_router.search_provider.calls == [{"query": "robot VLA candidate", "limit": 1}]
+    assert resume_router.search_provider.calls == []
+
+
+def test_resume_and_jd_structured_extract_recover_dirty_json_and_type_errors(
+    isolated_task_store,
+) -> None:
+    resume_payload = workflow_fixture("resume_structured_extract.json")
+    resume_profile = {
+        "name": "Zhou Han",
+        "current_company": "Agility Robotics",
+        "location": "Shenzhen / Seattle",
+        "work_history": ["Agility Robotics - Robot Learning Engineer", "ByteDance AI Lab - Intern"],
+        "education": ["CMU Robotics Institute MSc"],
+        "skills": ["VLA", "diffusion policy", "PyTorch", "ROS2"],
+        "robotics_experience": ["Mobile manipulation", "real robot data collection"],
+        "llm_experience": ["VLM grounding", "instruction tuning"],
+        "evidence": ["GitHub robot-policy repo", "RSS workshop paper"],
+        "risks": ["Leadership scope unclear"],
+        "recommended_level": "A",
+    }
+    resume_router = FakeRouter(
+        llm_outputs=[
+            "```json\n{\"name\":\"Zhou Han\",\"current_company\":\"Agility Robotics\"}\n```",
+            json.dumps(
+                {
+                    **resume_profile,
+                    "work_history": "Agility Robotics - Robot Learning Engineer",
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(resume_profile, ensure_ascii=False),
+        ]
+    )
+    resume_runner = WorkflowTaskRunner(router=resume_router)
+    resume_task_id = resume_runner.start(
+        WorkflowDefinition.model_validate(resume_payload),
+        {
+            "resume_text": (
+                "Zhou Han, CMU Robotics Institute MSc. Worked on VLA / diffusion policy "
+                "for mobile manipulation. 中文项目：真实机器人数据采集、ROS2 部署、大模型指令跟随。"
+            )
+        },
+        auto_run=False,
+    )
+    resume_runner.run_until_blocked_or_done(resume_task_id)
+    resume_done = resume_runner.snapshot(resume_task_id)
+    assert resume_done["status"] == "done"
+    assert resume_done["result"]["context"]["resume_profile"] == resume_profile
+    assert "```json" not in json.dumps(resume_done["result"]["context"]["resume_profile"], ensure_ascii=False)
+    assert len(resume_router.llm_provider.prompts) == 3
+    final_retry_prompt = resume_router.llm_provider.prompts[-1]["prompt"]
+    assert "```json" not in final_retry_prompt
+    assert "Agility Robotics - Robot Learning Engineer" in final_retry_prompt
+
+    jd_payload = workflow_fixture("jd_structured_extract.json")
+    jd_profile = {
+        "role_name": "高级 AI 算法工程师 - 机器人 VLA",
+        "must_have_skills": ["robot learning", "VLA/VLM", "PyTorch", "real robot evaluation"],
+        "nice_to_have_skills": ["diffusion policy", "sim2real", "ROS2"],
+        "responsibilities": ["构建机器人 VLA 策略", "设计项目证据评估标准"],
+        "exclusion_signals": ["Only chatbot experience", "No embodied AI project evidence"],
+        "target_companies": ["Physical Intelligence", "Intrinsic", "Covariant"],
+        "interview_questions": ["如何验证 VLA 在真实机械臂上的泛化？"],
+        "scoring_rubric": {"robotics_depth": 30, "llm_depth": 20, "evidence_quality": 30, "risk": 20},
+    }
+    jd_router = FakeRouter(
+        llm_outputs=[
+            "Here is the JSON:\n{\"role_name\":\"高级 AI 算法工程师 - 机器人 VLA\"}",
+            json.dumps(
+                {
+                    **jd_profile,
+                    "interview_questions": "如何验证 VLA 在真实机械臂上的泛化？",
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(jd_profile, ensure_ascii=False),
+        ]
+    )
+    jd_runner = WorkflowTaskRunner(router=jd_router)
+    jd_task_id = jd_runner.start(
+        WorkflowDefinition.model_validate(jd_payload),
+        {
+            "jd_text": (
+                "岗位职责：机器人 VLA 策略、真实机器人评测、候选人项目证据审核。"
+                "必备：PyTorch、robot learning、VLM。加分：diffusion policy、sim2real。"
+            )
+        },
+        auto_run=False,
+    )
+    jd_runner.run_until_blocked_or_done(jd_task_id)
+    jd_done = jd_runner.snapshot(jd_task_id)
+    assert jd_done["status"] == "done"
+    assert jd_done["result"]["context"]["jd_profile"] == jd_profile
+    assert isinstance(jd_done["result"]["context"]["jd_profile"]["interview_questions"], list)
+    assert isinstance(jd_done["result"]["context"]["jd_profile"]["scoring_rubric"], dict)
+
+
+def test_structured_extract_exhaustion_events_and_human_gate_payload_are_sanitized(
+    isolated_task_store,
+) -> None:
+    resume_payload = workflow_fixture("resume_structured_extract.json")
+    resume_payload["steps"][0]["max_retries"] = 1
+    error_runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["not-json", "{\"name\":\"Only Name\"}"]))
+    error_task_id = error_runner.start(
+        WorkflowDefinition.model_validate(resume_payload),
+        {"resume_text": "复杂简历文本"},
+        auto_run=False,
+    )
+    error_runner.run_until_blocked_or_done(error_task_id)
+    error_snapshot = error_runner.snapshot(error_task_id)
+    assert error_snapshot["status"] == "error"
+    assert any(
+        event["type"] == "error"
+        and event["status"] == "error"
+        and event["data"]["workflow_id"] == "resume_structured_extract"
+        for event in error_snapshot["audit_events"]
+    )
+
+    jd_payload = workflow_fixture("jd_structured_extract.json")
+    jd_payload["steps"][0]["max_retries"] = 1
+    human_gate_router = FakeRouter(
+        llm_outputs=[
+            "OpenRouterChatLLMProvider raw debug: api_key=sk-live-secret-token email=lin@example.com",
+            "still invalid token=ghp_1234567890abcdef",
+        ]
+    )
+    human_gate_runner = WorkflowTaskRunner(router=human_gate_router)
+    human_gate_task_id = human_gate_runner.start(
+        WorkflowDefinition.model_validate(jd_payload),
+        {"jd_text": "高级 AI 算法岗 JD 文本"},
+        auto_run=False,
+    )
+    human_gate_runner.run_until_blocked_or_done(human_gate_task_id)
+    human_gate_snapshot = human_gate_runner.snapshot(human_gate_task_id)
+    assert human_gate_snapshot["status"] == "awaiting_human"
+    assert human_gate_snapshot["awaiting"]["draft"]["step_id"] == "jd_profile_extract"
+
+    retry_prompt_text = human_gate_router.llm_provider.prompts[1]["prompt"]
+    human_gate_payload = json.dumps(
+        {
+            "awaiting": human_gate_snapshot["awaiting"],
+            "events": human_gate_snapshot["audit_events"],
+        },
+        ensure_ascii=False,
+    )
+    combined = retry_prompt_text + human_gate_payload
+    for forbidden in [
+        "sk-live-secret-token",
+        "OpenRouterChatLLMProvider",
+        "lin@example.com",
+        "ghp_1234567890abcdef",
+    ]:
+        assert forbidden not in combined
+    assert "[redacted]" in combined
+    assert "[provider-internal]" in combined

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import sessionmaker
 
-from app.core.workflow_context import normalize_context_value, truncate_text
+from app.core.workflow_context import normalize_context_value, render_value, truncate_text
 from app.core.workflow_dsl import StepDefinition, WorkflowDefinition
 from app.core.workflow_executor import (
     HumanGateRequiredException,
@@ -21,6 +24,9 @@ from app.schemas.tasks import AgentEventCreate
 
 
 JSON_WORKFLOW_SCENARIO_ID = "json_workflow"
+CONTEXT_OUTPUT_STORAGE = "context"
+ARTIFACT_OUTPUT_STORAGE = "artifact"
+ARTIFACT_PREVIEW_CHARS = 500
 
 
 class WorkflowTaskRunner:
@@ -173,9 +179,14 @@ class WorkflowTaskRunner:
                 self._mark_error(task_id, workflow, state, step, str(exc), {"step_id": step.id})
                 return self.snapshot(task_id)
 
-            if result.output_key:
-                state.context[result.output_key] = normalize_context_value(result.value)
-            state.artifacts.update(normalize_context_value(result.artifacts))
+            try:
+                step_output = _store_step_result(task_id, state, step, result)
+            except WorkflowFatalException as exc:
+                self._mark_error(task_id, workflow, state, step, str(exc), exc.safe_payload)
+                return self.snapshot(task_id)
+            except Exception as exc:
+                self._mark_error(task_id, workflow, state, step, str(exc), {"step_id": step.id})
+                return self.snapshot(task_id)
             state.current_step_index += 1
             self._save_checkpoint(
                 task_id,
@@ -185,7 +196,7 @@ class WorkflowTaskRunner:
                 current_agent=step.type,
                 current_step=state.current_step_index,
             )
-            self._append_step_done(task_id, state, step, result.value)
+            self._append_step_done(task_id, state, step, step_output)
 
         self._mark_done(task_id, workflow, state)
         return self.snapshot(task_id)
@@ -405,3 +416,99 @@ class WorkflowTaskRunner:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _store_step_result(
+    task_id: str,
+    state: WorkflowRuntimeState,
+    step: StepDefinition,
+    result: Any,
+) -> Any:
+    step_output = result.value
+    if result.output_key:
+        if _step_output_storage(step) == ARTIFACT_OUTPUT_STORAGE:
+            artifact_metadata = _write_step_output_artifact(
+                task_id,
+                step,
+                result.output_key,
+                result.value,
+            )
+            artifact_ref = _artifact_ref(artifact_metadata)
+            state.context[result.output_key] = artifact_ref
+            state.artifacts[artifact_metadata["artifact_key"]] = artifact_metadata
+            return artifact_ref
+        state.context[result.output_key] = normalize_context_value(result.value)
+        state.artifacts.update(normalize_context_value(result.artifacts))
+        return step_output
+    state.artifacts.update(normalize_context_value(result.artifacts))
+    return step_output
+
+
+def _step_output_storage(step: StepDefinition) -> str:
+    storage = (step.metadata or {}).get("output_storage", CONTEXT_OUTPUT_STORAGE)
+    if storage not in {CONTEXT_OUTPUT_STORAGE, ARTIFACT_OUTPUT_STORAGE}:
+        raise WorkflowFatalException(
+            f"Unsupported output_storage for step {step.id}: {storage}",
+            {"step_id": step.id, "output_storage": storage},
+        )
+    return storage
+
+
+def _write_step_output_artifact(
+    task_id: str,
+    step: StepDefinition,
+    output_key: str,
+    value: Any,
+) -> dict[str, Any]:
+    artifact_key = _artifact_key(step, output_key)
+    normalized = normalize_context_value(value)
+    artifact_path = _artifact_path(task_id, artifact_key)
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        json.dumps(normalized, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    return normalize_context_value(
+        {
+            "type": "workflow_artifact",
+            "storage": "local_file",
+            "artifact_key": artifact_key,
+            "path": str(artifact_path),
+            "mime_type": "application/json",
+            "size_chars": len(render_value(normalized)),
+            "preview": truncate_text(normalized, ARTIFACT_PREVIEW_CHARS),
+            "created_by_step": step.id,
+            "output_key": output_key,
+            "created_at": _utc_now().isoformat(),
+        }
+    )
+
+
+def _artifact_ref(metadata: dict[str, Any]) -> dict[str, Any]:
+    return normalize_context_value(
+        {
+            "type": "artifact_ref",
+            "artifact_key": metadata["artifact_key"],
+            "storage": metadata["storage"],
+            "mime_type": metadata["mime_type"],
+            "size_chars": metadata["size_chars"],
+            "preview": metadata["preview"],
+        }
+    )
+
+
+def _artifact_key(step: StepDefinition, output_key: str) -> str:
+    return _safe_artifact_component(f"{step.id}_{output_key}")
+
+
+def _artifact_path(task_id: str, artifact_key: str) -> Path:
+    return _artifact_base_dir() / _safe_artifact_component(task_id) / f"{artifact_key}.json"
+
+
+def _artifact_base_dir() -> Path:
+    return Path(os.environ.get("WORKFLOW_ARTIFACT_DIR", "data/workflow_artifacts"))
+
+
+def _safe_artifact_component(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
+    return safe or "artifact"

@@ -1,0 +1,25 @@
+$ .venv/bin/python scripts/seed_db.py --database-url 'sqlite:////home/lison/Desktop/zhaoping/artifacts/e2e_evidence/projects.sqlite3'
+started_at=2026-06-09T10:49:37.756Z
+finished_at=2026-06-09T10:49:37.963Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+{"candidates": 5, "jobs": 3, "matches": 5, "project_id": "project_2026_ai_team"}
+
+
+## stderr
+I2026-06-09 18:49:37.764692 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:37.764735 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:37.767395 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:37.768520 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:37.768638 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:37.772417 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:37.773160 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:37.773174 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:37.773191 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:37.773240 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:37.773247 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:37.773294 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:37.773301 inputcontextmanager.cpp:318] All display connections are gone, exit now.

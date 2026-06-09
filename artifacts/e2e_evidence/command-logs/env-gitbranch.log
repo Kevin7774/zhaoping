@@ -1,0 +1,25 @@
+$ git rev-parse --abbrev-ref HEAD
+started_at=2026-06-09T10:49:36.888Z
+finished_at=2026-06-09T10:49:36.905Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+main
+
+
+## stderr
+I2026-06-09 18:49:36.896764 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:36.896809 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:36.899974 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:36.901054 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:36.901140 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:36.903408 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:36.903944 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:36.903964 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:36.903987 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:36.904084 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:36.904099 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:36.904205 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:36.904215 inputcontextmanager.cpp:318] All display connections are gone, exit now.

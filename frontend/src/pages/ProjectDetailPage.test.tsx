@@ -425,7 +425,7 @@ describe("ProjectDetailPage backend hardening", () => {
       decision: "approve",
       simulate: true,
     });
-    expect(await screen.findByText("已记录模拟发送，未真实发送。")).toBeTruthy();
+    expect(await screen.findByText("草稿已确认，未发送；已记录模拟触达。")).toBeTruthy();
     expect(screen.queryByText("已发送")).toBeNull();
   });
 

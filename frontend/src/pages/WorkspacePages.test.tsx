@@ -1,0 +1,190 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+
+import { CandidatesPage } from "./CandidatesPage";
+import { DashboardPage } from "./DashboardPage";
+import { IntegrationsPage } from "./IntegrationsPage";
+import { JobsPage } from "./JobsPage";
+import { OutreachPage } from "./OutreachPage";
+import { ReportsPage } from "./ReportsPage";
+import { ScenariosPage } from "./ScenariosPage";
+import { TalentMapPage } from "./TalentMapPage";
+import { TasksPage } from "./TasksPage";
+import { RECENT_TASK_IDS_KEY } from "./projectWorkspace";
+
+function jsonResponse(payload: unknown, status = 200, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+const projectPayload = {
+  id: "project_2026_ai_team",
+  name: "真实后端项目",
+  status: "active",
+  createdAt: "2026-06-09T00:00:00Z",
+  openJobs: 1,
+  totalCandidates: 2,
+  awaitingHuman: 0,
+  averageMatchScore: 86,
+};
+
+const jobsPayload = [
+  {
+    id: "job_vla_algorithm",
+    projectId: "project_2026_ai_team",
+    title: "VLA / 具身智能算法工程师",
+    headcount: 2,
+    status: "processing",
+    pipelineStatus: "processing",
+    candidateCount: 2,
+    averageMatchScore: 86,
+  },
+];
+
+const candidatesPayload = [
+  {
+    id: "cand_zhou_han",
+    jobCandidateId: 1,
+    jobId: "job_vla_algorithm",
+    jobTitle: "VLA / 具身智能算法工程师",
+    name: "Zhou Han",
+    sourcePlatform: "GitHub",
+    sourceUrl: "https://github.com/example/robot-vla",
+    currentCompany: "Robot Foundation Team",
+    city: "上海",
+    email: "zhou.han@example.com",
+    matchScore: 91,
+    pipelineStatus: "pending_outreach",
+  },
+  {
+    id: "cand_lin_yu",
+    jobCandidateId: 2,
+    jobId: "job_vla_algorithm",
+    jobTitle: "VLA / 具身智能算法工程师",
+    name: "Lin Yu",
+    sourcePlatform: "Paper",
+    currentCompany: "Embodied AI Lab",
+    city: "北京",
+    email: null,
+    matchScore: 81,
+    pipelineStatus: "screening",
+  },
+];
+
+const integrationsPayload = {
+  capabilities: [
+    { id: "search_api", service_type: "search", label: "Search API", status: "active", connected: true, code_path: "app/providers/search.py" },
+    { id: "llm_api", service_type: "llm", label: "LLM API", status: "active", connected: true, code_path: "app/providers/llm.py" },
+    { id: "email_delivery_api", service_type: "email_delivery", label: "Email API", status: "missing_key", connected: false },
+  ],
+  services: [],
+};
+
+const reportPayload = {
+  reportId: "report_1",
+  projectId: "project_2026_ai_team",
+  sourceTaskId: "task_report",
+  createdAt: "2026-06-09T08:00:00Z",
+  content: {
+    conclusion: "本周候选人质量稳定。",
+    keyProgress: ["已完成 VLA 岗位初筛"],
+    topCandidates: ["Zhou Han"],
+    risks: ["高分候选人触达节奏需要跟进"],
+    nextActions: ["安排技术面"],
+  },
+};
+
+function renderPage(element: ReactElement) {
+  return render(<MemoryRouter>{element}</MemoryRouter>);
+}
+
+describe("workspace sidebar pages", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    window.localStorage.clear();
+    window.localStorage.setItem(RECENT_TASK_IDS_KEY, JSON.stringify(["task_demo"]));
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload);
+      if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
+      if (url.startsWith("/api/projects/project_2026_ai_team/candidates")) {
+        return jsonResponse(candidatesPayload, 200, {
+          "X-Total-Count": String(candidatesPayload.length),
+          "X-Has-More": "false",
+        });
+      }
+      if (url === "/api/integrations/status") return jsonResponse(integrationsPayload);
+      if (url === "/api/scenarios/meta") {
+        return jsonResponse({
+          scenarios: [
+            { id: "A", name_zh: "岗位分析" },
+            { id: "B", name_zh: "找候选人" },
+            { id: "C", name_zh: "候选人评估" },
+            { id: "D", name_zh: "招聘周报" },
+          ],
+        });
+      }
+      if (url === "/api/projects/project_2026_ai_team/reports/latest") return jsonResponse(reportPayload);
+      if (url.startsWith("/api/outreach/history")) {
+        return jsonResponse({
+          items: [
+            {
+              historyId: "history_1",
+              projectId: "project_2026_ai_team",
+              candidateId: "cand_zhou_han",
+              email: "zhou.han@example.com",
+              subject: "沟通 VLA 岗位",
+              body: "模拟触达",
+              status: "simulated",
+              deliveryMode: "simulated",
+              createdAt: "2026-06-09T09:00:00Z",
+            },
+          ],
+        });
+      }
+      if (url === "/api/tasks/task_demo") {
+        return jsonResponse({
+          task_id: "task_demo",
+          scenario_id: "C",
+          status: "done",
+          current_step: 4,
+          total_steps: 4,
+          audit_events: [{ type: "done", created_at: "2026-06-09T09:30:00Z" }],
+          steps_done: [],
+        });
+      }
+      return jsonResponse({ detail: `Unhandled ${url}` }, 404);
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["工作台", <DashboardPage />, "招聘流程入口"],
+    ["岗位分析", <JobsPage />, "岗位列表"],
+    ["找候选人", <TalentMapPage />, "来源分布"],
+    ["候选人评估", <ScenariosPage />, "候选人评估队列"],
+    ["人群筛选", <CandidatesPage />, "候选人结果"],
+    ["邮件触达", <OutreachPage />, "可触达候选人"],
+    ["招聘周报", <ReportsPage />, "周报输入范围"],
+    ["任务记录", <TasksPage />, "最近任务"],
+    ["系统设置", <IntegrationsPage />, "能力接入状态"],
+  ])("%s renders backend-backed content", async (title, element, marker) => {
+    renderPage(element);
+
+    expect(await screen.findByRole("heading", { name: title })).toBeTruthy();
+    expect(await screen.findByText(marker)).toBeTruthy();
+  });
+});

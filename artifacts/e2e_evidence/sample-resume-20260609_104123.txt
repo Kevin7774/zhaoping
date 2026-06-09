@@ -1,0 +1,6 @@
+Alex Chen / Robotics VLA Engineer
+
+教育经历: CMU Robotics Institute, M.S. Robotics.
+工作经历: Embodied AI Lab, Robot Learning Engineer.
+项目经历: VLA policy, teleoperation data cleaning, diffusion policy deployment, ROS real robot latency 12ms.
+技能: Python, PyTorch, ROS2, Isaac Sim, VLM, LLM agent tooling.

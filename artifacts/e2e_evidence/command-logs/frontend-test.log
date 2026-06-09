@@ -1,0 +1,34 @@
+$ pnpm --dir frontend test
+started_at=2026-06-09T10:49:40.817Z
+finished_at=2026-06-09T10:49:42.314Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+
+ RUN  v4.1.8 /home/lison/Desktop/zhaoping/frontend
+
+
+ Test Files  8 passed (8)
+      Tests  53 passed (53)
+   Start at  18:49:41
+   Duration  991ms (transform 173ms, setup 0ms, import 383ms, tests 801ms, environment 1.13s)
+
+
+
+## stderr
+I2026-06-09 18:49:40.825462 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:40.825491 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:40.827175 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:40.827890 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:40.827960 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:40.830246 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:40.830766 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:40.830786 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:40.830824 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:40.830940 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:40.830956 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:40.831083 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:40.831094 inputcontextmanager.cpp:318] All display connections are gone, exit now.
+$ vitest run

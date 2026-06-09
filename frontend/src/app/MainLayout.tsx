@@ -4,11 +4,13 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { navigationItems } from "./navigation";
 
 function activeSection(pathname: string) {
+  if (pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/jobs")) return "jobs";
   if (pathname.startsWith("/talent-map")) return "talent-map";
   if (pathname.startsWith("/scenarios")) return "evaluation";
   if (pathname.startsWith("/candidates")) return "segments";
+  if (pathname.startsWith("/outreach")) return "outreach";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/tasks")) return "tasks";
   if (pathname.startsWith("/integrations")) return "settings";

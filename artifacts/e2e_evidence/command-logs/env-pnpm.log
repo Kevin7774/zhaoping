@@ -1,0 +1,25 @@
+$ pnpm --version
+started_at=2026-06-09T10:49:36.969Z
+finished_at=2026-06-09T10:49:37.224Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+11.5.0
+
+
+## stderr
+I2026-06-09 18:49:36.977129 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:36.977169 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:36.979659 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:36.980716 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:36.980840 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:36.983256 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:36.983635 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:36.983643 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:36.983658 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:36.983701 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:36.983708 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:36.983756 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:36.983762 inputcontextmanager.cpp:318] All display connections are gone, exit now.

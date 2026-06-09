@@ -1,0 +1,65 @@
+{
+  "id": "jd_structured_extract",
+  "name": "JD 结构化解析",
+  "version": "2026-06-09",
+  "inputs": {
+    "jd_text": {
+      "type": "string"
+    }
+  },
+  "steps": [
+    {
+      "id": "jd_profile_extract",
+      "type": "structured_extract",
+      "input": "{{ jd_text }}",
+      "schema": {
+        "type": "object",
+        "required": [
+          "role_name",
+          "must_have_skills",
+          "nice_to_have_skills",
+          "responsibilities",
+          "exclusion_signals",
+          "target_companies",
+          "interview_questions",
+          "scoring_rubric"
+        ],
+        "properties": {
+          "role_name": {
+            "type": "string"
+          },
+          "must_have_skills": {
+            "type": "array"
+          },
+          "nice_to_have_skills": {
+            "type": "array"
+          },
+          "responsibilities": {
+            "type": "array"
+          },
+          "exclusion_signals": {
+            "type": "array"
+          },
+          "target_companies": {
+            "type": "array"
+          },
+          "interview_questions": {
+            "type": "array"
+          },
+          "scoring_rubric": {
+            "type": "object"
+          }
+        }
+      },
+      "max_retries": 2,
+      "on_failure": "human_gate",
+      "output_key": "jd_profile"
+    },
+    {
+      "id": "jd_profile_artifact",
+      "type": "save_artifact",
+      "input": "结构化 JD 画像：\n{{ jd_profile }}",
+      "output_key": "jd_artifact"
+    }
+  ]
+}

@@ -6,7 +6,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.router import ServiceRouter, get_router
-from app.core.workflow_context import normalize_context_value, render_template, retry_prompt
+from app.core.workflow_context import (
+    DEFAULT_PROMPT_CONTEXT_BUDGET_CHARS,
+    build_prompt_context,
+    normalize_context_value,
+    render_template,
+    retry_prompt,
+    sanitize_failure_text,
+    truncate_text,
+)
 from app.core.workflow_dsl import StepDefinition, WorkflowDefinition
 
 
@@ -74,7 +82,7 @@ class StepExecutor:
         if step_def.type == "save_artifact":
             return self._execute_save_artifact(step_def, state)
         if step_def.type == "human_gate":
-            prompt = render_template(step_def.prompt or "请确认", state.context)
+            prompt = _render_prompt_template(step_def.prompt or "请确认", state.context)
             raise HumanGateRequiredException(
                 {"agent": "json_workflow", "prompt": prompt, "draft": state.context}
             )
@@ -87,7 +95,7 @@ class StepExecutor:
         return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=normalize_context_value(value))
 
     def _execute_llm_prompt(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
-        prompt = render_template(step_def.prompt or "", state.context)
+        prompt = _render_prompt_template(step_def.prompt or "", state.context)
         llm = self.router.llm(step_def.service)
         value = llm.text(prompt, max_tokens=step_def.max_tokens or 256)
         return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=value)
@@ -102,7 +110,7 @@ class StepExecutor:
         )
 
     def _execute_structured_extract(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
-        source = render_template(str(step_def.input or ""), state.context)
+        source = _render_prompt_template(str(step_def.input or ""), state.context)
         llm = self.router.llm(step_def.service)
         prompt = (
             "请从输入中抽取结构化数据。只输出合法 JSON，不要输出 Markdown 或解释。\n\n"
@@ -124,25 +132,38 @@ class StepExecutor:
                 )
             except Exception as exc:
                 last_output = output
-                last_error = str(exc)
+                raw_error = str(exc)
+                last_error = sanitize_failure_text(raw_error)
                 state.retry_state = {
                     "step_id": step_def.id,
                     "retry_count": attempt + 1,
                     "last_error": last_error,
                 }
-                prompt = retry_prompt(step_def.schema or {}, last_output, last_error)
+                prompt = retry_prompt(step_def.schema or {}, last_output, raw_error)
         if step_def.on_failure == "human_gate":
             raise HumanGateRequiredException(
                 {
                     "agent": "json_workflow",
                     "prompt": f"结构化抽取失败，需要人工确认：{step_def.id}",
-                    "draft": {"step_id": step_def.id, "last_error": last_error, "last_output": last_output[:1200]},
+                    "draft": {
+                        "step_id": step_def.id,
+                        "last_error": last_error,
+                        "last_output": truncate_text(sanitize_failure_text(last_output), 1200),
+                    },
                 }
             )
         raise WorkflowFatalException(
             f"structured_extract failed for step {step_def.id}",
             {"step_id": step_def.id, "last_error": last_error},
         )
+
+
+def _render_prompt_template(
+    template: str,
+    context: dict[str, Any],
+    max_chars: int = DEFAULT_PROMPT_CONTEXT_BUDGET_CHARS,
+) -> str:
+    return render_template(template, build_prompt_context(template, context, max_chars=max_chars))
 
 
 def _validate_schema(value: Any, schema: dict[str, Any]) -> None:

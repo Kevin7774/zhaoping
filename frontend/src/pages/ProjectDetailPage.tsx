@@ -44,6 +44,7 @@ import { humanGateRequestFromEvent, type HumanGateRequest } from "../features/pr
 import { defaultFilterCriteria, type FilterCriteria } from "../features/projects/state";
 import { apiClient, type ApiRequestLogEntry } from "../shared/api/client";
 import { useTaskStream } from "../shared/hooks/useTaskStream";
+import { rememberTaskId } from "./projectWorkspace";
 
 type LoadingState = "idle" | "loading" | "ready" | "error";
 
@@ -329,6 +330,10 @@ export function ProjectDetailPage() {
     usedFallbackPolling,
   } = useTaskStream(activeTaskId);
   const taskStatus = taskSnapshot?.status ?? (activeTaskId ? connectionState : "idle");
+
+  useEffect(() => {
+    if (activeTaskId) rememberTaskId(activeTaskId);
+  }, [activeTaskId]);
 
   const loadProjectData = useCallback(
     async (criteria: FilterCriteria) => {
@@ -734,7 +739,7 @@ export function ProjectDetailPage() {
       });
       setOutreachHistory((current) => [sendResult, ...current]);
       setDraftConfirmOpen(false);
-      setToast(sendResult.deliveryMode === "simulated" ? "已记录模拟发送，未真实发送。" : "已写入触达记录。");
+      setToast(sendResult.deliveryMode === "simulated" ? "草稿已确认，未发送；已记录模拟触达。" : "已写入触达记录。");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "草稿确认失败");
     } finally {
@@ -1140,7 +1145,7 @@ export function ProjectDetailPage() {
                   草稿由 POST /outreach/draft 生成，编辑通过 PATCH /outreach/drafts/&lt;draftId&gt; 保存，确认后写入触达历史。
                 </p>
                 <p className="text-[12px] leading-[18px] text-[#F59E0B]">
-                  当前真实邮件提供方未接入发送动作，确认后仅记录模拟发送，不显示真实发送成功。
+                  当前真实邮件提供方未接入发送动作，确认后仅记录模拟触达，不显示真实送达状态。
                 </p>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] text-[#6B7280]">收件人</span>

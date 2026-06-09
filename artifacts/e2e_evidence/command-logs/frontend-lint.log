@@ -1,0 +1,25 @@
+$ pnpm --dir frontend lint
+started_at=2026-06-09T10:49:37.963Z
+finished_at=2026-06-09T10:49:39.512Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+
+
+## stderr
+I2026-06-09 18:49:37.971853 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:37.971896 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:37.974530 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:37.975609 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:37.975729 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:37.978200 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:37.978897 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:37.978915 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:37.978942 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:37.979042 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:37.979055 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:37.979151 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:37.979162 inputcontextmanager.cpp:318] All display connections are gone, exit now.
+$ eslint .

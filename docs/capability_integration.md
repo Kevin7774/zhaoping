@@ -67,6 +67,43 @@ The four A/B/C/D recruiting scenarios can also be controlled as atomic nodes wit
 - Node outputs are summarized into workflow `artifacts` so the frontend can pass outputs between A/B/C/D at field level.
 - Human-in-the-loop atomic nodes should be run once to create an awaiting draft, then run again with `decision` and optional `edits`.
 
+## JSON Workflow Context And Artifact Contract
+
+JSON workflow `context` is the hot state bag for prompt variables and business flow
+state. It should stay small. Do not use it as a long-text document store.
+
+For large step outputs such as raw search results, extracted page text, uploaded
+resume text, or generated long drafts, opt into file-backed artifact storage:
+
+```json
+{
+  "id": "raw_search",
+  "type": "search",
+  "input": "{{ query }}",
+  "output_key": "search_results",
+  "metadata": {
+    "output_storage": "artifact"
+  }
+}
+```
+
+When `metadata.output_storage = "artifact"`:
+
+- The normalized raw output is written to
+  `WORKFLOW_ARTIFACT_DIR/{task_id}/{artifact_key}.json`.
+- `WORKFLOW_ARTIFACT_DIR` defaults to `data/workflow_artifacts`.
+- `state.context[output_key]` contains only an `artifact_ref` with key, storage
+  type, size, MIME type, and preview.
+- `state.artifacts[artifact_key]` contains local file metadata including the
+  path, producing step, output key, size, and preview.
+- Step audit output uses the same lightweight `artifact_ref`, so task snapshots,
+  events, and final results do not persist the raw long payload in the task DB.
+
+Downstream LLM prompts should normally reference a summary variable such as
+`{{ search_summary }}`. If a later step needs raw artifact content, add an
+explicit artifact-reading step instead of relying on `{{ search_results }}` to
+inline the original long text.
+
 ## Adding A Service
 
 1. Add `[services.<service_name>]` to `config/services.toml`.

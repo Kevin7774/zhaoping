@@ -1,0 +1,25 @@
+$ .venv/bin/python --version
+started_at=2026-06-09T10:49:36.938Z
+finished_at=2026-06-09T10:49:36.952Z
+exit_code=0
+signal=
+timed_out=false
+
+## stdout
+Python 3.11.0rc1
+
+
+## stderr
+I2026-06-09 18:49:36.946418 instance.cpp:1394] Override Enabled Addons: {}
+I2026-06-09 18:49:36.946448 instance.cpp:1395] Override Disabled Addons: {}
+I2026-06-09 18:49:36.948370 addonmanager.cpp:191] Loaded addon xcb
+I2026-06-09 18:49:36.949350 addonmanager.cpp:191] Loaded addon quickphrase
+I2026-06-09 18:49:36.949440 addonmanager.cpp:191] Loaded addon imselector
+I2026-06-09 18:49:36.951810 addonmanager.cpp:191] Loaded addon keyboard
+E2026-06-09 18:49:36.952242 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
+I2026-06-09 18:49:36.952252 addonmanager.cpp:188] Could not load addon dbus
+I2026-06-09 18:49:36.952271 addonmanager.cpp:297] Unloading addon keyboard
+I2026-06-09 18:49:36.952317 addonmanager.cpp:297] Unloading addon imselector
+I2026-06-09 18:49:36.952325 addonmanager.cpp:297] Unloading addon quickphrase
+I2026-06-09 18:49:36.952384 addonmanager.cpp:297] Unloading addon xcb
+I2026-06-09 18:49:36.952391 inputcontextmanager.cpp:318] All display connections are gone, exit now.
