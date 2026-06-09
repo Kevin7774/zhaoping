@@ -44,6 +44,8 @@ export const PATH_PRODUCTIZATION = {
   '/workflow/sessions/{task_id}/nodes/{node_id}/retry': 'productized',
   '/workflow/sessions/{task_id}/nodes/{node_id}/run': 'productized',
   '/workflow/sessions/{task_id}/nodes/{node_id}/skip': 'productized',
+  '/workflows/run': 'productized',
+  '/workflows/validate': 'system',
 }
 
 export const WORKSPACES = [

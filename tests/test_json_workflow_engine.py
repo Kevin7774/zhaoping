@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.main import app
 from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
 from app.core.workflow_context import render_template, render_value
 from app.core.workflow_executor import (
@@ -294,3 +296,51 @@ def test_runner_error_on_structured_extract_failure_emits_error_event() -> None:
     assert snapshot["status"] == "error"
     assert snapshot["error"]
     assert any(event["type"] == "error" and event["data"]["workflow_id"] == "extract_error" for event in snapshot["audit_events"])
+
+
+def test_workflows_validate_api_accepts_valid_workflow() -> None:
+    client = TestClient(app)
+    response = client.post("/workflows/validate", json={"workflow": valid_workflow()})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["valid"] is True
+    assert payload["workflow_id"] == "research_report"
+    assert payload["step_count"] == 2
+
+
+def test_workflows_validate_api_reports_invalid_workflow() -> None:
+    client = TestClient(app)
+    payload = valid_workflow()
+    payload["steps"][0]["input"] = "{{ missing }}"
+    response = client.post("/workflows/validate", json={"workflow": payload})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert "Unresolved template variable" in body["errors"][0]["message"]
+
+
+def test_workflows_run_api_creates_task() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/workflows/run",
+        json={"workflow": valid_workflow(), "input": {"user_input": "robotics"}},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workflow_id"] == "research_report"
+    assert payload["status"] == "processing"
+    assert payload["task_id"]
+
+
+def test_openapi_exposes_json_workflow_routes() -> None:
+    schema = app.openapi()
+    assert "/workflows/validate" in schema["paths"]
+    assert "/workflows/run" in schema["paths"]
+
+
+def test_confirm_route_checks_json_workflow_before_legacy_confirm() -> None:
+    source = Path("app/api/main.py").read_text(encoding="utf-8")
+    confirm_start = source.index("def confirm_task")
+    json_runtime_check = source.index("json_workflow_runtime", confirm_start)
+    legacy_confirm = source.index("task_store.confirm", confirm_start)
+    assert json_runtime_check < legacy_confirm

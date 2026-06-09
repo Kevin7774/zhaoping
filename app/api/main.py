@@ -29,7 +29,15 @@ from app.core.orchestrator import (
     task_store,
 )
 from app.core.router import get_router
+from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
+from app.core.workflow_runner import WorkflowTaskRunner
 from app.rag.ingest_worker import process_and_vectorize_resume
+from app.schemas.workflows import (
+    WorkflowRunRequest,
+    WorkflowRunResponse,
+    WorkflowValidateRequest,
+    WorkflowValidateResponse,
+)
 
 app = FastAPI(title="Robot Talent Agent MVP")
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -400,6 +408,40 @@ def scenarios_run(request: RunRequest) -> dict:
     return {"task_id": task.task_id, "scenario": task.scenario, "status": task.status}
 
 
+@app.post("/workflows/validate", response_model=WorkflowValidateResponse)
+def workflows_validate(request: WorkflowValidateRequest) -> WorkflowValidateResponse:
+    try:
+        workflow = WorkflowDefinition.model_validate(request.workflow)
+    except WorkflowValidationException as exc:
+        return WorkflowValidateResponse(valid=False, errors=[{"message": str(exc)}])
+    except Exception as exc:
+        return WorkflowValidateResponse(valid=False, errors=[{"message": str(exc)}])
+    return WorkflowValidateResponse(
+        valid=True,
+        workflow_id=workflow.id,
+        step_count=len(workflow.steps),
+        dependencies=workflow.dependency_summary(),
+    )
+
+
+@app.post("/workflows/run", response_model=WorkflowRunResponse)
+def workflows_run(request: WorkflowRunRequest) -> WorkflowRunResponse:
+    try:
+        workflow = WorkflowDefinition.model_validate(request.workflow)
+    except WorkflowValidationException as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    task_id = WorkflowTaskRunner().start(
+        workflow,
+        request.input,
+        auto_run=False,
+        conversation_id=request.conversation_id,
+    )
+    snapshot = task_store.snapshot(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=500, detail="JSON workflow task creation failed")
+    return WorkflowRunResponse(task_id=task_id, workflow_id=workflow.id, status=snapshot["status"])
+
+
 @app.post("/workflow/sessions")
 def workflow_session_create(request: WorkflowSessionRequest) -> dict:
     if not request.input.strip():
@@ -553,6 +595,13 @@ def confirm_task(task_id: str, request: ConfirmRequest) -> dict:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
     if task.status != "awaiting_human":
         raise HTTPException(status_code=409, detail=f"Task is not awaiting human input (status={task.status})")
+    runtime = (task.frontend_state or {}).get("json_workflow_runtime")
+    if runtime:
+        return WorkflowTaskRunner().resume(
+            task_id,
+            request.decision,
+            {"edits": request.edits, "data": request.data},
+        )
     ok = task_store.confirm(task_id, request.decision, request.edits)
     if not ok:
         raise HTTPException(status_code=409, detail="Task could not accept confirmation")

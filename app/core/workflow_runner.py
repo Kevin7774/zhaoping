@@ -16,7 +16,7 @@ from app.core.workflow_executor import (
     WorkflowFatalException,
     WorkflowRuntimeState,
 )
-from app.db.task_models import TaskModel, make_task_session_factory
+from app.db.task_models import TaskModel
 from app.schemas.tasks import AgentEventCreate
 
 
@@ -30,7 +30,11 @@ class WorkflowTaskRunner:
         session_factory: sessionmaker | None = None,
     ) -> None:
         self.executor = StepExecutor(router=router)
-        self._session_factory = session_factory or make_task_session_factory()
+        if session_factory is None:
+            from app.core.orchestrator import task_store
+
+            session_factory = task_store._session_factory
+        self._session_factory = session_factory
 
     def start(
         self,
