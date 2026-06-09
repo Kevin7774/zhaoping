@@ -402,7 +402,7 @@ describe("projects api", () => {
       candidateId: "cand_zhou_han",
     });
     await updateOutreachDraft("draft_1", { subject: "更新主题", body: "更新正文" });
-    await sendOutreachDraft({ draftId: "draft_1", decision: "approve", simulate: true });
+    await sendOutreachDraft({ draftId: "draft_1", decision: "approve", simulate: false });
     await getOutreachHistory({ projectId: "project_2026_ai_team" });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -430,7 +430,7 @@ describe("projects api", () => {
       "/api/outreach/send",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ draftId: "draft_1", decision: "approve", simulate: true }),
+        body: JSON.stringify({ draftId: "draft_1", decision: "approve", simulate: false }),
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(

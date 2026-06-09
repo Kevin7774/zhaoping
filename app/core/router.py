@@ -14,6 +14,7 @@ from app.providers.llm import AnthropicCompatibleLLMProvider, OpenRouterChatLLMP
 from app.providers.ocr import AliyunOCRProvider, DoclingOCRProvider
 from app.providers.outreach import (
     HunterEmailFinderProvider,
+    MailtrapSMTPEmailProvider,
     NeverBounceEmailValidationProvider,
     PostmarkCompliantEmailProvider,
     SendGridCompliantEmailProvider,
@@ -646,6 +647,23 @@ class ServiceRouter:
                 audit_log_path=str(settings["audit_log_path"]),
                 daily_send_limit=int(settings.get("daily_send_limit", 50)),
                 manual_approval_required=bool(settings.get("manual_approval_required", True)),
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "email_delivery" and provider == "mailtrap_smtp_email":
+            return MailtrapSMTPEmailProvider(
+                provider=provider,
+                host_env=str(settings["host_env"]),
+                port_env=str(settings["port_env"]),
+                username_env=str(settings["username_env"]),
+                password_env=str(settings["password_env"]),
+                from_email_env=str(settings["from_email_env"]),
+                unsubscribe_base_url_env=str(settings["unsubscribe_base_url_env"]),
+                suppression_list_path=str(settings["suppression_list_path"]),
+                audit_log_path=str(settings["audit_log_path"]),
+                daily_send_limit=int(settings.get("daily_send_limit", 50)),
+                manual_approval_required=bool(settings.get("manual_approval_required", True)),
+                use_starttls=bool(settings.get("use_starttls", True)),
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
             )
 

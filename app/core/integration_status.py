@@ -190,6 +190,7 @@ SERVICE_NAME_ZH = {
     "neverbounce_email_validation": "NeverBounce 邮箱验证",
     "postmark_compliant_email": "Postmark 合规邮件发送",
     "sendgrid_compliant_email": "SendGrid 合规邮件发送",
+    "mailtrap_smtp_email": "Mailtrap 邮件沙箱",
     "firecrawl_scrape": "Firecrawl 网页抓取",
     "opencli_crawl_scrape": "OpenCLI 本地抓取",
     "public_web_snapshot_monitor": "公开网页快照监控",
@@ -210,6 +211,7 @@ PROVIDER_CODE_PATHS = {
     ("email_verification", "neverbounce_email_validation"): "app/providers/outreach.py",
     ("email_delivery", "postmark_compliant_email"): "app/providers/outreach.py",
     ("email_delivery", "sendgrid_compliant_email"): "app/providers/outreach.py",
+    ("email_delivery", "mailtrap_smtp_email"): "app/providers/outreach.py",
     ("llm", "anthropic_compatible"): "app/providers/llm.py",
     ("llm", "openrouter_chat"): "app/providers/llm.py",
     ("mcp", "local"): "app/providers/mcp.py",
@@ -354,7 +356,13 @@ def _capability_status(
     service_type = spec["service_type"]
     default_service_name = config.defaults.get(service_type)
     default_service = next((service for service in services if service["name"] == default_service_name), None)
-    primary_service = default_service or next(iter(services), None)
+    connected_service = next((service for service in services if service["status"] in CONNECTED_STATUSES), None)
+    coded_service = next((service for service in services if service["status"] in CODED_STATUSES), None)
+    primary_service = (
+        default_service
+        if default_service and default_service["status"] in CONNECTED_STATUSES
+        else connected_service or default_service or coded_service or next(iter(services), None)
+    )
 
     if primary_service is None:
         status = "not_configured"

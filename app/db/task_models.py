@@ -92,12 +92,39 @@ def task_database_url() -> str:
 
 def make_task_engine(database_url: str | None = None):
     url = database_url or task_database_url()
+    _guard_sqlite_in_production(url, "task")
     if url.startswith("sqlite:///"):
         db_path = Path(url.removeprefix("sqlite:///"))
         if db_path.parent != Path("."):
             db_path.parent.mkdir(parents=True, exist_ok=True)
-        return create_engine(url, future=True, connect_args={"check_same_thread": False})
-    return create_engine(url, future=True, pool_pre_ping=True)
+        return create_engine(
+            url,
+            future=True,
+            connect_args={"check_same_thread": False, "timeout": _sqlite_busy_timeout_seconds()},
+        )
+    return create_engine(url, future=True, **_pool_options("TASK_DATABASE"))
+
+
+def _guard_sqlite_in_production(url: str, purpose: str) -> None:
+    app_env = str(os.environ.get("APP_ENV") or os.environ.get("ENV") or os.environ.get("ZHAOPING_ENV") or "").lower()
+    if app_env in {"production", "prod"} and url.startswith("sqlite") and os.environ.get("ALLOW_SQLITE_IN_PRODUCTION") != "1":
+        raise RuntimeError(
+            f"SQLite is not allowed for {purpose} database in production. "
+            "Set PROJECT_DATABASE_URL/TASK_DATABASE_URL to a PostgreSQL URL."
+        )
+
+
+def _pool_options(prefix: str) -> dict[str, int | bool]:
+    return {
+        "pool_pre_ping": True,
+        "pool_size": int(os.environ.get(f"{prefix}_POOL_SIZE", "10")),
+        "max_overflow": int(os.environ.get(f"{prefix}_MAX_OVERFLOW", "20")),
+        "pool_recycle": int(os.environ.get(f"{prefix}_POOL_RECYCLE_SECONDS", "1800")),
+    }
+
+
+def _sqlite_busy_timeout_seconds() -> float:
+    return float(os.environ.get("SQLITE_BUSY_TIMEOUT_SECONDS", "30"))
 
 
 def make_task_session_factory(database_url: str | None = None):

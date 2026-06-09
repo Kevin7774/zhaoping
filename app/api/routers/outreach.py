@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import json
+import os
+import re
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.prompt_config import load_system_prompt
 from app.core.integration_status import get_integration_status
+from app.core.router import get_router
 from app.db.session import get_project_session
-from app.models import Candidate, Job, OutreachDraft, OutreachHistory, Project
+from app.models import Candidate, Job, JobCandidate, OutreachDraft, OutreachHistory, Project
 from app.schemas.outreach import (
     OutreachDraftPatchRequest,
     OutreachDraftRequest,
@@ -23,9 +29,13 @@ from app.schemas.outreach import (
 router = APIRouter(prefix="/outreach", tags=["outreach"])
 
 DEFAULT_STRATEGY_TAG: OutreachStrategyTag = "场景叙事类"
-QUANTGROUP_SYSTEM_PROMPT = (
-    "量化派的目标是做 AI 应用公司，强调技术的商业落地能力。触达邮件应体现出"
-    "用技术解决 10 亿级用户消费决策难题的使命感，而非仅仅追求算法极致。"
+OUTREACH_FORBIDDEN_PHRASES = (
+    "希望这封邮件没有打扰到您",
+    "我正在寻找优秀的人才",
+    "优秀的人才",
+    "招聘黑话",
+    "招聘团队",
+    "面试",
 )
 
 
@@ -37,6 +47,7 @@ def create_outreach_draft(
     project = _require_project(session, request.project_id)
     job = _require_job(session, request.job_id, request.project_id)
     candidate = _require_candidate(session, request.candidate_id)
+    _require_contact_compliance_unlocked(session, job.id, candidate.id)
     now = _now()
     strategy_tag = request.strategy_tag or DEFAULT_STRATEGY_TAG
     draft = OutreachDraft(
@@ -89,14 +100,30 @@ def send_outreach_draft(
     candidate = _require_candidate(session, draft.candidate_id)
     if not candidate.email:
         raise HTTPException(status_code=409, detail="Candidate email is required before outreach send")
+    _require_contact_compliance_unlocked(session, draft.job_id, candidate.id)
 
     if not request.simulate and not _email_delivery_active():
         raise HTTPException(status_code=503, detail="email_delivery is not active; real send is disabled")
-    if not request.simulate:
-        raise HTTPException(status_code=501, detail="Real email provider send is not implemented; use simulate=true")
 
     now = _now()
-    draft.status = "simulated"
+    provider_result: dict[str, Any] | None = None
+    delivery_mode = "simulated"
+    history_status = "simulated"
+    provider_status = "simulated"
+    if not request.simulate:
+        try:
+            provider_result = _send_real_email(
+                to=candidate.email,
+                subject=draft.subject,
+                body=draft.body,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"email_delivery send failed: {exc}") from exc
+        delivery_mode = "real"
+        history_status = str(provider_result.get("status") or "sent")
+        provider_status = _provider_status(provider_result)
+
+    draft.status = history_status
     draft.updated_at = now
     history = OutreachHistory(
         id=_new_id("history"),
@@ -109,9 +136,9 @@ def send_outreach_draft(
         strategy_tag=draft.strategy_tag,
         subject=draft.subject,
         body=draft.body,
-        status="simulated",
-        delivery_mode="simulated",
-        provider_status="simulated",
+        status=history_status,
+        delivery_mode=delivery_mode,
+        provider_status=provider_status,
         created_at=now,
     )
     session.add(history)
@@ -140,7 +167,7 @@ def get_outreach_history(
 
 def _build_quantgroup_subject(job: Job, candidate: Candidate) -> str:
     specialty = _candidate_specialty(job, candidate)
-    return f"关于 {specialty} 与量化派“羊小咩”场景下的决策链路探讨"
+    return f"关于 {specialty} 真机部署问题的技术切磋"
 
 
 def _build_backend_draft(
@@ -149,41 +176,85 @@ def _build_backend_draft(
     candidate: Candidate,
     strategy_tag: OutreachStrategyTag = DEFAULT_STRATEGY_TAG,
 ) -> str:
+    llm_draft = _build_llm_hardware_draft(project, job, candidate, strategy_tag)
+    if llm_draft:
+        return llm_draft
+
     recent_work = _candidate_recent_work(candidate)
     technical_detail = _candidate_technical_detail(job, candidate)
-    business_challenge = _business_challenge_for_candidate(job, candidate)
-    quantgroup_method = _quantgroup_technical_method(candidate)
+    business_challenge = _hardware_challenge_for_candidate(job, candidate)
     domain = _candidate_domain(candidate)
-    insider_question = _industry_internal_question(domain, business_challenge)
+    project_name = project.name or "当前硬件项目"
     return "\n".join(
         [
-            f"{candidate.name}，你好。",
+            f"看到你材料里写到的「{recent_work}」，这个工程取舍很硬核。",
             "",
-            f"关注你在 {technical_detail} 上的研究有一段时间了。你在 {recent_work} 里处理"
-            f" {business_challenge} 时展现出的工程洞察，在当前的 AI 决策领域并不常见。",
+            f"{candidate.name}，你好。我这边负责 {project_name} 的核心硬件产品落地，最近卡在"
+            f"{business_challenge}：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、"
+            "执行器余量和现场稳定性一起放大。",
             "",
-            "量化派技术团队目前在重构“羊小咩”的实时决策底层，目标是把 AI 从单纯推荐"
-            "推进到可验证的消费撮合决策。我们发现行业内大多方案在响应速度、策略精度"
-            "和商业闭环之间存在明显的 Trade-off，这会导致真实流量场景下的决策链路很难稳定收敛。",
-            f"我们正在尝试一套基于 {quantgroup_method} 的新架构，但在 {business_challenge} "
-            "这块，工业界实现还存在不小的认知空白。",
+            f"你在 {technical_detail} 上的经历，和我们现在要把 {domain} 从 demo 推到真实商业化的阶段很接近。"
+            "我更想拿一个具体技术问题和你对齐：在不牺牲系统可维护性的前提下，哪些约束应该进控制/规划闭环，"
+            "哪些应该留给数据和模型迭代？",
             "",
-            f"行业内部困惑：{insider_question}",
+            f"这封触达采用 {strategy_tag} 策略：不聊流程，只做一次平等的技术切磋。"
+            "如果你愿意，我想约 20 分钟，把我们现在的未解瓶颈摊开，请你按专家视角直接挑问题。",
             "",
-            "这套系统已经投入了相当量级的工程和算力资源。这个阶段，比起寻找人选，"
-            f"我更希望找一位真正理解 {domain} 的同行，针对这套决策逻辑做一次毫无保留的技术复盘。"
-            f"{QUANTGROUP_SYSTEM_PROMPT}",
-            "",
-            f"这封触达采用 {strategy_tag} 策略：不谈职位 JD，也不聊面试流程，只想把你的"
-            f" {technical_detail} 经验放到“羊小咩”电商平台化和 AI 决策服务结合的场景里验证一下。",
-            "",
-            f"周五下午或者下周一，如果你方便，抽 20 分钟做一次闭门技术探讨，"
-            f"我想听听你对 {business_challenge} 的处理思路。",
-            "",
-            "祝好，",
-            "量化派技术团队",
+            "研发总监",
         ]
     )
+
+
+def _build_llm_hardware_draft(
+    project: Project,
+    job: Job,
+    candidate: Candidate,
+    strategy_tag: OutreachStrategyTag,
+) -> str | None:
+    system_prompt = load_system_prompt("outreach_agent")
+    if not system_prompt:
+        return None
+    candidate_detail = {
+        "name": candidate.name,
+        "title": candidate.title,
+        "current_company": candidate.current_company,
+        "email": candidate.email,
+        "skills": _candidate_skills(candidate),
+        "evidence": _candidate_evidence(candidate),
+        "github_url": candidate.github_url,
+        "source_platform": candidate.source_platform,
+    }
+    job_challenge = {
+        "project_name": project.name,
+        "job_title": job.title,
+        "challenge": _hardware_challenge_for_candidate(job, candidate),
+        "strategy_tag": strategy_tag,
+    }
+    prompt = (
+        f"{system_prompt}\n\n"
+        "只输出邮件正文，不要 Markdown，不要解释。\n"
+        f"candidate_detail:\n{json.dumps(candidate_detail, ensure_ascii=False, indent=2)}\n\n"
+        f"job_challenge:\n{json.dumps(job_challenge, ensure_ascii=False, indent=2)}"
+    )
+    try:
+        draft = get_router().llm().text(prompt, max_tokens=900)
+    except Exception:
+        return None
+    draft = _clean_generated_draft(draft)
+    if not draft:
+        return None
+    if any(phrase in draft for phrase in OUTREACH_FORBIDDEN_PHRASES):
+        return None
+    return draft
+
+
+def _clean_generated_draft(value: str) -> str | None:
+    text = value.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:text|markdown)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+    return text if len(text) >= 80 else None
 
 
 def _candidate_specialty(job: Job, candidate: Candidate) -> str:
@@ -240,6 +311,27 @@ def _business_challenge_for_candidate(job: Job, candidate: Candidate) -> str:
     if "数据" in job.title or "平台" in job.title:
         return "海量用户行为数据下的实时特征处理"
     return "复杂业务场景下的智能消费决策链路优化"
+
+
+def _hardware_challenge_for_candidate(job: Job, candidate: Candidate) -> str:
+    text = " ".join(
+        [
+            job.title or "",
+            candidate.title or "",
+            candidate.current_company or "",
+            " ".join(_candidate_skills(candidate)),
+            " ".join(_candidate_evidence(candidate)),
+        ]
+    ).lower()
+    if any(keyword in text for keyword in ("ros", "slam", "nav2", "navigation", "定位", "建图", "导航")):
+        return "ROS2/nav2 在复杂室内场景下的定位漂移、恢复策略和行为树稳定性"
+    if any(keyword in text for keyword in ("foc", "motor", "servo", "电机", "伺服", "控制")):
+        return "电机控制链路在高频通信、热漂移和负载突变下的闭环稳定性"
+    if any(keyword in text for keyword in ("vla", "diffusion", "imitation", "policy", "具身", "强化学习")):
+        return "端到端策略从仿真/离线数据迁移到真机后的泛化与安全边界"
+    if any(keyword in text for keyword in ("嵌入式", "stm32", "firmware", "rtos", "sensor", "传感器")):
+        return "嵌入式传感器、实时任务和上层算法之间的时序一致性"
+    return "算法、硬件拓扑和现场交付节奏之间的系统级取舍"
 
 
 def _quantgroup_technical_method(candidate: Candidate) -> str:
@@ -303,11 +395,32 @@ def _excerpt(value: str, limit: int) -> str:
 
 def _email_delivery_active() -> bool:
     status = get_integration_status()
+    if _should_use_mailtrap():
+        return any(
+            service.get("name") == "mailtrap_smtp_email" and service.get("status") in {"active", "available"}
+            for service in status.get("services", [])
+        )
     capabilities = status.get("capabilities", [])
     return any(
         capability.get("service_type") == "email_delivery" and capability.get("status") in {"active", "available"}
         for capability in capabilities
     )
+
+
+def _send_real_email(*, to: str, subject: str, body: str) -> dict[str, Any]:
+    service_name = "mailtrap_smtp_email" if _should_use_mailtrap() else None
+    provider = get_router().email_delivery(service_name) if service_name else get_router().email_delivery()
+    return provider.send(to=to, subject=subject, text_body=body, approved=True)
+
+
+def _provider_status(result: dict[str, Any]) -> str:
+    provider = str(result.get("provider") or "email_delivery")
+    status = str(result.get("status") or "sent")
+    return f"{provider}:{status}"
+
+
+def _should_use_mailtrap() -> bool:
+    return str(os.getenv("APP_ENV") or os.getenv("ENV") or os.getenv("ZHAOPING_ENV") or "").lower() == "test"
 
 
 def _require_project(session: Session, project_id: str) -> Project:
@@ -336,6 +449,20 @@ def _require_draft(session: Session, draft_id: str) -> OutreachDraft:
     if draft is None:
         raise HTTPException(status_code=404, detail=f"Outreach draft not found: {draft_id}")
     return draft
+
+
+def _require_contact_compliance_unlocked(session: Session, job_id: str, candidate_id: str) -> None:
+    link = session.scalar(
+        select(JobCandidate).where(
+            JobCandidate.job_id == job_id,
+            JobCandidate.candidate_id == candidate_id,
+        )
+    )
+    if link is not None and link.pipeline_status == "pending_compliance_review":
+        raise HTTPException(
+            status_code=409,
+            detail="Candidate contact source is pending compliance review",
+        )
 
 
 def _draft_response(draft: OutreachDraft) -> OutreachDraftResponse:

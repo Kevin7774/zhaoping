@@ -28,6 +28,7 @@ class CandidateLead:
     skills: list[str]
     matched_keywords: list[str]
     confidence: float
+    requires_compliance_review: bool
     raw_payload: dict[str, Any]
 
 
@@ -61,6 +62,36 @@ STRING_LIMITS = {
     "source_platform": 64,
     "source_url": 512,
 }
+PENDING_COMPLIANCE_REVIEW_STATUS = "pending_compliance_review"
+SOURCED_STATUS = "sourced"
+COMPLIANCE_REVIEW_UNLOCKED_STATUSES = {
+    "pending_outreach",
+    "technical_interview",
+    "offer",
+    "offer_review",
+    "done",
+}
+CONTACT_COMPLIANCE_RISK_MARKERS = (
+    "__cf_email__",
+    "data-cfemail",
+    "cfemail",
+    "cloudflare_email_decode",
+    "cloudflare-email-decode",
+    "email_obfuscation",
+    "obfuscated_email",
+    "obfuscated contact",
+    "hex_decode",
+    "hex decoded",
+    "anti_scrape",
+    "anti-scrape",
+    "anti_crawler",
+    "dark_web",
+    "darkweb",
+    "反混淆",
+    "混淆邮箱",
+    "反爬",
+    "暗网",
+)
 
 
 def normalize_candidate_lead(raw: Mapping[str, Any]) -> NormalizationResult:
@@ -109,6 +140,7 @@ def normalize_candidate_lead(raw: Mapping[str, Any]) -> NormalizationResult:
         skills=skills,
         matched_keywords=matched_keywords,
         confidence=_confidence(_first_present(payload, ("confidence", "score", "match_score", "matchScore"))),
+        requires_compliance_review=_requires_contact_compliance_review(payload),
         raw_payload=payload,
     )
 
@@ -167,6 +199,7 @@ def empty_lead_ingestion_result(source_task_id: str, reason: str | None = None) 
         "linked_job_candidates": 0,
         "duplicates": 0,
         "rejected": 0,
+        "compliance_review_required": 0,
         "rejected_reasons": {},
         "source_task_id": source_task_id,
     }
@@ -203,6 +236,8 @@ def ingest_candidate_leads(
 
         lead = normalized.lead
         result["normalized"] += 1
+        if lead.requires_compliance_review:
+            result["compliance_review_required"] += 1
         duplicate_keys = _dedupe_keys(lead)
         if duplicate_keys and any(key in seen_keys for key in duplicate_keys):
             result["duplicates"] += 1
@@ -234,14 +269,14 @@ def ingest_candidate_leads(
                     job_id=job_id,
                     candidate_id=candidate.id,
                     match_score=_match_score(lead.confidence),
-                    pipeline_status="sourced",
+                    pipeline_status=_pipeline_status_for_lead(lead),
                     evidence=list(lead.evidence),
                     source_task_id=source_task_id,
                 )
             )
             result["linked_job_candidates"] += 1
         else:
-            _merge_job_candidate_link(link, project_id, lead.evidence, source_task_id)
+            _merge_job_candidate_link(link, project_id, lead.evidence, source_task_id, lead.requires_compliance_review)
             if candidate_was_existing:
                 result["duplicates"] += 1
 
@@ -370,7 +405,13 @@ def _merge_candidate(candidate: Candidate, lead: CandidateLead) -> bool:
     return changed
 
 
-def _merge_job_candidate_link(link: JobCandidate, project_id: str, evidence: list[str], source_task_id: str) -> bool:
+def _merge_job_candidate_link(
+    link: JobCandidate,
+    project_id: str,
+    evidence: list[str],
+    source_task_id: str,
+    requires_compliance_review: bool = False,
+) -> bool:
     changed = False
     if not link.project_id:
         link.project_id = project_id
@@ -382,7 +423,17 @@ def _merge_job_candidate_link(link: JobCandidate, project_id: str, evidence: lis
     if merged_evidence != (link.evidence or []):
         link.evidence = merged_evidence
         changed = True
+    if (
+        requires_compliance_review
+        and link.pipeline_status not in {PENDING_COMPLIANCE_REVIEW_STATUS, *COMPLIANCE_REVIEW_UNLOCKED_STATUSES}
+    ):
+        link.pipeline_status = PENDING_COMPLIANCE_REVIEW_STATUS
+        changed = True
     return changed
+
+
+def _pipeline_status_for_lead(lead: CandidateLead) -> str:
+    return PENDING_COMPLIANCE_REVIEW_STATUS if lead.requires_compliance_review else SOURCED_STATUS
 
 
 def _dedupe_keys(lead: CandidateLead) -> list[tuple[str, ...]]:
@@ -439,6 +490,33 @@ def _first_present(payload: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
         if value not in (None, "", [], {}):
             return value
     return None
+
+
+def _requires_contact_compliance_review(payload: Mapping[str, Any]) -> bool:
+    if not _clean_email(_first_present(payload, ("email", "邮箱"))):
+        return False
+    for text in _flatten_payload_text(payload):
+        normalized = text.casefold()
+        if any(marker in normalized for marker in CONTACT_COMPLIANCE_RISK_MARKERS):
+            return True
+    return False
+
+
+def _flatten_payload_text(value: Any, *, depth: int = 0) -> list[str]:
+    if depth > 4 or value in (None, "", [], {}):
+        return []
+    if isinstance(value, Mapping):
+        flattened: list[str] = []
+        for key, child in value.items():
+            flattened.append(str(key))
+            flattened.extend(_flatten_payload_text(child, depth=depth + 1))
+        return flattened
+    if isinstance(value, list | tuple | set):
+        flattened = []
+        for item in value:
+            flattened.extend(_flatten_payload_text(item, depth=depth + 1))
+        return flattened
+    return [str(value)]
 
 
 def _string_list(value: Any) -> list[str]:

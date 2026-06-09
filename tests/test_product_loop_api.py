@@ -5,7 +5,7 @@ from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -65,19 +65,13 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     assert draft["jobId"] == "job_vla_algorithm"
     assert draft["candidateId"] == "cand_lin_chen"
     assert draft["strategyTag"] == "场景叙事类"
-    assert "量化派" in draft["subject"]
-    assert "羊小咩" in draft["subject"]
+    assert "真机部署" in draft["subject"]
     assert "Alex Chen" in draft["body"]
-    assert "量化派" in draft["body"]
-    assert "羊小咩" in draft["body"]
-    assert "消费撮合决策" in draft["body"]
-    assert "AI 应用公司" in draft["body"]
-    assert "量化派技术团队" in draft["body"]
-    assert "行业内部困惑" in draft["body"]
-    assert "Trade-off" in draft["body"]
-    assert "闭门技术探讨" in draft["body"]
-    assert "技术复盘" in draft["body"]
+    assert "真机部署" in draft["body"]
+    assert "技术切磋" in draft["body"]
+    assert "面试" not in draft["body"]
     assert "招聘团队" not in draft["body"]
+    assert "希望这封邮件没有打扰到您" not in draft["body"]
     assert "项目：" not in draft["body"]
 
     patch_response = client.patch(
@@ -150,6 +144,42 @@ def test_outreach_draft_allows_hardcore_strategy_tag_for_kpi_grouping(client: Te
     assert send_response.json()["strategyTag"] == "硬核技术类"
 
 
+def test_outreach_draft_rejects_llm_body_when_it_contains_recruiting_redlines(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLlm:
+        def text(self, prompt: str, max_tokens: int = 900) -> str:
+            return (
+                "看到你在真机部署项目里的数据闭环，我觉得很有意思。\n\n"
+                "我们招聘团队希望约一次面试，聊聊你是否愿意加入。"
+                "这段话故意超过八十个字符，用来证明后端会因为触达红线丢弃 LLM 正文。"
+            )
+
+    class FakeRouter:
+        def llm(self) -> FakeLlm:
+            return FakeLlm()
+
+    monkeypatch.setattr("app.api.routers.outreach.load_system_prompt", lambda name: "system prompt")
+    monkeypatch.setattr("app.api.routers.outreach.get_router", lambda: FakeRouter())
+
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+
+    assert draft_response.status_code == 200
+    body = draft_response.json()["body"]
+    assert "技术切磋" in body
+    assert "面试" not in body
+    assert "招聘团队" not in body
+    assert "希望这封邮件没有打扰到您" not in body
+
+
 def test_outreach_send_requires_real_candidate_email(client: TestClient) -> None:
     draft_response = client.post(
         "/outreach/draft",
@@ -169,6 +199,54 @@ def test_outreach_send_requires_real_candidate_email(client: TestClient) -> None
 
     assert send_response.status_code == 409
     assert "email" in send_response.json()["detail"].lower()
+
+
+def test_outreach_blocks_compliance_pending_candidate_until_hr_approval(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "pending_compliance_review"
+        session.commit()
+
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+
+    assert draft_response.status_code == 409
+    assert "compliance" in draft_response.json()["detail"].lower()
+
+    candidates_before = client.get("/projects/project_2026_ai_team/candidates").json()
+    job_candidate_id = candidates_before[0]["jobCandidateId"]
+
+    review_response = client.post(
+        f"/projects/project_2026_ai_team/candidates/{job_candidate_id}/compliance-review",
+        json={"decision": "approve"},
+    )
+    assert review_response.status_code == 200
+    assert review_response.json()["pipelineStatus"] == "pending_outreach"
+
+    draft_after_review = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    assert draft_after_review.status_code == 200
 
 
 def test_outreach_real_send_is_blocked_when_email_delivery_is_not_active(
@@ -192,6 +270,64 @@ def test_outreach_real_send_is_blocked_when_email_delivery_is_not_active(
 
     assert send_response.status_code == 503
     assert send_response.json()["detail"] == "email_delivery is not active; real send is disabled"
+
+
+def test_outreach_real_send_uses_email_delivery_provider(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: dict[str, object] = {}
+
+    class FakeEmailDelivery:
+        def send(
+            self,
+            *,
+            to: str,
+            subject: str,
+            text_body: str,
+            html_body: str | None = None,
+            approved: bool = False,
+        ) -> dict[str, object]:
+            sent.update(
+                {
+                    "to": to,
+                    "subject": subject,
+                    "text_body": text_body,
+                    "html_body": html_body,
+                    "approved": approved,
+                }
+            )
+            return {"status": "sent", "provider": "mailtrap_smtp_email", "message_id": "mailtrap-msg-1"}
+
+    class FakeRouter:
+        def email_delivery(self) -> FakeEmailDelivery:
+            return FakeEmailDelivery()
+
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    monkeypatch.setattr("app.api.routers.outreach._email_delivery_active", lambda: True)
+    monkeypatch.setattr("app.api.routers.outreach.get_router", lambda: FakeRouter())
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": False},
+    )
+
+    assert send_response.status_code == 200
+    payload = send_response.json()
+    assert payload["status"] == "sent"
+    assert payload["deliveryMode"] == "real"
+    assert payload["providerStatus"] == "mailtrap_smtp_email:sent"
+    assert sent["to"] == "alex.chen@example.com"
+    assert sent["approved"] is True
+    assert sent["subject"] == draft_response.json()["subject"]
+    assert sent["text_body"] == draft_response.json()["body"]
 
 
 def test_segments_query_save_list_and_detail(client: TestClient) -> None:
@@ -272,25 +408,24 @@ def test_weekly_report_can_be_saved_and_reloaded_as_latest(client: TestClient) -
     assert detail_response.json()["sourceTaskId"] == "task_weekly_1"
 
 
-def test_jobs_match_falls_back_to_real_project_database_matches_when_provider_is_unavailable(
+def test_jobs_match_returns_real_project_database_matches_without_warming_vector_provider(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingEmbedding:
+    class UnexpectedEmbedding:
         def embed_texts(self, texts: list[str]):  # noqa: ANN201
-            raise RuntimeError("embedding provider unavailable")
+            raise AssertionError("embedding provider should not be called for existing project jobs")
 
     class StubRouter:
-        def embedding(self) -> FailingEmbedding:
-            return FailingEmbedding()
+        def embedding(self) -> UnexpectedEmbedding:
+            return UnexpectedEmbedding()
 
     monkeypatch.setattr("app.api.main.get_router", lambda: StubRouter())
 
     response = client.post("/jobs/match", json={"query": "VLA / 具身智能算法工程师", "top_k": 3})
 
     assert response.status_code == 200
-    assert response.json()["source"] == "project_database_fallback"
-    assert response.json()["provider_error"] == "embedding provider unavailable"
+    assert response.json()["source"] == "project_database"
     assert response.json()["results"] == [
         {
             "candidate_id": "cand_lin_chen",
@@ -313,25 +448,24 @@ def test_jobs_match_falls_back_to_real_project_database_matches_when_provider_is
     ]
 
 
-def test_jobs_match_falls_back_to_real_project_database_matches_when_provider_raises_unexpected_error(
+def test_jobs_match_applies_top_k_to_real_project_database_matches(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingEmbedding:
+    class UnexpectedEmbedding:
         def embed_texts(self, texts: list[str]):  # noqa: ANN201
-            raise ValueError("embedding provider internal error")
+            raise AssertionError("embedding provider should not be called for existing project jobs")
 
     class StubRouter:
-        def embedding(self) -> FailingEmbedding:
-            return FailingEmbedding()
+        def embedding(self) -> UnexpectedEmbedding:
+            return UnexpectedEmbedding()
 
     monkeypatch.setattr("app.api.main.get_router", lambda: StubRouter())
 
     response = client.post("/jobs/match", json={"query": "VLA / 具身智能算法工程师", "top_k": 1})
 
     assert response.status_code == 200
-    assert response.json()["source"] == "project_database_fallback"
-    assert response.json()["provider_error"] == "embedding provider internal error"
+    assert response.json()["source"] == "project_database"
     assert response.json()["results"] == [
         {
             "candidate_id": "cand_lin_chen",

@@ -14,13 +14,14 @@ from app.schemas.candidate_search_schedule import (
     CandidateSearchScheduleRequest,
     CandidateSearchScheduleResponse,
 )
-from app.schemas.candidate import CandidateResponse, UniqueCandidateResponse
+from app.schemas.candidate import CandidateComplianceReviewRequest, CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
 from app.schemas.project import ProjectResponse
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-PIPELINE_STATUS_PRIORITY = ("awaiting_human", "processing", "pending_outreach", "sourced", "done")
+PENDING_COMPLIANCE_REVIEW_STATUS = "pending_compliance_review"
+PIPELINE_STATUS_PRIORITY = (PENDING_COMPLIANCE_REVIEW_STATUS, "awaiting_human", "processing", "pending_outreach", "sourced", "done")
 
 
 class JobStats(TypedDict):
@@ -94,33 +95,37 @@ def get_project_candidates(
         .offset(skip)
         .limit(limit)
     ).all()
-    return [
-        CandidateResponse(
-            id=candidate.id,
-            job_candidate_id=job_candidate.id,
-            job_id=job.id,
-            job_title=job.title,
-            name=candidate.name,
-            title=candidate.title,
-            current_company=candidate.current_company,
-            location=candidate.location,
-            city=candidate.city,
-            email=candidate.email,
-            github_url=candidate.github_url,
-            linkedin_url=candidate.linkedin_url,
-            homepage_url=candidate.homepage_url,
-            source_platform=candidate.source_platform,
-            source_url=candidate.source_url,
-            evidence=candidate.evidence,
-            skills=candidate.skills,
-            created_from_task_id=candidate.created_from_task_id,
-            match_score=job_candidate.match_score,
-            pipeline_status=job_candidate.pipeline_status,
-            job_evidence=job_candidate.evidence,
-            source_task_id=job_candidate.source_task_id,
-        )
-        for job_candidate, candidate, job in rows
-    ]
+    return [_candidate_response(job_candidate, candidate, job) for job_candidate, candidate, job in rows]
+
+
+@router.post(
+    "/{project_id}/candidates/{job_candidate_id}/compliance-review",
+    response_model=CandidateResponse,
+    response_model_exclude_none=True,
+)
+def confirm_candidate_contact_compliance(
+    project_id: str,
+    job_candidate_id: int,
+    request: CandidateComplianceReviewRequest,
+    session: Session = Depends(get_project_session),
+) -> CandidateResponse:
+    _require_project(session, project_id)
+    row = session.execute(
+        select(JobCandidate, Candidate, Job)
+        .join(Candidate, Candidate.id == JobCandidate.candidate_id)
+        .join(Job, Job.id == JobCandidate.job_id)
+        .where(JobCandidate.id == job_candidate_id, Job.project_id == project_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Project candidate not found: {job_candidate_id}")
+    job_candidate, candidate, job = row
+    if request.decision != "approve":
+        raise HTTPException(status_code=409, detail="Compliance review currently supports approve decisions only")
+    if job_candidate.pipeline_status == PENDING_COMPLIANCE_REVIEW_STATUS:
+        job_candidate.pipeline_status = "pending_outreach" if candidate.email else "sourced"
+        session.commit()
+        session.refresh(job_candidate)
+    return _candidate_response(job_candidate, candidate, job)
 
 
 @router.get("/{project_id}/candidates/unique", response_model=list[UniqueCandidateResponse], response_model_exclude_none=True)
@@ -316,7 +321,10 @@ def _project_stats(session: Session, project_id: str) -> dict[str, int]:
         session.scalar(
             select(func.count(JobCandidate.id))
             .join(Job, Job.id == JobCandidate.job_id)
-            .where(Job.project_id == project_id, JobCandidate.pipeline_status == "awaiting_human")
+            .where(
+                Job.project_id == project_id,
+                JobCandidate.pipeline_status.in_(["awaiting_human", PENDING_COMPLIANCE_REVIEW_STATUS]),
+            )
         )
         or 0
     )
@@ -388,6 +396,33 @@ def _aggregate_pipeline_status(statuses: list[str]) -> str | None:
         if status in status_set:
             return status
     return statuses[0]
+
+
+def _candidate_response(job_candidate: JobCandidate, candidate: Candidate, job: Job) -> CandidateResponse:
+    return CandidateResponse(
+        id=candidate.id,
+        job_candidate_id=job_candidate.id,
+        job_id=job.id,
+        job_title=job.title,
+        name=candidate.name,
+        title=candidate.title,
+        current_company=candidate.current_company,
+        location=candidate.location,
+        city=candidate.city,
+        email=candidate.email,
+        github_url=candidate.github_url,
+        linkedin_url=candidate.linkedin_url,
+        homepage_url=candidate.homepage_url,
+        source_platform=candidate.source_platform,
+        source_url=candidate.source_url,
+        evidence=candidate.evidence,
+        skills=candidate.skills,
+        created_from_task_id=candidate.created_from_task_id,
+        match_score=job_candidate.match_score,
+        pipeline_status=job_candidate.pipeline_status,
+        job_evidence=job_candidate.evidence,
+        source_task_id=job_candidate.source_task_id,
+    )
 
 
 def _rounded_score(value: object | None) -> int:

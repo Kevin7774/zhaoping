@@ -156,6 +156,42 @@ def test_ingestion_inserts_candidate_and_job_link(session_factory: sessionmaker[
         assert link.source_task_id == "task_B_1"
 
 
+def test_ingestion_marks_obfuscated_contact_for_compliance_review(session_factory: sessionmaker[Session]) -> None:
+    from app.core.candidate_lead_ingestion import ingest_candidate_leads
+
+    lead = {
+        **github_lead(),
+        "email": "alice@example.com",
+        "contact_source": "cloudflare_email_decode",
+        "raw_payload": {
+            "contact_source": "cloudflare_email_decode",
+            "source_markup": '<a class="__cf_email__" data-cfemail="...">[email protected]</a>',
+        },
+    }
+
+    with session_factory() as session:
+        result = ingest_candidate_leads(
+            session,
+            project_id="project_2026_ai_team",
+            job_id="job_vla_algorithm",
+            source_task_id="task_B_risky",
+            raw_leads=[lead],
+        )
+
+    assert result["compliance_review_required"] == 1
+    with session_factory() as session:
+        candidate = session.scalar(select(Candidate).where(Candidate.email == "alice@example.com"))
+        assert candidate is not None
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == candidate.id,
+            )
+        )
+        assert link is not None
+        assert link.pipeline_status == "pending_compliance_review"
+
+
 def test_ingestion_deduplicates_existing_candidate_and_repeated_run(session_factory: sessionmaker[Session]) -> None:
     from app.core.candidate_lead_ingestion import ingest_candidate_leads
 

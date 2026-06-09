@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -96,9 +97,11 @@ class StepExecutor:
 
     def _execute_llm_prompt(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
         prompt = _render_prompt_template(step_def.prompt or "", state.context)
+        max_tokens = step_def.max_tokens or 256
+        usage = _reserve_llm_budget(state, step_def.id, prompt, max_tokens)
         llm = self.router.llm(step_def.service)
-        value = llm.text(prompt, max_tokens=step_def.max_tokens or 256)
-        return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=value)
+        value = llm.text(prompt, max_tokens=max_tokens)
+        return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=value, usage=usage)
 
     def _execute_save_artifact(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
         value = render_template(str(step_def.input or ""), state.context)
@@ -119,8 +122,11 @@ class StepExecutor:
         )
         last_output = ""
         last_error = ""
+        usage: dict[str, Any] = {}
         for attempt in range((step_def.max_retries or 0) + 1):
-            output = llm.text(prompt, max_tokens=step_def.max_tokens or 1024)
+            max_tokens = step_def.max_tokens or 1024
+            usage = _reserve_llm_budget(state, step_def.id, prompt, max_tokens)
+            output = llm.text(prompt, max_tokens=max_tokens)
             try:
                 parsed = json.loads(output)
                 _validate_schema(parsed, step_def.schema or {})
@@ -128,6 +134,7 @@ class StepExecutor:
                     step_id=step_def.id,
                     output_key=step_def.output_key,
                     value=normalize_context_value(parsed),
+                    usage=usage,
                     diagnostics={"attempts": attempt + 1},
                 )
             except Exception as exc:
@@ -164,6 +171,66 @@ def _render_prompt_template(
     max_chars: int = DEFAULT_PROMPT_CONTEXT_BUDGET_CHARS,
 ) -> str:
     return render_template(template, build_prompt_context(template, context, max_chars=max_chars))
+
+
+def _reserve_llm_budget(
+    state: WorkflowRuntimeState,
+    step_id: str,
+    prompt: str,
+    max_tokens: int,
+) -> dict[str, Any]:
+    budget = _task_token_budget()
+    if budget is None:
+        return {}
+    estimated_prompt_tokens = _estimate_tokens(prompt)
+    requested_tokens = estimated_prompt_tokens + max_tokens
+    usage = dict(state.retry_state.get("token_budget") or {})
+    used_tokens = int(usage.get("used_tokens") or 0)
+    if used_tokens + requested_tokens > budget:
+        raise HumanGateRequiredException(
+            {
+                "agent": "json_workflow",
+                "prompt": f"任务 Token 预算已触发熔断：{used_tokens + requested_tokens}/{budget}",
+                "draft": {
+                    "reason": "token_budget_exceeded",
+                    "step_id": step_id,
+                    "budget_tokens": budget,
+                    "used_tokens": used_tokens,
+                    "requested_tokens": requested_tokens,
+                    "estimated_prompt_tokens": estimated_prompt_tokens,
+                    "max_tokens": max_tokens,
+                },
+            }
+        )
+    updated_usage = {
+        "budget_tokens": budget,
+        "used_tokens": used_tokens + requested_tokens,
+        "last_step_id": step_id,
+        "last_requested_tokens": requested_tokens,
+    }
+    state.retry_state["token_budget"] = updated_usage
+    return updated_usage
+
+
+def _task_token_budget() -> int | None:
+    raw = os.environ.get("ZHAOPING_TASK_TOKEN_BUDGET")
+    if raw in (None, ""):
+        return None
+    try:
+        budget = int(raw)
+    except ValueError:
+        raise WorkflowFatalException(
+            "ZHAOPING_TASK_TOKEN_BUDGET must be an integer",
+            {"env_var": "ZHAOPING_TASK_TOKEN_BUDGET", "value": raw},
+        )
+    return budget if budget > 0 else None
+
+
+def _estimate_tokens(text: str) -> int:
+    normalized_length = len(text.strip())
+    if normalized_length <= 0:
+        return 0
+    return max(1, (normalized_length + 3) // 4)
 
 
 def _validate_schema(value: Any, schema: dict[str, Any]) -> None:

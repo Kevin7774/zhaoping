@@ -3,10 +3,12 @@ import type { Candidate } from "../types";
 type CandidateTableProps = {
   candidates: Candidate[];
   onSendEmail: (candidate: Candidate) => void;
+  onConfirmCompliance?: (candidate: Candidate) => void;
   onRunEvaluation?: (candidate: Candidate) => void;
   canRunEvaluation?: boolean;
   evaluationDisabledReason?: string;
   evaluatingCandidateId?: string | null;
+  confirmingComplianceCandidateId?: string | null;
   hasMore?: boolean;
   isLoadingMore?: boolean;
   loadedCount?: number;
@@ -31,6 +33,7 @@ const pipelineLabel: Record<string, string> = {
   error: "失败",
   cancelled: "已取消",
   sourced: "已入库",
+  pending_compliance_review: "合规待审",
   screening: "初筛中",
   technical_interview: "技术面",
   offer: "Offer",
@@ -59,10 +62,12 @@ function avatarText(name: string) {
 export function CandidateTable({
   candidates,
   onSendEmail,
+  onConfirmCompliance,
   onRunEvaluation,
   canRunEvaluation = true,
   evaluationDisabledReason,
   evaluatingCandidateId = null,
+  confirmingComplianceCandidateId = null,
   hasMore = false,
   isLoadingMore = false,
   loadedCount,
@@ -103,8 +108,16 @@ export function CandidateTable({
             <tbody className="divide-y divide-[#EEF2F7]">
               {candidates.map((candidate) => {
                 const hasEmail = Boolean(candidate.email);
+                const compliancePending = candidate.pipelineStatus === "pending_compliance_review";
                 const isEvaluating = evaluatingCandidateId === candidate.candidateId;
+                const isConfirmingCompliance = confirmingComplianceCandidateId === candidate.candidateId;
                 const evaluationDisabled = isEvaluating || !canRunEvaluation;
+                const draftDisabled = !hasEmail || compliancePending;
+                const draftDisabledTitle = compliancePending
+                  ? "候选人联系方式待合规确认"
+                  : hasEmail
+                    ? undefined
+                    : "候选人无邮箱";
 
                 return (
                   <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px]">
@@ -142,6 +155,16 @@ export function CandidateTable({
                             {isEvaluating ? "评估中" : "候选人评估"}
                           </button>
                         ) : null}
+                        {compliancePending && onConfirmCompliance ? (
+                          <button
+                            type="button"
+                            onClick={() => onConfirmCompliance(candidate)}
+                            disabled={isConfirmingCompliance}
+                            className="h-[30px] whitespace-nowrap rounded-lg border border-[#F59E0B] bg-[#FFFBEB] px-2 text-[12px] font-medium text-[#92400E] transition hover:bg-[#FEF3C7] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isConfirmingCompliance ? "确认中" : "确认来源"}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="h-[30px] whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
@@ -150,10 +173,10 @@ export function CandidateTable({
                         </button>
                         <button
                           type="button"
-                          disabled={!hasEmail}
-                          title={hasEmail ? undefined : "候选人无邮箱"}
+                          disabled={draftDisabled}
+                          title={draftDisabledTitle}
                           onClick={() => {
-                            if (hasEmail) onSendEmail(candidate);
+                            if (!draftDisabled) onSendEmail(candidate);
                           }}
                           className="h-[30px] whitespace-nowrap rounded-lg bg-[#2563EB] px-2 text-[12px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
                         >

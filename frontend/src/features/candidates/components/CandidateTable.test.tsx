@@ -8,6 +8,7 @@ import { CandidateTable } from "./CandidateTable";
 
 const candidate: Candidate = {
   candidateId: "cand_zhou_han",
+  jobCandidateId: 42,
   name: "Zhou Han",
   targetJobProfileId: "job_vla_algorithm",
   sourcePlatform: "Backend",
@@ -53,6 +54,34 @@ describe("CandidateTable", () => {
     expect(button).toHaveProperty("disabled", true);
     expect(button.getAttribute("title")).toBe("候选人无邮箱");
     fireEvent.click(button);
+    expect(onSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("requires HR compliance confirmation before outreach for obfuscated contact sources", () => {
+    const onSendEmail = vi.fn();
+    const onConfirmCompliance = vi.fn();
+    const complianceCandidate = {
+      ...candidate,
+      pipelineStatus: "pending_compliance_review",
+      stepStatus: "awaiting_human" as const,
+    };
+
+    render(
+      <CandidateTable
+        candidates={[complianceCandidate]}
+        onSendEmail={onSendEmail}
+        onConfirmCompliance={onConfirmCompliance}
+      />,
+    );
+
+    expect(screen.getByText("合规待审")).toBeTruthy();
+    const draftButton = screen.getByRole("button", { name: "生成草稿" });
+    expect(draftButton).toHaveProperty("disabled", true);
+    expect(draftButton.getAttribute("title")).toBe("候选人联系方式待合规确认");
+
+    fireEvent.click(screen.getByRole("button", { name: "确认来源" }));
+
+    expect(onConfirmCompliance).toHaveBeenCalledWith(complianceCandidate);
     expect(onSendEmail).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -74,3 +74,7 @@ class CandidateResponse(CandidateRequest):
     pipeline_status: str
     job_evidence: list[str] | None = None
     source_task_id: str | None = Field(default=None, max_length=64)
+
+
+class CandidateComplianceReviewRequest(CamelModel):
+    decision: Literal["approve"] = "approve"

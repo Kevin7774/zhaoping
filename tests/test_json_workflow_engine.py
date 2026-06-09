@@ -244,6 +244,21 @@ def test_step_executor_uses_service_router_for_llm_prompt() -> None:
     assert result.value == "summary"
 
 
+def test_step_executor_suspends_llm_prompt_when_task_token_budget_is_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ZHAOPING_TASK_TOKEN_BUDGET", "12")
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    state = WorkflowRuntimeState.from_definition(workflow, {"user_input": "robotics"})
+    state.context["search_results"] = [{"title": "A"}]
+    router = FakeRouter(llm_outputs=["summary"])
+
+    with pytest.raises(HumanGateRequiredException) as exc:
+        StepExecutor(router=router).execute_step(workflow.steps[1], state)
+
+    assert exc.value.awaiting["agent"] == "json_workflow"
+    assert exc.value.awaiting["draft"]["reason"] == "token_budget_exceeded"
+    assert router.llm_provider.prompts == []
+
+
 def test_step_executor_limits_llm_prompt_context_without_mutating_runtime_context() -> None:
     workflow = WorkflowDefinition.model_validate(valid_workflow())
     state = WorkflowRuntimeState.from_definition(workflow, {"user_input": "robotics"})

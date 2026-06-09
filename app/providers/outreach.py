@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import smtplib
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 from urllib.parse import quote
 
 
@@ -383,3 +386,76 @@ class SendGridCompliantEmailProvider(CompliantEmailDeliveryProvider):
         if response.text.strip():
             return response.json()
         return {"message_id": response.headers.get("X-Message-Id")}
+
+
+class MailtrapSMTPEmailProvider(CompliantEmailDeliveryProvider):
+    def __init__(
+        self,
+        *,
+        provider: str,
+        host_env: str,
+        port_env: str,
+        username_env: str,
+        password_env: str,
+        from_email_env: str,
+        unsubscribe_base_url_env: str,
+        suppression_list_path: str,
+        audit_log_path: str,
+        daily_send_limit: int = 50,
+        manual_approval_required: bool = True,
+        use_starttls: bool = True,
+        timeout_seconds: int = 20,
+    ) -> None:
+        super().__init__(
+            provider=provider,
+            endpoint="smtp",
+            token_env=password_env,
+            from_email_env=from_email_env,
+            unsubscribe_base_url_env=unsubscribe_base_url_env,
+            suppression_list_path=suppression_list_path,
+            audit_log_path=audit_log_path,
+            daily_send_limit=daily_send_limit,
+            manual_approval_required=manual_approval_required,
+            timeout_seconds=timeout_seconds,
+        )
+        self.host_env = host_env
+        self.port_env = port_env
+        self.username_env = username_env
+        self.password_env = password_env
+        self.use_starttls = use_starttls
+
+    def _send_request(
+        self,
+        *,
+        token: str,
+        sender: str,
+        to: str,
+        subject: str,
+        text_body: str,
+        html_body: str | None,
+        unsubscribe_url: str,
+    ) -> dict[str, Any]:
+        host = _require_env(self.host_env)
+        username = _require_env(self.username_env)
+        password = token
+        try:
+            port = int(_require_env(self.port_env))
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid Mailtrap SMTP port in {self.port_env}") from exc
+
+        message = EmailMessage()
+        message["From"] = sender
+        message["To"] = to
+        message["Subject"] = subject
+        message["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+        message.set_content(text_body)
+        if html_body:
+            message.add_alternative(html_body, subtype="html")
+
+        with smtplib.SMTP(host, port, timeout=self.timeout_seconds) as smtp:
+            if self.use_starttls:
+                smtp.starttls()
+            smtp.login(username, password)
+            smtp.send_message(message)
+
+        return {"message_id": f"mailtrap-{uuid4().hex[:16]}"}

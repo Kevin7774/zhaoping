@@ -647,6 +647,23 @@ manual_approval_required = true
 timeout_seconds = 20
 description = "SendGrid email sender wrapped with manual approval, unsubscribe, suppression-list, daily-limit, and audit-log guardrails."
 
+[services.mailtrap_smtp_email]
+type = "email_delivery"
+provider = "mailtrap_smtp_email"
+host_env = "MAILTRAP_SMTP_HOST"
+port_env = "MAILTRAP_SMTP_PORT"
+username_env = "MAILTRAP_SMTP_USERNAME"
+password_env = "MAILTRAP_SMTP_PASSWORD"
+from_email_env = "RECRUITING_CONTACT_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/outreach/suppression_list.jsonl"
+audit_log_path = "data/outreach/email_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+use_starttls = true
+timeout_seconds = 20
+description = "Mailtrap SMTP sandbox sender for test-mode real email delivery without contacting production recipients."
+
 [services.firecrawl_scrape]
 type = "scraping"
 provider = "firecrawl_scrape"

@@ -721,19 +721,16 @@ def ingest_resume(request: IngestRequest) -> dict:
 
 @app.post("/jobs/match")
 def match_candidates(request: MatchRequest, session: Session = Depends(get_project_session)) -> dict:
+    database_results = _match_candidates_from_project_database(session, request.query, request.top_k)
+    if database_results:
+        return {"results": database_results, "source": "project_database"}
+
     router = get_router()
     try:
         embedding = router.embedding().embed_texts([request.query])
         results = router.vector_store().search(embedding[0].tolist(), top_k=request.top_k)
         return {"results": results, "source": "vector_store"}
     except Exception as exc:
-        fallback_results = _match_candidates_from_project_database(session, request.query, request.top_k)
-        if fallback_results:
-            return {
-                "results": fallback_results,
-                "source": "project_database_fallback",
-                "provider_error": str(exc),
-            }
         detail = str(exc) if isinstance(exc, RuntimeError) else f"Job match failed: {exc}"
         raise HTTPException(status_code=503, detail=detail) from exc
 

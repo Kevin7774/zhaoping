@@ -108,6 +108,56 @@ def llm_resume_output() -> dict:
     }
 
 
+def test_auto_document_parser_blocks_pdftotext_fallback_by_default_for_pdf(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers import document
+
+    pdf_path = tmp_path / "resume.pdf"
+    pdf_path.write_bytes(b"%PDF-1.5\n")
+
+    def fail_docling(self, file_path: str) -> str:  # noqa: ANN001
+        raise RuntimeError("docling unavailable")
+
+    monkeypatch.setattr(document.DoclingDocumentParser, "parse", fail_docling)
+    monkeypatch.delenv("ZHAOPING_ALLOW_PDF_TEXT_FALLBACK", raising=False)
+
+    with pytest.raises(RuntimeError, match="Refusing low-quality pdftotext fallback"):
+        document.AutoDocumentParser().parse(str(pdf_path))
+
+
+def test_auto_document_parser_allows_pdftotext_only_when_explicitly_enabled(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers import document
+
+    pdf_path = tmp_path / "resume.pdf"
+    pdf_path.write_bytes(b"%PDF-1.5\n")
+
+    def fail_docling(self, file_path: str) -> str:  # noqa: ANN001
+        raise RuntimeError("docling unavailable")
+
+    class Result:
+        returncode = 0
+        stdout = "张载德\nAI 全栈工程师\n"
+        stderr = ""
+
+    def fake_run(args, *, check: bool, capture_output: bool, text: bool):  # noqa: ANN001
+        assert args == ["pdftotext", "-layout", str(pdf_path), "-"]
+        assert check is False
+        assert capture_output is True
+        assert text is True
+        return Result()
+
+    monkeypatch.setenv("ZHAOPING_ALLOW_PDF_TEXT_FALLBACK", "1")
+    monkeypatch.setattr(document.DoclingDocumentParser, "parse", fail_docling)
+    monkeypatch.setattr(document.shutil, "which", lambda command: "/usr/bin/pdftotext" if command == "pdftotext" else None)
+    monkeypatch.setattr(document.subprocess, "run", fake_run)
+    assert document.AutoDocumentParser().parse(str(pdf_path)) == "张载德\nAI 全栈工程师\n"
+
+
 def test_extract_resume_lead_validates_llm_json_and_preserves_source_file(tmp_path) -> None:
     from app.core.resume_ingestion import extract_resume_lead
 
@@ -122,6 +172,8 @@ def test_extract_resume_lead_validates_llm_json_and_preserves_source_file(tmp_pa
     assert lead["raw_payload"]["source_file"] == str(path)
     assert lead["raw_payload"]["source_filename"] == "lin-chen-resume.md"
     assert "只输出合法 JSON" in router.llm_provider.prompts[0]
+    assert "极其严厉的数据清洗与结构化抽取 Agent" in router.llm_provider.prompts[0]
+    assert "confidence_score" in router.llm_provider.prompts[0]
 
 
 def test_import_resume_to_project_reuses_candidate_lead_ingestion(
@@ -231,6 +283,60 @@ def test_project_resume_upload_saves_file_creates_task_and_project_candidate(
     candidates = client.get("/projects/project_2026_ai_team/candidates")
     assert candidates.headers["x-total-count"] == "1"
     assert candidates.json()[0]["sourcePlatform"] == "resume_file"
+
+
+def test_resume_import_task_does_not_hold_project_session_while_parsing_or_calling_llm(
+    session_factory: sessionmaker[Session],
+    isolated_task_store,
+    tmp_path,
+) -> None:
+    from app.core.resume_ingestion import run_resume_import_task
+
+    tracker = {"session_open": False}
+    path = resume_file(tmp_path)
+
+    class GuardedParser(FakeDocumentParser):
+        def parse(self, file_path: str) -> str:
+            assert tracker["session_open"] is False
+            return super().parse(file_path)
+
+    class GuardedLLM(FakeLLM):
+        def text(self, prompt: str, max_tokens: int = 1024) -> str:
+            assert tracker["session_open"] is False
+            return super().text(prompt, max_tokens=max_tokens)
+
+    class GuardedRouter(FakeRouter):
+        def __init__(self) -> None:
+            self.parser = GuardedParser()
+            self.llm_provider = GuardedLLM(llm_resume_output())
+
+    class GuardedSessionContext:
+        def __init__(self) -> None:
+            self._session_context = session_factory()
+
+        def __enter__(self) -> Session:
+            tracker["session_open"] = True
+            return self._session_context.__enter__()
+
+        def __exit__(self, exc_type, exc, traceback) -> None:  # noqa: ANN001
+            try:
+                return self._session_context.__exit__(exc_type, exc, traceback)
+            finally:
+                tracker["session_open"] = False
+
+    task = isolated_task_store.create("RESUME_IMPORT", "导入简历：lin-chen-resume.md")
+    snapshot = run_resume_import_task(
+        task.task_id,
+        project_id="project_2026_ai_team",
+        job_id="job_vla_algorithm",
+        file_path=str(path),
+        task_store=isolated_task_store,
+        session_factory=lambda: GuardedSessionContext(),
+        router=GuardedRouter(),
+    )
+
+    assert snapshot is not None
+    assert snapshot["status"] == "done"
 
 
 def test_resume_import_task_type_uses_task_store_without_scenario_plan(isolated_task_store) -> None:

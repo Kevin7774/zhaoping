@@ -16,6 +16,7 @@ export type CandidateEvidence = {
 
 export type Candidate = {
   candidateId: string;
+  jobCandidateId?: number;
   name: string;
   targetJobProfileId: string;
   sourcePlatform: string;

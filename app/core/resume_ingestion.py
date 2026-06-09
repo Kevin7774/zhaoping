@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.candidate_lead_ingestion import ingest_candidate_leads
+from app.core.prompt_config import load_system_prompt
 from app.core.router import ServiceRouter, get_router
 from app.db.session import project_session_factory
 from app.schemas.tasks import AgentEventCreate
@@ -107,8 +108,45 @@ def import_resume_to_project(
     document_parser_service: str | None = None,
     llm_service: str | None = None,
 ) -> dict[str, Any]:
+    markdown, lead = prepare_resume_lead(
+        file_path,
+        router=router,
+        document_parser_service=document_parser_service,
+        llm_service=llm_service,
+    )
+    return ingest_prepared_resume_lead(
+        session,
+        project_id=project_id,
+        job_id=job_id,
+        file_path=file_path,
+        source_task_id=source_task_id,
+        markdown=markdown,
+        lead=lead,
+    )
+
+
+def prepare_resume_lead(
+    file_path: str,
+    *,
+    router: ServiceRouter | None = None,
+    document_parser_service: str | None = None,
+    llm_service: str | None = None,
+) -> tuple[str, dict[str, Any]]:
     markdown = parse_resume_file(file_path, router=router, document_parser_service=document_parser_service)
     lead = extract_resume_lead(markdown, source_file=file_path, router=router, llm_service=llm_service)
+    return markdown, lead
+
+
+def ingest_prepared_resume_lead(
+    session: Session,
+    *,
+    project_id: str,
+    job_id: str,
+    file_path: str,
+    source_task_id: str,
+    markdown: str,
+    lead: dict[str, Any],
+) -> dict[str, Any]:
     result = ingest_candidate_leads(
         session,
         project_id=project_id,
@@ -156,14 +194,16 @@ def run_resume_import_task(
     )
     try:
         factory = session_factory or project_session_factory()
+        markdown, lead = prepare_resume_lead(file_path, router=router)
         with factory() as session:
-            result = import_resume_to_project(
+            result = ingest_prepared_resume_lead(
                 session,
                 project_id=project_id,
                 job_id=job_id,
                 file_path=file_path,
                 source_task_id=task_id,
-                router=router,
+                markdown=markdown,
+                lead=lead,
             )
         task_store.update(task_id, result=result, current_step=0, current_agent=None)
         task_store.append_event(
@@ -262,6 +302,7 @@ def _extract_with_llm(
 
 
 def _resume_extract_prompt(markdown: str) -> str:
+    system_prompt = load_system_prompt("candidate_extractor")
     schema = {
         "name": "string|null",
         "current_company": "string|null",
@@ -276,6 +317,7 @@ def _resume_extract_prompt(markdown: str) -> str:
         "confidence": "number 0-1",
     }
     return (
+        f"{system_prompt}\n\n"
         "请从候选人简历中抽取项目入库字段。只输出合法 JSON，不要输出 Markdown 或解释。\n"
         "字段缺失时填 null 或空数组；evidence 必须是简历中的具体事实，不要泛泛总结。\n\n"
         f"Schema:\n{json.dumps(schema, ensure_ascii=False, indent=2)}\n\n"

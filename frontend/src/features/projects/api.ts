@@ -307,6 +307,15 @@ export function getOutreachHistory(query: { projectId: string; candidateId?: str
   return apiClient.get<OutreachHistoryResponse>("/outreach/history", { query });
 }
 
+export function confirmCandidateCompliance(projectId: string, jobCandidateId: number) {
+  return apiClient
+    .post<CandidateBackendResponse>(
+      `/projects/${encodeURIComponent(projectId)}/candidates/${encodeURIComponent(String(jobCandidateId))}/compliance-review`,
+      { decision: "approve" },
+    )
+    .then(mapCandidate);
+}
+
 export async function querySegmentCandidates(projectId: string, criteria: FilterCriteria): Promise<SegmentQueryResponse> {
   const response = await apiClient.post<Omit<SegmentQueryResponse, "candidates"> & { candidates: CandidateBackendResponse[] }>(
     "/segments/query",
@@ -531,6 +540,7 @@ function mapCandidate(candidate: CandidateBackendResponse): Candidate {
   const matchScore = typeof candidate.matchScore === "number" && Number.isFinite(candidate.matchScore) ? candidate.matchScore : null;
   return {
     candidateId: candidate.id,
+    jobCandidateId: candidate.jobCandidateId,
     name: candidate.name || "—",
     targetJobProfileId: candidate.jobId,
     // Frontend projection: current project candidate API does not expose a normalized source platform.
@@ -577,6 +587,9 @@ function normalizeStepStatus(status: string): StepStatus {
   if (["pending", "processing", "awaiting_human", "done", "error", "cancelled"].includes(status)) {
     return status as StepStatus;
   }
+  if (status === "pending_compliance_review") {
+    return "awaiting_human";
+  }
   if (["offer", "offer_review", "technical_interview", "screening", "sourced", "pending_outreach"].includes(status)) {
     return "processing";
   }
@@ -584,7 +597,7 @@ function normalizeStepStatus(status: string): StepStatus {
 }
 
 function candidateStage(status: string): Candidate["stage"] {
-  if (status === "awaiting_human") return "human_gate";
+  if (status === "awaiting_human" || status === "pending_compliance_review") return "human_gate";
   if (status === "done" || status === "pending_outreach") return "agent_evaluated";
   if (status === "screening" || status === "sourced") return status;
   if (status === "offer" || status === "offer_review") return "offer_review";

@@ -212,12 +212,14 @@ describe("ProjectDetailPage backend hardening", () => {
         });
       }
       if (url === "/api/outreach/send") {
+        const body = JSON.parse(String(init?.body));
+        const simulated = Boolean(body.simulate);
         return jsonResponse({
           historyId: "history_1",
           draftId: "draft_backend_1",
-          status: "simulated",
-          deliveryMode: "simulated",
-          providerStatus: "simulated",
+          status: simulated ? "simulated" : "sent",
+          deliveryMode: simulated ? "simulated" : "real",
+          providerStatus: simulated ? "simulated" : "mailtrap_smtp_email:sent",
         });
       }
       if (url.startsWith("/api/outreach/history")) return jsonResponse({ items: [] });
@@ -543,8 +545,8 @@ describe("ProjectDetailPage backend hardening", () => {
     );
   });
 
-  it("uses backend generated email drafts and records simulated send after confirmation", async () => {
-    mockBackend({ integrations: { email_delivery_api: "disabled" } });
+  it("uses backend generated email drafts and sends real email when delivery is connected", async () => {
+    mockBackend();
 
     renderProjectPage();
 
@@ -563,10 +565,9 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(JSON.parse(String(sendCall?.[1]?.body))).toMatchObject({
       draftId: "draft_backend_1",
       decision: "approve",
-      simulate: true,
+      simulate: false,
     });
-    expect(await screen.findByText("草稿已确认，未发送；已记录模拟触达。")).toBeTruthy();
-    expect(screen.queryByText("已发送")).toBeNull();
+    expect(await screen.findByText("真实邮件已发送，并写入触达历史。")).toBeTruthy();
   });
 
   it("queries and saves target segments through backend segment endpoints", async () => {

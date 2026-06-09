@@ -6,6 +6,7 @@ import type { Candidate } from "../features/candidates/types";
 import type { JobProfile, StepStatus } from "../features/jobs/types";
 import {
   createOutreachDraft,
+  confirmCandidateCompliance,
   createSegment,
   confirmTask,
   cancelTask,
@@ -322,6 +323,7 @@ export function ProjectDetailPage() {
     action: RunProjectScenarioAction;
   } | null>(null);
   const [runningCandidateId, setRunningCandidateId] = useState<string | null>(null);
+  const [confirmingComplianceCandidateId, setConfirmingComplianceCandidateId] = useState<string | null>(null);
   const [taskControlBusy, setTaskControlBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -434,6 +436,7 @@ export function ProjectDetailPage() {
     setLoadingMoreCandidates(false);
     setHumanGateRequest(null);
     setRunningCandidateId(null);
+    setConfirmingComplianceCandidateId(null);
     setActiveTaskId(null);
     setActiveTaskAction(null);
     setDraftConfirmOpen(false);
@@ -785,6 +788,23 @@ export function ProjectDetailPage() {
     }
   };
 
+  const handleConfirmCandidateCompliance = async (candidate: Candidate) => {
+    if (typeof candidate.jobCandidateId !== "number") {
+      setToast("候选人关联 ID 缺失，无法确认来源");
+      return;
+    }
+    setConfirmingComplianceCandidateId(candidate.candidateId);
+    try {
+      await confirmCandidateCompliance(projectId, candidate.jobCandidateId);
+      setToast("已确认联系方式来源合法，候选人可进入触达流程");
+      await loadProjectData(filterCriteria);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "来源合规确认失败");
+    } finally {
+      setConfirmingComplianceCandidateId(null);
+    }
+  };
+
   const handleConfirmDraft = async (draft: string) => {
     if (!selectedCandidate || !outreachDraft) return;
     setHumanGateBusy(true);
@@ -799,11 +819,11 @@ export function ProjectDetailPage() {
       const sendResult = await sendOutreachDraft({
         draftId: updated.draftId,
         decision: "approve",
-        simulate: true,
+        simulate: !emailDeliveryGate.enabled,
       });
       setOutreachHistory((current) => [sendResult, ...current]);
       setDraftConfirmOpen(false);
-      setToast(sendResult.deliveryMode === "simulated" ? "草稿已确认，未发送；已记录模拟触达。" : "已写入触达记录。");
+      setToast(sendResult.deliveryMode === "simulated" ? "草稿已确认，未发送；已记录模拟触达。" : "真实邮件已发送，并写入触达历史。");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "草稿确认失败");
     } finally {
@@ -1053,10 +1073,12 @@ export function ProjectDetailPage() {
           <CandidateTable
             candidates={visibleCandidates}
             onSendEmail={handleSelectEmailCandidate}
+            onConfirmCompliance={handleConfirmCandidateCompliance}
             onRunEvaluation={handleRunCandidateEvaluation}
             canRunEvaluation={actionAvailability.candidate_evaluation.enabled}
             evaluationDisabledReason={actionAvailability.candidate_evaluation.reason}
             evaluatingCandidateId={runningCandidateId}
+            confirmingComplianceCandidateId={confirmingComplianceCandidateId}
             hasMore={hasMoreCandidates}
             isLoadingMore={loadingMoreCandidates}
             loadedCount={candidates.length}
@@ -1217,8 +1239,10 @@ export function ProjectDetailPage() {
                 <p className="text-[12px] leading-[18px] text-[#9CA3AF]">
                   草稿由 POST /outreach/draft 生成，编辑通过 PATCH /outreach/drafts/&lt;draftId&gt; 保存，确认后写入触达历史。
                 </p>
-                <p className="text-[12px] leading-[18px] text-[#F59E0B]">
-                  当前真实邮件提供方未接入发送动作，确认后仅记录模拟触达，不显示真实送达状态。
+                <p className={`text-[12px] leading-[18px] ${emailDeliveryGate.enabled ? "text-[#047857]" : "text-[#F59E0B]"}`}>
+                  {emailDeliveryGate.enabled
+                    ? "邮件发送 API 已接入，确认后会调用后端真实发送并写入触达历史。"
+                    : "邮件发送 API 未就绪，确认后仅记录模拟触达，不显示真实送达状态。"}
                 </p>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] text-[#6B7280]">收件人</span>

@@ -12,6 +12,7 @@ from app.api import main as api_main
 from app.core.config import load_app_config
 from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
+from app.core.prompt_config import load_system_prompt
 from app.core.orchestrator import (
     _a_industry,
     _a_plan,
@@ -90,6 +91,16 @@ def test_get_capabilities_for_role_includes_ids() -> None:
         "cap_data_alignment",
         "cap_data_cleaning_pipeline",
     }
+
+
+def test_job_deconstructor_prompt_generates_comprehensive_dynamic_roles() -> None:
+    prompt = load_system_prompt("job_deconstructor")
+
+    assert "不得限制为 3 个岗位" in prompt
+    assert "行业研究" in prompt
+    assert "技术架构" in prompt
+    assert "硬件拓扑" in prompt
+    assert "产品交付" in prompt
 
 
 def test_chunking_and_stable_ids() -> None:
@@ -523,7 +534,7 @@ def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
     registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
     backend_paths = sorted(app.openapi()["paths"])
 
-    assert len(backend_paths) == 49
+    assert len(backend_paths) == 50
     for path in backend_paths:
         assert path in registry_source
     for status in ["productized", "system", "closed"]:
@@ -4731,6 +4742,7 @@ def test_recruiting_growth_services_are_configured() -> None:
     assert config.service("neverbounce_email_validation").provider == "neverbounce_email_validation"
     assert config.service("postmark_compliant_email").provider == "postmark_compliant_email"
     assert config.service("sendgrid_compliant_email").provider == "sendgrid_compliant_email"
+    assert config.service("mailtrap_smtp_email").provider == "mailtrap_smtp_email"
     assert config.service("firecrawl_scrape").provider == "firecrawl_scrape"
     assert config.service("apify_actor_run").provider == "apify_actor_run"
     assert config.service("brightdata_web_unlocker").provider == "brightdata_web_unlocker"
@@ -4748,6 +4760,10 @@ def test_recruiting_growth_services_show_status_without_secret_values(monkeypatc
         "NEVERBOUNCE_API_KEY": "unit-neverbounce-secret",
         "POSTMARK_SERVER_TOKEN": "unit-postmark-secret",
         "SENDGRID_API_KEY": "unit-sendgrid-secret",
+        "MAILTRAP_SMTP_HOST": "sandbox.smtp.mailtrap.io",
+        "MAILTRAP_SMTP_PORT": "2525",
+        "MAILTRAP_SMTP_USERNAME": "unit-mailtrap-user",
+        "MAILTRAP_SMTP_PASSWORD": "unit-mailtrap-secret",
         "RECRUITING_CONTACT_EMAIL": "recruiting@example.com",
         "UNSUBSCRIBE_BASE_URL": "https://example.com/unsubscribe",
         "APIFY_API_TOKEN": "unit-apify-secret",
@@ -5069,6 +5085,66 @@ def test_compliant_postmark_sender_requires_approval_and_writes_audit(
     assert "unsubscribe" in calls["json"]["TextBody"]
     assert result["status"] == "sent"
     assert (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+
+
+def test_mailtrap_email_provider_sends_smtp_message(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeSMTP:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            calls["host"] = host
+            calls["port"] = port
+            calls["timeout"] = timeout
+
+        def __enter__(self) -> "FakeSMTP":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+            return None
+
+        def starttls(self) -> None:
+            calls["starttls"] = True
+
+        def login(self, username: str, password: str) -> None:
+            calls["username"] = username
+            calls["password"] = password
+
+        def send_message(self, message) -> None:  # noqa: ANN001
+            calls["message"] = message
+
+    import smtplib
+
+    monkeypatch.setenv("MAILTRAP_SMTP_HOST", "sandbox.smtp.mailtrap.io")
+    monkeypatch.setenv("MAILTRAP_SMTP_PORT", "2525")
+    monkeypatch.setenv("MAILTRAP_SMTP_USERNAME", "unit-mailtrap-user")
+    monkeypatch.setenv("MAILTRAP_SMTP_PASSWORD", "unit-mailtrap-secret")
+    monkeypatch.setenv("RECRUITING_CONTACT_EMAIL", "recruiting@example.com")
+    monkeypatch.setenv("UNSUBSCRIBE_BASE_URL", "https://example.com/unsubscribe")
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+
+    sender = ServiceRouter(load_app_config()).email_delivery("mailtrap_smtp_email")
+    sender.suppression_list_path = str(tmp_path / "suppression.jsonl")
+    sender.audit_log_path = str(tmp_path / "audit.jsonl")
+
+    result = sender.send(
+        to="ada@robot.example",
+        subject="真机部署问题切磋",
+        text_body="看到你做过 ROS2 nav2 真机调参。",
+        approved=True,
+    )
+
+    assert result["status"] == "sent"
+    assert result["provider"] == "mailtrap_smtp_email"
+    assert calls["host"] == "sandbox.smtp.mailtrap.io"
+    assert calls["port"] == 2525
+    assert calls["starttls"] is True
+    assert calls["username"] == "unit-mailtrap-user"
+    assert calls["password"] == "unit-mailtrap-secret"
+    message = calls["message"]
+    assert message["To"] == "ada@robot.example"
+    assert message["From"] == "recruiting@example.com"
+    assert "List-Unsubscribe" in message
+    assert "ROS2 nav2" in message.get_content()
 
 
 def test_scraping_providers_map_core_requests(monkeypatch: pytest.MonkeyPatch) -> None:

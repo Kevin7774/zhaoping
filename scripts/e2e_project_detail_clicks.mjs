@@ -9,7 +9,8 @@ const API_BASE = process.env.E2E_API_BASE || "http://127.0.0.1:8011";
 const CHROME_PATH = process.env.CHROME_PATH || "/usr/bin/google-chrome";
 const DEBUG_PORT = Number(process.env.E2E_CHROME_PORT || 9223);
 const REPORT_PATH = resolve(process.env.E2E_REPORT_PATH || "data/runtime/e2e_project_detail_report.json");
-const PROJECT_ID = "project_2026_ai_team";
+const PROJECT_ID = process.env.E2E_PROJECT_ID || "project_2026_ai_team";
+const PROJECT_TITLE = process.env.E2E_PROJECT_TITLE || "2026 AI 团队招聘";
 
 const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
@@ -896,6 +897,7 @@ async function main() {
     appUrl: APP_URL,
     apiBase: API_BASE,
     projectId: PROJECT_ID,
+    projectTitle: PROJECT_TITLE,
     status: "RUNNING",
     flows: [],
     createdTaskIds: [],
@@ -928,7 +930,7 @@ async function main() {
     await waitFor(
       async () => {
         const text = await pageText(cdp);
-        return text.includes("2026 AI 团队招聘") && text.includes("岗位进展") && text.includes("候选人名单");
+        return text.includes(PROJECT_TITLE) && text.includes("岗位进展") && text.includes("候选人名单");
       },
       20_000,
       "project detail page",

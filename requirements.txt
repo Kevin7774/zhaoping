@@ -3,6 +3,7 @@ pydantic>=2.7.0
 qdrant-client>=1.9.0
 sentence-transformers>=3.0.0
 sqlalchemy>=2.0.0
+psycopg[binary]>=3.2.0
 torch>=2.3.0
 pytest>=8.0.0
 outlines>=1.2.0
