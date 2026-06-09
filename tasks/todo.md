@@ -77,14 +77,22 @@ Use the backend `skip` / `limit` support from `GET /projects/{project_id}/candid
 
 ## Task checklist
 
-- [ ] Add a failing API client test proving `getProjectCandidates(projectId, { skip, limit })` sends query parameters.
-- [ ] Add a failing CandidateTable test proving the table renders a `加载更多` control and calls `onLoadMore`.
-- [ ] Update `frontend/src/features/projects/api.ts` so `getProjectCandidates` accepts optional pagination params.
-- [ ] Update `frontend/src/features/candidates/components/CandidateTable.tsx` with `hasMore`, `isLoadingMore`, and `onLoadMore` props.
-- [ ] Update `frontend/src/pages/ProjectDetailPage.tsx` to load the first candidate page, append later pages, and re-apply local filters.
-- [ ] Run `pnpm test` and `pnpm build` in `frontend/`.
-- [ ] Run `.venv/bin/python -m pytest -q`.
+- [x] Add a failing API client test proving `getProjectCandidates(projectId, { skip, limit })` sends query parameters.
+- [x] Add a failing CandidateTable test proving the table renders a `加载更多` control and calls `onLoadMore`.
+- [x] Update `frontend/src/features/projects/api.ts` so `getProjectCandidates` accepts optional pagination params.
+- [x] Update `frontend/src/features/candidates/components/CandidateTable.tsx` with `hasMore`, `isLoadingMore`, and `onLoadMore` props.
+- [x] Update `frontend/src/pages/ProjectDetailPage.tsx` to load the first candidate page, append later pages, and re-apply local filters.
+- [x] Run `pnpm test` and `pnpm build` in `frontend/`.
+- [x] Run `.venv/bin/python -m pytest -q`.
 
 ## Review
 
-- Status: in progress.
+- Status: implemented.
+- Test evidence:
+  - RED API client: `pnpm vitest run src/features/projects/api.test.ts` failed before implementation because query params were not present.
+  - RED table: `pnpm vitest run src/features/candidates/components/CandidateTable.test.tsx` failed before implementation because `加载更多` / `加载中...` controls were missing.
+  - Focused API client: `pnpm vitest run src/features/projects/api.test.ts` passed with 6 tests.
+  - Focused table: `pnpm vitest run src/features/candidates/components/CandidateTable.test.tsx` passed with 4 tests.
+  - Frontend full: `pnpm test` passed with 23 tests.
+  - Frontend build: `pnpm build` passed.
+  - Backend/contracts: `.venv/bin/python -m pytest -q` passed with 123 tests.
