@@ -1,6 +1,15 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
+from app.core.workflow_context import render_template, render_value
+from app.core.workflow_executor import (
+    HumanGateRequiredException,
+    StepExecutor,
+    WorkflowRuntimeState,
+)
 
 
 def valid_workflow() -> dict:
@@ -52,3 +61,137 @@ def test_workflow_definition_rejects_future_dependency() -> None:
     payload["steps"][0]["input"] = "{{ summary }}"
     with pytest.raises(WorkflowValidationException, match="future output"):
         WorkflowDefinition.model_validate(payload)
+
+
+class FakeSearchProvider:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def search(self, query: str, limit: int = 10):
+        self.calls.append({"query": query, "limit": limit})
+        return [{"title": "Result", "snippet": query}]
+
+
+class FakeLLMProvider:
+    def __init__(self, outputs: list[str] | None = None) -> None:
+        self.outputs = list(outputs or ["ok"])
+        self.prompts = []
+
+    def text(self, prompt: str, max_tokens: int = 256) -> str:
+        self.prompts.append({"prompt": prompt, "max_tokens": max_tokens})
+        return self.outputs.pop(0)
+
+
+class FakeRouter:
+    def __init__(self, llm_outputs: list[str] | None = None) -> None:
+        self.search_provider = FakeSearchProvider()
+        self.llm_provider = FakeLLMProvider(llm_outputs)
+
+    def search(self, service_name: str | None = None):
+        return self.search_provider
+
+    def llm(self, service_name: str | None = None):
+        return self.llm_provider
+
+    def structured_output(self, service_name: str | None = None):
+        raise RuntimeError("structured output backend unavailable in unit test")
+
+
+def test_render_value_uses_json_for_non_strings() -> None:
+    rendered = render_value({"ok": True, "missing": None, "items": [{"name": "OpenAI"}]})
+    parsed = json.loads(rendered)
+    assert parsed["ok"] is True
+    assert parsed["missing"] is None
+    assert "'ok'" not in rendered
+    assert "None" not in rendered
+
+
+def test_render_template_injects_context_as_formatted_json() -> None:
+    prompt = render_template("Entities:\n{{ entities }}", {"entities": [{"name": "OpenAI"}]})
+    assert json.loads(prompt.split("Entities:\n", 1)[1]) == [{"name": "OpenAI"}]
+
+
+def test_step_executor_uses_service_router_for_search() -> None:
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    state = WorkflowRuntimeState.from_definition(workflow, {"user_input": "robotics"})
+    router = FakeRouter()
+    result = StepExecutor(router=router).execute_step(workflow.steps[0], state)
+    assert router.search_provider.calls == [{"query": "robotics", "limit": 5}]
+    assert result.output_key == "search_results"
+    assert result.value[0]["snippet"] == "robotics"
+
+
+def test_step_executor_uses_service_router_for_llm_prompt() -> None:
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    state = WorkflowRuntimeState.from_definition(workflow, {"user_input": "robotics"})
+    state.context["search_results"] = [{"title": "A"}]
+    router = FakeRouter(llm_outputs=["summary"])
+    result = StepExecutor(router=router).execute_step(workflow.steps[1], state)
+    assert router.llm_provider.prompts[0]["max_tokens"] == 256
+    assert result.value == "summary"
+
+
+def test_step_executor_does_not_import_concrete_providers() -> None:
+    source = Path("app/core/workflow_executor.py").read_text(encoding="utf-8")
+    assert "app.providers" not in source
+    assert "OpenRouterChatLLMProvider" not in source
+    assert "BraveWebSearchProvider" not in source
+
+
+def test_structured_extract_retries_with_only_last_failure() -> None:
+    payload = {
+        "id": "extract",
+        "inputs": {"source": {"type": "string"}},
+        "steps": [
+            {
+                "id": "extract_entities",
+                "type": "structured_extract",
+                "input": "{{ source }}",
+                "schema": {
+                    "type": "object",
+                    "required": ["entities"],
+                    "properties": {"entities": {"type": "array"}},
+                },
+                "max_retries": 2,
+                "output_key": "entities",
+            }
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    state = WorkflowRuntimeState.from_definition(workflow, {"source": "OpenAI hired Alice"})
+    router = FakeRouter(llm_outputs=["not json", "{\"wrong\": []}", "{\"entities\": []}"])
+    result = StepExecutor(router=router).execute_step(workflow.steps[0], state)
+    assert result.value == {"entities": []}
+    assert len(router.llm_provider.prompts) == 3
+    last_prompt = router.llm_provider.prompts[-1]["prompt"]
+    assert "not json" not in last_prompt
+    assert "\"wrong\": []" in last_prompt
+
+
+def test_structured_extract_exhaustion_can_raise_human_gate() -> None:
+    payload = {
+        "id": "extract",
+        "inputs": {"source": {"type": "string"}},
+        "steps": [
+            {
+                "id": "extract_entities",
+                "type": "structured_extract",
+                "input": "{{ source }}",
+                "schema": {
+                    "type": "object",
+                    "required": ["entities"],
+                    "properties": {"entities": {"type": "array"}},
+                },
+                "max_retries": 1,
+                "on_failure": "human_gate",
+                "output_key": "entities",
+            }
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    state = WorkflowRuntimeState.from_definition(workflow, {"source": "bad"})
+    router = FakeRouter(llm_outputs=["bad", "{\"wrong\": []}"])
+    with pytest.raises(HumanGateRequiredException) as exc:
+        StepExecutor(router=router).execute_step(workflow.steps[0], state)
+    assert exc.value.awaiting["agent"] == "json_workflow"
+    assert exc.value.awaiting["draft"]["step_id"] == "extract_entities"

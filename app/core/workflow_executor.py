@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.core.router import ServiceRouter, get_router
+from app.core.workflow_context import normalize_context_value, render_template, retry_prompt
+from app.core.workflow_dsl import StepDefinition, WorkflowDefinition
+
+
+class WorkflowFatalException(Exception):
+    def __init__(self, message: str, safe_payload: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.safe_payload = safe_payload or {"message": message}
+
+
+class StepExecutionException(Exception):
+    pass
+
+
+class HumanGateRequiredException(Exception):
+    def __init__(self, awaiting: dict[str, Any]) -> None:
+        super().__init__(awaiting.get("prompt", "Human input required"))
+        self.awaiting = awaiting
+
+
+class WorkflowRuntimeState(BaseModel):
+    workflow_id: str
+    workflow: dict[str, Any]
+    current_step_index: int = 0
+    context: dict[str, Any] = Field(default_factory=dict)
+    retry_state: dict[str, Any] = Field(default_factory=dict)
+    artifacts: dict[str, Any] = Field(default_factory=dict)
+    conversation_id: str | None = None
+    human_decision: dict[str, Any] | None = None
+
+    @classmethod
+    def from_definition(
+        cls,
+        workflow: WorkflowDefinition,
+        initial_context: dict[str, Any],
+        conversation_id: str | None = None,
+    ) -> "WorkflowRuntimeState":
+        return cls(
+            workflow_id=workflow.id,
+            workflow=workflow.model_dump(mode="json"),
+            context=normalize_context_value(initial_context),
+            conversation_id=conversation_id,
+        )
+
+
+class StepResult(BaseModel):
+    step_id: str
+    output_key: str | None = None
+    value: Any = None
+    artifacts: dict[str, Any] = Field(default_factory=dict)
+    usage: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+
+class StepExecutor:
+    def __init__(self, router: ServiceRouter | None = None) -> None:
+        self.router = router or get_router()
+
+    def execute_step(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
+        if step_def.type == "search":
+            return self._execute_search(step_def, state)
+        if step_def.type == "llm_prompt":
+            return self._execute_llm_prompt(step_def, state)
+        if step_def.type == "structured_extract":
+            return self._execute_structured_extract(step_def, state)
+        if step_def.type == "save_artifact":
+            return self._execute_save_artifact(step_def, state)
+        if step_def.type == "human_gate":
+            prompt = render_template(step_def.prompt or "请确认", state.context)
+            raise HumanGateRequiredException(
+                {"agent": "json_workflow", "prompt": prompt, "draft": state.context}
+            )
+        raise WorkflowFatalException(f"Unsupported step type: {step_def.type}")
+
+    def _execute_search(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
+        query = render_template(str(step_def.input or ""), state.context)
+        provider = self.router.search(step_def.service)
+        value = provider.search(query, limit=step_def.limit or 10)
+        return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=normalize_context_value(value))
+
+    def _execute_llm_prompt(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
+        prompt = render_template(step_def.prompt or "", state.context)
+        llm = self.router.llm(step_def.service)
+        value = llm.text(prompt, max_tokens=step_def.max_tokens or 256)
+        return StepResult(step_id=step_def.id, output_key=step_def.output_key, value=value)
+
+    def _execute_save_artifact(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
+        value = render_template(str(step_def.input or ""), state.context)
+        return StepResult(
+            step_id=step_def.id,
+            output_key=step_def.output_key,
+            value=value,
+            artifacts={step_def.output_key or step_def.id: value},
+        )
+
+    def _execute_structured_extract(self, step_def: StepDefinition, state: WorkflowRuntimeState) -> StepResult:
+        source = render_template(str(step_def.input or ""), state.context)
+        llm = self.router.llm(step_def.service)
+        prompt = (
+            "请从输入中抽取结构化数据。只输出合法 JSON，不要输出 Markdown 或解释。\n\n"
+            f"Schema:\n{json.dumps(step_def.schema, ensure_ascii=False, indent=2)}\n\n"
+            f"Input:\n{source}"
+        )
+        last_output = ""
+        last_error = ""
+        for attempt in range((step_def.max_retries or 0) + 1):
+            output = llm.text(prompt, max_tokens=step_def.max_tokens or 1024)
+            try:
+                parsed = json.loads(output)
+                _validate_schema(parsed, step_def.schema or {})
+                return StepResult(
+                    step_id=step_def.id,
+                    output_key=step_def.output_key,
+                    value=normalize_context_value(parsed),
+                    diagnostics={"attempts": attempt + 1},
+                )
+            except Exception as exc:
+                last_output = output
+                last_error = str(exc)
+                state.retry_state = {
+                    "step_id": step_def.id,
+                    "retry_count": attempt + 1,
+                    "last_error": last_error,
+                }
+                prompt = retry_prompt(step_def.schema or {}, last_output, last_error)
+        if step_def.on_failure == "human_gate":
+            raise HumanGateRequiredException(
+                {
+                    "agent": "json_workflow",
+                    "prompt": f"结构化抽取失败，需要人工确认：{step_def.id}",
+                    "draft": {"step_id": step_def.id, "last_error": last_error, "last_output": last_output[:1200]},
+                }
+            )
+        raise WorkflowFatalException(
+            f"structured_extract failed for step {step_def.id}",
+            {"step_id": step_def.id, "last_error": last_error},
+        )
+
+
+def _validate_schema(value: Any, schema: dict[str, Any]) -> None:
+    schema_type = schema.get("type")
+    if schema_type == "object":
+        if not isinstance(value, dict):
+            raise ValueError("expected object")
+        for key in schema.get("required", []):
+            if key not in value:
+                raise ValueError(f"missing required field: {key}")
+        properties = schema.get("properties", {})
+        for key, child_schema in properties.items():
+            if key in value:
+                _validate_schema(value[key], child_schema)
+    elif schema_type == "array":
+        if not isinstance(value, list):
+            raise ValueError("expected array")
+        item_schema = schema.get("items")
+        if item_schema:
+            for item in value:
+                _validate_schema(item, item_schema)
+    elif schema_type == "string" and not isinstance(value, str):
+        raise ValueError("expected string")
+    elif schema_type == "number" and not isinstance(value, (int, float)):
+        raise ValueError("expected number")
+    elif schema_type == "integer" and not isinstance(value, int):
+        raise ValueError("expected integer")
+    elif schema_type == "boolean" and not isinstance(value, bool):
+        raise ValueError("expected boolean")
