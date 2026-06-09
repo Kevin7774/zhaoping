@@ -2192,6 +2192,17 @@ class TaskCancelled(RuntimeError):
     pass
 
 
+LEGACY_SCENARIO_RUNTIME_KEY = "legacy_scenario_runtime"
+PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY = "project_candidate_evaluation_runtime"
+
+
+def _frontend_state_without_internal_runtime(frontend_state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    state = dict(frontend_state or {})
+    state.pop(LEGACY_SCENARIO_RUNTIME_KEY, None)
+    state.pop(PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY, None)
+    return state
+
+
 @dataclass
 class TaskState:
     task_id: str
@@ -2283,7 +2294,6 @@ class DBTaskStore:
     def __init__(self) -> None:
         self._session_factory = make_task_session_factory()
         self._lock = threading.RLock()
-        self._wait_events: Dict[str, threading.Event] = {}
         self._cancel_flags: Dict[str, threading.Event] = {}
         self._bus = TaskEventBus()
         self._recover_interrupted_tasks()
@@ -2329,7 +2339,6 @@ class DBTaskStore:
                     ),
                 )
         with self._lock:
-            self._wait_events[task_id] = threading.Event()
             self._cancel_flags[task_id] = threading.Event()
         if event:
             self._bus.publish(task_id, event)
@@ -2412,6 +2421,20 @@ class DBTaskStore:
                     if not hasattr(row, key):
                         continue
                     setattr(row, key, _sanitize_event_value(value))
+                row.updated_at = _dt_now()
+
+    def set_frontend_runtime(self, task_id: str, key: str, runtime: dict[str, Any] | None) -> None:
+        with self._session_factory() as session:
+            with session.begin():
+                row = session.get(TaskModel, task_id)
+                if row is None:
+                    return
+                frontend_state = dict(row.frontend_state or {})
+                if runtime is None:
+                    frontend_state.pop(key, None)
+                else:
+                    frontend_state[key] = _sanitize_event_value(runtime)
+                row.frontend_state = _sanitize_event_value(frontend_state)
                 row.updated_at = _dt_now()
 
     def start_step(self, task_id: str, index: int, step: Step) -> None:
@@ -2511,10 +2534,6 @@ class DBTaskStore:
             self._bus.publish(task_id, event)
 
     def confirm(self, task_id: str, decision: str, edits: Optional[str]) -> bool:
-        wait_event = self._wait_events.get(task_id)
-        if wait_event is None:
-            self.set_error(task_id, "human_expert", "任务执行线程不可用，请重试该任务。")
-            return False
         event_dict: dict[str, Any] | None = None
         with self._session_factory() as session:
             with session.begin():
@@ -2539,8 +2558,18 @@ class DBTaskStore:
                 )
         if event_dict:
             self._bus.publish(task_id, event_dict)
-        wait_event.set()
         return True
+
+    def consume_human_decision(self, task_id: str) -> dict[str, Any] | None:
+        with self._session_factory() as session:
+            with session.begin():
+                row = session.get(TaskModel, task_id)
+                if row is None or not row.human_decision:
+                    return None
+                decision = dict(row.human_decision)
+                row.human_decision = None
+                row.updated_at = _dt_now()
+                return _sanitize_event_value(decision)
 
     def mark_done(self, task_id: str) -> None:
         event: dict[str, Any] | None = None
@@ -2595,9 +2624,6 @@ class DBTaskStore:
     def cancel(self, task_id: str, reason: str = "用户取消任务") -> Optional[Dict[str, Any]]:
         flag = self._cancel_flags.setdefault(task_id, threading.Event())
         flag.set()
-        wait_event = self._wait_events.get(task_id)
-        if wait_event:
-            wait_event.set()
         event: dict[str, Any] | None = None
         terminal_snapshot: Optional[Dict[str, Any]] = None
         with self._session_factory() as session:
@@ -2696,23 +2722,6 @@ class DBTaskStore:
             self._bus.publish(task_id, event)
         return response
 
-    def _wait_for_human(self, task_id: str) -> Dict[str, Any]:
-        event = self._wait_events[task_id]
-        while True:
-            if self.is_cancelled(task_id):
-                return {"decision": "cancelled", "edits": None}
-            event.wait(timeout=0.5)
-            event.clear()
-            with self._session_factory() as session:
-                row = session.get(TaskModel, task_id)
-                if row is None:
-                    return {"decision": "cancelled", "edits": None}
-                if row.human_decision:
-                    decision = dict(row.human_decision)
-                    row.human_decision = None
-                    session.commit()
-                    return decision
-
     def _insert_event(self, session, task_id: str, event: AgentEventCreate) -> dict[str, Any]:
         payload = event.model_dump()
         event_row = AgentEventModel(
@@ -2780,6 +2789,8 @@ class DBTaskStore:
                 for row in rows:
                     frontend_state = row.frontend_state or {}
                     json_runtime = frontend_state.get("json_workflow_runtime")
+                    legacy_runtime = frontend_state.get(LEGACY_SCENARIO_RUNTIME_KEY)
+                    project_candidate_runtime = frontend_state.get(PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY)
                     if isinstance(json_runtime, dict):
                         workflow_id = str(json_runtime.get("workflow_id") or "")
                         if row.status == "awaiting_human":
@@ -2807,6 +2818,10 @@ class DBTaskStore:
                             )
                             recovery_events.append((row.task_id, event))
                             continue
+                    if row.status == "awaiting_human" and (
+                        isinstance(legacy_runtime, dict) or isinstance(project_candidate_runtime, dict)
+                    ):
+                        continue
                     updated_at = row.updated_at
                     if updated_at is not None and updated_at.tzinfo is None:
                         updated_at = updated_at.replace(tzinfo=timezone.utc)
@@ -2889,6 +2904,11 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
     def run(self) -> None:
         task_id = self._task.task_id
         try:
+            resume_decision = self._store.consume_human_decision(task_id)
+            if resume_decision is not None:
+                self._resume_after_human_gate(task_id, resume_decision)
+                return
+
             context = self._load_context()
             self._emit_step(
                 0,
@@ -2920,6 +2940,18 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                 "具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？"
             )
             awaiting_step = Step("human_expert", "人工网闸", "等待 HR 确认 AI 候选评估报告", "hitl")
+            self._store.set_frontend_runtime(
+                task_id,
+                PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY,
+                {
+                    "type": PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY,
+                    "candidate_id": self._candidate_id,
+                    "job_id": self._job_id,
+                    "context": context,
+                    "report": report,
+                    "awaiting_step_index": 2,
+                },
+            )
             self._store.set_awaiting(
                 task_id,
                 awaiting_step,
@@ -2939,41 +2971,6 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                     "pipeline_status": CANDIDATE_EVALUATION_APPROVED_STATUS,
                 },
             )
-            decision = self._store._wait_for_human(task_id)
-            if decision.get("decision") == "cancelled":
-                raise TaskCancelled("任务已取消")
-
-            if decision.get("decision") == "reject":
-                self._store.complete_step(
-                    task_id,
-                    awaiting_step,
-                    2,
-                    {
-                        "decision": "reject",
-                        "candidate_id": self._candidate_id,
-                        "job_id": self._job_id,
-                        "database_updated": False,
-                    },
-                    "HR 已拒绝自动推进，未更新候选人状态。",
-                    final=True,
-                )
-                self._store.mark_done(task_id)
-                return
-
-            database_update = self._apply_approved_result()
-            self._store.complete_step(
-                task_id,
-                awaiting_step,
-                2,
-                {
-                    "decision": decision.get("decision", "approve"),
-                    "evaluation_report": report,
-                    "database_update": database_update,
-                },
-                "HR 已批准评估结论，候选人匹配分与 pipeline 状态已写回数据库。",
-                final=True,
-            )
-            self._store.mark_done(task_id)
         except TaskCancelled:
             self._store.cancel(task_id, "用户取消任务")
         except Exception as exc:  # noqa: BLE001 - task failures must be visible to SSE clients.
@@ -2982,6 +2979,48 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
         finally:
             with _active_runners_lock:
                 _active_runners.pop(task_id, None)
+
+    def _resume_after_human_gate(self, task_id: str, decision: dict[str, Any]) -> None:
+        runtime = self._project_candidate_runtime()
+        report = str(runtime.get("report") or "")
+        awaiting_step = Step("human_expert", "人工网闸", "等待 HR 确认 AI 候选评估报告", "hitl")
+        if decision.get("decision") == "reject":
+            self._store.complete_step(
+                task_id,
+                awaiting_step,
+                2,
+                {
+                    "decision": "reject",
+                    "candidate_id": self._candidate_id,
+                    "job_id": self._job_id,
+                    "database_updated": False,
+                },
+                "HR 已拒绝自动推进，未更新候选人状态。",
+                final=True,
+            )
+            self._store.mark_done(task_id)
+            self._store.set_frontend_runtime(task_id, PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY, None)
+            return
+
+        database_update = self._apply_approved_result()
+        self._store.complete_step(
+            task_id,
+            awaiting_step,
+            2,
+            {
+                "decision": decision.get("decision", "approve"),
+                "evaluation_report": report,
+                "database_update": database_update,
+            },
+            "HR 已批准评估结论，候选人匹配分与 pipeline 状态已写回数据库。",
+            final=True,
+        )
+        self._store.mark_done(task_id)
+        self._store.set_frontend_runtime(task_id, PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY, None)
+
+    def _project_candidate_runtime(self) -> dict[str, Any]:
+        runtime = (self._task.frontend_state or {}).get(PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY)
+        return runtime if isinstance(runtime, dict) else {}
 
     def _load_context(self) -> dict[str, Any]:
         with project_session_factory()() as session:
@@ -3080,61 +3119,57 @@ class AgentRunner(threading.Thread):
         task_id = self._task.task_id
         scenario = self._task.scenario
         plan = SCENARIO_PLANS[scenario]
-        ctx: Dict[str, Any] = {
-            "task_id": task_id,
-            "input": self._task.input,
-            "scenario": scenario,
-            "team_constraint": self._task.team_constraint,
-            "aperture_weight": self._task.aperture_weight,
-            "frontend_state": self._task.frontend_state,
-            "data": {},
-            "human": None,
-        }
+        ctx, start_index, awaiting_step_index = self._load_runtime_context()
 
         try:
-            for idx, step in enumerate(plan["steps"]):
+            for idx, step in enumerate(plan["steps"][start_index:], start=start_index):
                 self._raise_if_cancelled()
                 ctx["current_step"] = idx
                 ctx["current_step_label"] = step.label
                 agent = AGENT_REGISTRY[step.agent_id]["name_zh"]
-                self._store.start_step(task_id, idx, step)
-                self._store.append_event(
-                    task_id,
-                    AgentEventCreate(
-                        type="tool_call",
-                        agent_id=step.agent_id,
-                        step_index=idx,
-                        step_label=step.label,
-                        message=f"调用节点处理器：{step.label}",
-                        data={"handler": getattr(step.handler, "__name__", None), "kind": step.kind},
-                        status="processing",
-                    ),
-                )
-                self._interruptible_delay()
+                resumed_human_gate = step.kind == "hitl" and awaiting_step_index == idx
+                if not resumed_human_gate:
+                    self._store.start_step(task_id, idx, step)
+                    self._store.append_event(
+                        task_id,
+                        AgentEventCreate(
+                            type="tool_call",
+                            agent_id=step.agent_id,
+                            step_index=idx,
+                            step_label=step.label,
+                            message=f"调用节点处理器：{step.label}",
+                            data={"handler": getattr(step.handler, "__name__", None), "kind": step.kind},
+                            status="processing",
+                        ),
+                    )
+                    self._interruptible_delay()
 
                 if step.kind == "hitl":
-                    payload = step.handler(ctx) if step.handler else {"prompt": "请确认", "draft": {}}
-                    awaiting = {
-                        "agent": step.agent_id,
-                        "prompt": payload.get("prompt", "请确认"),
-                        "draft": payload.get("draft", {}),
-                    }
-                    if _should_auto_confirm_human_gate(ctx):
-                        decision = {"decision": "approve", "edits": "scheduler auto approve"}
-                        ctx["human"] = decision
-                        self._store.complete_step(
-                            task_id,
-                            step,
-                            idx,
-                            {"人工决策": "approve", "修改意见": decision["edits"], "auto_confirmed": True},
-                            "自动搜候选人任务已自动通过人工门控，继续执行入库。",
-                        )
-                        continue
-                    self._store.set_awaiting(task_id, step, idx, awaiting)
-                    decision = self._store._wait_for_human(task_id)
-                    if decision.get("decision") == "cancelled":
-                        raise TaskCancelled("任务已取消")
+                    decision = self._store.consume_human_decision(task_id) if resumed_human_gate else None
+                    if decision is None:
+                        payload = step.handler(ctx) if step.handler else {"prompt": "请确认", "draft": {}}
+                        awaiting = {
+                            "agent": step.agent_id,
+                            "prompt": payload.get("prompt", "请确认"),
+                            "draft": payload.get("draft", {}),
+                        }
+                        if _should_auto_confirm_human_gate(ctx):
+                            decision = {"decision": "approve", "edits": "scheduler auto approve"}
+                            ctx["human"] = decision
+                            self._store.complete_step(
+                                task_id,
+                                step,
+                                idx,
+                                {"人工决策": "approve", "修改意见": decision["edits"], "auto_confirmed": True},
+                                "自动搜候选人任务已自动通过人工门控，继续执行入库。",
+                            )
+                            self._save_runtime_context(ctx, idx + 1)
+                            continue
+                        self._save_runtime_context(ctx, idx, awaiting_step_index=idx)
+                        self._store.set_awaiting(task_id, step, idx, awaiting)
+                        return
                     if decision.get("decision") == "reject":
+                        self._clear_runtime_context()
                         self._store.set_error(task_id, step.agent_id, "人工拒绝，流程终止。")
                         return
                     ctx["human"] = decision
@@ -3145,22 +3180,84 @@ class AgentRunner(threading.Thread):
                         {"人工决策": decision.get("decision"), "修改意见": decision.get("edits")},
                         f"人类专家已{decision.get('decision')}，继续执行。",
                     )
+                    self._save_runtime_context(ctx, idx + 1)
                     continue
 
                 output = step.handler(ctx) if step.handler else None
                 self._raise_if_cancelled()
                 log_message = ctx.pop("log", None) or f"{agent} 完成：{step.label}"
                 self._store.complete_step(task_id, step, idx, output, log_message, final=step.kind == "finalize")
+                self._save_runtime_context(ctx, idx + 1)
 
             self._store.mark_done(task_id)
+            self._clear_runtime_context()
         except TaskCancelled:
+            self._clear_runtime_context()
             self._store.cancel(task_id, "用户取消任务")
         except Exception as exc:  # noqa: BLE001 - surface handler failures to the UI.
+            self._clear_runtime_context()
             message = friendly_error(exc, provider=self._task.current_agent or "AgentRunner")
             self._store.set_error(task_id, self._task.current_agent or "orchestrator", message)
         finally:
             with _active_runners_lock:
                 _active_runners.pop(task_id, None)
+
+    def _load_runtime_context(self) -> tuple[Dict[str, Any], int, int | None]:
+        runtime = (self._task.frontend_state or {}).get(LEGACY_SCENARIO_RUNTIME_KEY)
+        if isinstance(runtime, dict) and runtime.get("scenario") == self._task.scenario:
+            raw_context = runtime.get("context")
+            ctx = dict(raw_context) if isinstance(raw_context, dict) else {}
+            ctx["task_id"] = self._task.task_id
+            ctx["input"] = self._task.input
+            ctx["scenario"] = self._task.scenario
+            ctx["team_constraint"] = self._task.team_constraint
+            ctx["aperture_weight"] = self._task.aperture_weight
+            ctx["frontend_state"] = _frontend_state_without_internal_runtime(
+                ctx.get("frontend_state") if isinstance(ctx.get("frontend_state"), dict) else self._task.frontend_state
+            )
+            ctx.setdefault("data", {})
+            ctx.setdefault("human", None)
+            start_index = int(runtime.get("next_step_index") or 0)
+            awaiting_index = runtime.get("awaiting_step_index")
+            return ctx, max(0, start_index), int(awaiting_index) if awaiting_index is not None else None
+
+        return (
+            {
+                "task_id": self._task.task_id,
+                "input": self._task.input,
+                "scenario": self._task.scenario,
+                "team_constraint": self._task.team_constraint,
+                "aperture_weight": self._task.aperture_weight,
+                "frontend_state": _frontend_state_without_internal_runtime(self._task.frontend_state),
+                "data": {},
+                "human": None,
+            },
+            0,
+            None,
+        )
+
+    def _save_runtime_context(
+        self,
+        ctx: Dict[str, Any],
+        next_step_index: int,
+        awaiting_step_index: int | None = None,
+    ) -> None:
+        runtime = {
+            "type": LEGACY_SCENARIO_RUNTIME_KEY,
+            "scenario": self._task.scenario,
+            "next_step_index": next_step_index,
+            "awaiting_step_index": awaiting_step_index,
+            "context": _sanitize_event_value(
+                {
+                    **ctx,
+                    "frontend_state": _frontend_state_without_internal_runtime(ctx.get("frontend_state")),
+                }
+            ),
+        }
+        self._store.set_frontend_runtime(self._task.task_id, LEGACY_SCENARIO_RUNTIME_KEY, runtime)
+
+    def _clear_runtime_context(self) -> None:
+        self._store.set_frontend_runtime(self._task.task_id, LEGACY_SCENARIO_RUNTIME_KEY, None)
 
     def _raise_if_cancelled(self) -> None:
         if self._store.is_cancelled(self._task.task_id):
@@ -3221,6 +3318,35 @@ def start_task(
 
 def cancel_task(task_id: str) -> Optional[Dict[str, Any]]:
     return task_store.cancel(task_id)
+
+
+def resume_task_after_confirm(task_id: str) -> Optional[Dict[str, Any]]:
+    task = task_store.get(task_id)
+    if task is None:
+        return None
+    frontend_state = task.frontend_state or {}
+    runner: threading.Thread | None = None
+    project_runtime = frontend_state.get(PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY)
+    if isinstance(project_runtime, dict):
+        candidate_id = str(project_runtime.get("candidate_id") or "")
+        job_id = str(project_runtime.get("job_id") or "")
+        if not candidate_id or not job_id:
+            task_store.set_error(task_id, "candidate_eval", "候选人评估恢复失败：缺少 candidate_id 或 job_id。")
+            return task_store.snapshot(task_id)
+        runner = ProjectCandidateEvaluationRunner(
+            task_store,
+            task,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+    elif isinstance(frontend_state.get(LEGACY_SCENARIO_RUNTIME_KEY), dict):
+        runner = AgentRunner(task_store, task)
+
+    if runner is not None:
+        with _active_runners_lock:
+            _active_runners[task.task_id] = runner
+        runner.start()
+    return task_store.snapshot(task_id)
 
 
 def retry_task(task_id: str) -> Optional[TaskState]:

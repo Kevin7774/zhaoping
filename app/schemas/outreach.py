@@ -5,17 +5,21 @@ from typing import Literal
 
 from app.schemas.common import CamelModel
 
+OutreachStrategyTag = Literal["场景叙事类", "硬核技术类"]
+
 
 class OutreachDraftRequest(CamelModel):
     project_id: str
     job_id: str
     candidate_id: str
     segment_id: str | None = None
+    strategy_tag: OutreachStrategyTag | None = None
 
 
 class OutreachDraftPatchRequest(CamelModel):
     subject: str | None = None
     body: str | None = None
+    strategy_tag: OutreachStrategyTag | None = None
 
 
 class OutreachSendRequest(CamelModel):
@@ -33,6 +37,7 @@ class OutreachDraftResponse(CamelModel):
     subject: str
     body: str
     status: str
+    strategy_tag: OutreachStrategyTag | None = None
     backend_generated: bool = True
     created_at: datetime
     updated_at: datetime
@@ -46,6 +51,7 @@ class OutreachHistoryRecord(CamelModel):
     draft_id: str | None = None
     segment_id: str | None = None
     email: str | None = None
+    strategy_tag: OutreachStrategyTag | None = None
     subject: str
     body: str
     status: str

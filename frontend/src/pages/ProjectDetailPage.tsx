@@ -395,7 +395,7 @@ export function ProjectDetailPage() {
   const loadCandidateSearchSchedules = useCallback(async () => {
     try {
       const response = await getCandidateSearchSchedules(projectId);
-      setCandidateSearchSchedules(response.items);
+      setCandidateSearchSchedules(Array.isArray(response.items) ? response.items : []);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "自动搜索配置加载失败");
     }
@@ -1389,7 +1389,9 @@ function CandidateAutoSearchCard({
   onToggle: (job: JobProfile, enabled: boolean) => void;
   onIntervalChange: (job: JobProfile, intervalMinutes: number) => void;
 }) {
-  const scheduleByJobId = new Map(schedules.map((schedule) => [schedule.jobId, schedule]));
+  const safeSchedules = Array.isArray(schedules) ? schedules : [];
+  const safeJobs = Array.isArray(jobs) ? jobs : [];
+  const scheduleByJobId = new Map(safeSchedules.map((schedule) => [schedule.jobId, schedule]));
   return (
     <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="flex items-center justify-between gap-3">
@@ -1399,7 +1401,7 @@ function CandidateAutoSearchCard({
         </span>
       </div>
       <div className="mt-4 space-y-3">
-        {jobs.map((job) => {
+        {safeJobs.map((job) => {
           const schedule = scheduleByJobId.get(job.jobProfileId);
           const enabled = Boolean(schedule?.enabled);
           const busy = busyJobId === job.jobProfileId;

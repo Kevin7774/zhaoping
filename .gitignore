@@ -13,6 +13,7 @@ qdrant_mvp_store/
 data/*.sqlite3
 data/*.sqlite3-*
 data/runtime/
+data/workflow_artifacts/
 data/snapshots/
 data/e2e_test_results/
 test_readme.md

@@ -29,6 +29,7 @@ from app.core.orchestrator import (
     get_meta,
     get_workflow_meta,
     retry_task,
+    resume_task_after_confirm,
     retry_workflow_node,
     run_workflow_node,
     skip_workflow_node,
@@ -673,7 +674,10 @@ def confirm_task(task_id: str, request: ConfirmRequest) -> dict:
     ok = task_store.confirm(task_id, request.decision, request.edits)
     if not ok:
         raise HTTPException(status_code=409, detail="Task could not accept confirmation")
-    return task_store.snapshot(task_id)
+    snapshot = resume_task_after_confirm(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    return snapshot
 
 
 @app.post("/tasks/{task_id}/probe-feedback")

@@ -199,6 +199,17 @@ def wait_for_task_status(client: TestClient, task_id: str, expected: str, timeou
     pytest.fail(f"Task {task_id} did not reach {expected}; latest={latest}")
 
 
+def wait_for_runner_release(task_id: str, timeout: float = 1.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with orchestrator._active_runners_lock:
+            runner = orchestrator._active_runners.get(task_id)
+        if runner is None or not runner.is_alive():
+            return
+        time.sleep(0.02)
+    pytest.fail(f"Task {task_id} still holds an active runner while awaiting human confirmation")
+
+
 def test_render_value_uses_json_for_non_strings() -> None:
     rendered = render_value({"ok": True, "missing": None, "items": [{"name": "OpenAI"}]})
     parsed = json.loads(rendered)
@@ -441,6 +452,63 @@ def test_runner_resume_continues_after_human_gate() -> None:
     assert done["result"]["final_output"] == "finished"
 
 
+def test_legacy_scenario_human_gate_releases_runner_and_confirm_resumes(
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario_id = "T"
+
+    def plan_handler(ctx: dict) -> dict:
+        ctx["data"]["draft"] = {"body": ctx["input"]}
+        return {"draft": ctx["data"]["draft"]}
+
+    def gate_handler(ctx: dict) -> dict:
+        return {"prompt": "Approve draft?", "draft": ctx["data"]["draft"]}
+
+    def finalize_handler(ctx: dict) -> dict:
+        return {
+            "draft": ctx["data"]["draft"],
+            "human": ctx["human"],
+        }
+
+    monkeypatch.setitem(
+        orchestrator.SCENARIO_PLANS,
+        scenario_id,
+        {
+            "name_zh": "Test scenario",
+            "input_hint": "input",
+            "steps": [
+                orchestrator.Step("orchestrator", "prepare", "Prepare draft", "compute", plan_handler),
+                orchestrator.Step("human_expert", "review", "Wait for HR", "hitl", gate_handler),
+                orchestrator.Step("report", "final", "Finalize", "finalize", finalize_handler),
+            ],
+        },
+    )
+    monkeypatch.setattr(orchestrator.AgentRunner, "STEP_DELAY_SECONDS", 0)
+    client = TestClient(app)
+
+    task = orchestrator.start_task(scenario_id, "candidate draft")
+    awaiting = wait_for_task_status(client, task.task_id, "awaiting_human")
+
+    assert awaiting["awaiting"]["draft"] == {"body": "candidate draft"}
+    wait_for_runner_release(task.task_id)
+    assert "legacy_scenario_runtime" in awaiting["frontend_state"]
+
+    confirm_response = client.post(
+        f"/tasks/{task.task_id}/confirm",
+        json={"action": "approve", "data": {"draft": "approved with edits"}},
+    )
+    assert confirm_response.status_code == 200
+
+    done = wait_for_task_status(client, task.task_id, "done")
+    assert done["result"] == {
+        "draft": {"body": "candidate draft"},
+        "human": {"decision": "approve", "edits": "approved with edits"},
+    }
+    assert [step["label"] for step in done["steps_done"]] == ["prepare", "review", "final"]
+    assert "legacy_scenario_runtime" not in done["frontend_state"]
+
+
 def test_runner_error_on_structured_extract_failure_emits_error_event() -> None:
     payload = {
         "id": "extract_error",
@@ -678,7 +746,8 @@ def test_recruiting_custom_pipeline_json_fixture_validates_runs_and_resumes(
     assert awaiting["awaiting"]["json_workflow"] is True
     assert awaiting["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 3
     assert "Lin Chen" in json.dumps(awaiting["awaiting"], ensure_ascii=False)
-    assert task_id not in isolated_task_store._wait_events
+    assert "legacy_scenario_runtime" not in awaiting["frontend_state"]
+    assert "project_candidate_evaluation_runtime" not in awaiting["frontend_state"]
 
     runtime = awaiting["frontend_state"]["json_workflow_runtime"]
     candidate_signal_ref = runtime["context"]["candidate_signals"]
@@ -772,7 +841,8 @@ def test_json_workflow_human_gate_survives_store_restart_and_api_confirm_resumes
     assert awaiting["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 1
     assert awaiting["awaiting"]["workflow_id"] == "long_running_hr_checkpoint"
     assert awaiting["awaiting"]["json_workflow"] is True
-    assert task_id not in isolated_task_store._wait_events
+    assert "legacy_scenario_runtime" not in awaiting["frontend_state"]
+    assert "project_candidate_evaluation_runtime" not in awaiting["frontend_state"]
 
     restarted_store = orchestrator.DBTaskStore()
     monkeypatch.setattr(orchestrator, "task_store", restarted_store)

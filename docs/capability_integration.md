@@ -49,8 +49,9 @@ Agent runs are persisted in `tasks` and `agent_events`.
 - Allowed audit event types: `step_start`, `tool_call`, `evidence`, `summary`, `human_gate`, `error`, `cancelled`.
 - The frontend should prefer `GET /tasks/{task_id}/stream` with native `EventSource`.
 - `GET /tasks/{task_id}` remains the 600ms polling fallback.
-- `POST /tasks/{task_id}/cancel` records a `cancelled` event and wakes any human gate wait.
+- `POST /tasks/{task_id}/cancel` records a `cancelled` event and releases any checkpointed human gate.
 - `POST /tasks/{task_id}/retry` starts a new task from the original persisted input.
+- `POST /tasks/{task_id}/confirm` writes the human decision and resumes checkpointed human-gate tasks. Fixed legacy scenarios and project candidate-evaluation tasks must not keep a runner thread blocked while waiting for HR approval.
 - Do not emit raw LLM thought chains. Audit events may include stage summaries, tool calls, evidence, citations, result summaries, and error reasons only.
 
 ## Atomic Workflow Control Contract

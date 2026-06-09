@@ -74,6 +74,7 @@ export type OutreachDraft = {
   subject: string;
   body: string;
   status: string;
+  strategyTag?: string | null;
   backendGenerated: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -87,6 +88,7 @@ export type OutreachHistoryItem = {
   draftId?: string | null;
   segmentId?: string | null;
   email?: string | null;
+  strategyTag?: string | null;
   subject: string;
   body: string;
   status: string;
@@ -269,6 +271,7 @@ export function createOutreachDraft(request: {
   jobId: string;
   candidateId: string;
   segmentId?: string | null;
+  strategyTag?: string | null;
 }) {
   return apiClient.post<OutreachDraft>("/outreach/draft", request);
 }

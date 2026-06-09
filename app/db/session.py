@@ -70,6 +70,22 @@ def ensure_project_schema(engine) -> None:
                 "source_task_id": "VARCHAR(64)",
             },
         )
+    if "outreach_drafts" in table_names:
+        _ensure_columns(
+            engine,
+            "outreach_drafts",
+            {
+                "strategy_tag": "VARCHAR(64)",
+            },
+        )
+    if "outreach_history" in table_names:
+        _ensure_columns(
+            engine,
+            "outreach_history",
+            {
+                "strategy_tag": "VARCHAR(64)",
+            },
+        )
 
 
 def _ensure_columns(engine, table_name: str, column_defs: dict[str, str]) -> None:

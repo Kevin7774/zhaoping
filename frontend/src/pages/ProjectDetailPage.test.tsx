@@ -139,6 +139,7 @@ describe("ProjectDetailPage backend hardening", () => {
     candidates?: unknown[];
     candidateResponses?: unknown[][];
     schedules?: unknown[];
+    scheduleResponse?: unknown;
     updatedSchedule?: unknown;
     projectStatus?: number;
     integrations?: Record<string, string>;
@@ -152,6 +153,7 @@ describe("ProjectDetailPage backend hardening", () => {
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload, options.projectStatus ?? 200);
       if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
       if (url === "/api/projects/project_2026_ai_team/candidate-search-schedules") {
+        if (options.scheduleResponse !== undefined) return jsonResponse(options.scheduleResponse);
         return jsonResponse({ items: options.schedules ?? [] });
       }
       if (url === "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/candidate-search-schedule") {
@@ -432,6 +434,16 @@ describe("ProjectDetailPage backend hardening", () => {
       intervalMinutes: 360,
     });
     expect(await screen.findByText("自动搜候选人已开启")).toBeTruthy();
+  });
+
+  it("does not crash when automatic search schedule response has no items", async () => {
+    mockBackend({ scheduleResponse: {} });
+
+    renderProjectPage();
+
+    expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
+    expect(screen.getByText("自动搜候选人")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "开启自动搜索 VLA / 具身智能算法工程师" })).toBeTruthy();
   });
 
   it("starts candidate evaluation and weekly report through backend scenarios", async () => {

@@ -64,8 +64,14 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     assert draft["projectId"] == "project_2026_ai_team"
     assert draft["jobId"] == "job_vla_algorithm"
     assert draft["candidateId"] == "cand_lin_chen"
-    assert "VLA / 具身智能算法工程师" in draft["subject"]
+    assert draft["strategyTag"] == "场景叙事类"
+    assert "量化派" in draft["subject"]
+    assert "羊小咩" in draft["subject"]
     assert "Alex Chen" in draft["body"]
+    assert "量化派" in draft["body"]
+    assert "羊小咩" in draft["body"]
+    assert "消费撮合决策" in draft["body"]
+    assert "AI 应用公司" in draft["body"]
 
     patch_response = client.patch(
         f"/outreach/drafts/{draft['draftId']}",
@@ -87,6 +93,7 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     assert send_result["deliveryMode"] == "simulated"
     assert send_result["historyId"].startswith("history_")
     assert send_result["draftId"] == draft["draftId"]
+    assert send_result["strategyTag"] == "场景叙事类"
 
     history_response = client.get("/outreach/history?projectId=project_2026_ai_team")
 
@@ -100,6 +107,7 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
             "draftId": draft["draftId"],
             "segmentId": None,
             "email": "alex.chen@example.com",
+            "strategyTag": "场景叙事类",
             "subject": "更新后的主题",
             "body": "人工编辑后的正文",
             "status": "simulated",
@@ -108,6 +116,31 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
             "createdAt": send_result["createdAt"],
         }
     ]
+
+
+def test_outreach_draft_allows_hardcore_strategy_tag_for_kpi_grouping(client: TestClient) -> None:
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+            "strategyTag": "硬核技术类",
+        },
+    )
+
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    assert draft["strategyTag"] == "硬核技术类"
+    assert "硬核技术类" in draft["body"]
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft["draftId"], "decision": "approve", "simulate": True},
+    )
+
+    assert send_response.status_code == 200
+    assert send_response.json()["strategyTag"] == "硬核技术类"
 
 
 def test_outreach_send_requires_real_candidate_email(client: TestClient) -> None:
