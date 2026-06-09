@@ -33,6 +33,12 @@ export type RunScenarioResponse = {
   status: string;
 };
 
+export type ResumeImportResponse = {
+  taskId: string;
+  scenario: string;
+  status: string;
+};
+
 export type IntegrationCapabilityStatus = {
   id: string;
   service_type: string;
@@ -208,6 +214,15 @@ export function getProjectJobs(projectId: string, options: ListQueryOptions = {}
 
 export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {
   return getProjectCandidatesPage(projectId, options).then((page) => page.candidates);
+}
+
+export function uploadProjectResume(projectId: string, jobId: string, file: File): Promise<ResumeImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiClient.post<ResumeImportResponse>(
+    `/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}/upload-resumes`,
+    formData,
+  );
 }
 
 export async function getProjectCandidatesPage(

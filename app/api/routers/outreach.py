@@ -154,33 +154,34 @@ def _build_backend_draft(
     business_challenge = _business_challenge_for_candidate(job, candidate)
     quantgroup_method = _quantgroup_technical_method(candidate)
     domain = _candidate_domain(candidate)
+    insider_question = _industry_internal_question(domain, business_challenge)
     return "\n".join(
         [
-            f"{candidate.name} 兄，",
+            f"{candidate.name}，你好。",
             "",
-            f"最近关注到你在 {recent_work} 上的思考，尤其是关于 {technical_detail} 的处理方式，"
-            "这种在复杂海量数据下追求极速响应的思路很有价值。",
+            f"关注你在 {technical_detail} 上的研究有一段时间了。你在 {recent_work} 里处理"
+            f" {business_challenge} 时展现出的工程洞察，在当前的 AI 决策领域并不常见。",
             "",
-            "我是量化派的招聘团队。我们最近在重构“羊小咩”背后的智能决策引擎，"
-            "旨在将 AI 从单纯的推荐，进化为更精准的消费撮合决策。"
-            f"在处理 {business_challenge} 时，我们遇到了类似你过往项目里"
-            "高吞吐、低延迟与策略准确性之间取舍的瓶颈，"
-            f"目前正尝试通过 {quantgroup_method} 寻求突破。",
+            "量化派技术团队目前在重构“羊小咩”的实时决策底层，目标是把 AI 从单纯推荐"
+            "推进到可验证的消费撮合决策。我们发现行业内大多方案在响应速度、策略精度"
+            "和商业闭环之间存在明显的 Trade-off，这会导致真实流量场景下的决策链路很难稳定收敛。",
+            f"我们正在尝试一套基于 {quantgroup_method} 的新架构，但在 {business_challenge} "
+            "这块，工业界实现还存在不小的认知空白。",
             "",
-            "我们团队现在正处于从“智能金融技术”向“智能生活场景”全速切换的关键期，"
-            "量化派不是只做算法指标的团队，而是 AI 应用公司，核心是用模块化数字化服务能力，"
-            "把模型判断落到真实商业流量和消费场景里。"
+            f"行业内部困惑：{insider_question}",
+            "",
+            "这套系统已经投入了相当量级的工程和算力资源。这个阶段，比起寻找人选，"
+            f"我更希望找一位真正理解 {domain} 的同行，针对这套决策逻辑做一次毫无保留的技术复盘。"
             f"{QUANTGROUP_SYSTEM_PROMPT}",
             "",
-            f"这封触达采用 {strategy_tag} 策略：希望把你的 {domain} 经验，"
-            "放到“羊小咩”电商平台化和 AI 决策服务结合的场景里讨论，而不是直接进入面试流程。",
+            f"这封触达采用 {strategy_tag} 策略：不谈职位 JD，也不聊面试流程，只想把你的"
+            f" {technical_detail} 经验放到“羊小咩”电商平台化和 AI 决策服务结合的场景里验证一下。",
             "",
-            f"如果你这周五下午或者下周一晚上有 20 分钟，我们可以就 {technical_detail} "
-            f"和 {business_challenge} 对齐一下思路？纯技术推演，不聊面试。",
+            f"周五下午或者下周一，如果你方便，抽 20 分钟做一次闭门技术探讨，"
+            f"我想听听你对 {business_challenge} 的处理思路。",
             "",
             "祝好，",
-            "量化派招聘团队",
-            f"项目：{project.name} / {job.title}",
+            "量化派技术团队",
         ]
     )
 
@@ -252,6 +253,33 @@ def _quantgroup_technical_method(candidate: Candidate) -> str:
     if domain == "AI 建模与复杂决策":
         return "大模型语义理解、实时决策特征和业务闭环评估"
     return "模块化数字化服务、在线策略评估和消费场景反馈闭环"
+
+
+def _industry_internal_question(domain: str, business_challenge: str) -> str:
+    if domain == "供应链与履约优化":
+        return (
+            "在供给波动已经传导到前端排序时，策略引擎应该优先保护履约确定性，"
+            "还是保留足够探索来捕捉瞬时消费意图？前者容易牺牲转化，后者会把库存噪声放大。"
+        )
+    if domain == "数据工程与实时特征平台":
+        return (
+            "实时特征到底应该追求秒级新鲜度，还是优先保证跨渠道口径一致？"
+            "在羊小咩这种高频流量里，前者会引入抖动，后者又会错过短周期意图。"
+        )
+    if domain == "推荐排序与消费意图建模":
+        return (
+            "用户意图校准应该放在召回前的特征门控，还是放在排序后的策略约束？"
+            "前者压缩探索空间，后者会在大促和长尾供给里放大延迟反馈。"
+        )
+    if domain == "AI 建模与复杂决策":
+        return (
+            "大模型语义理解应该直接进入在线决策，还是只作为离线策略蒸馏的教师信号？"
+            "前者难控延迟和成本，后者又可能丢掉长尾消费意图。"
+        )
+    return (
+        f"{business_challenge} 中，系统应该优先优化可解释的规则稳定性，"
+        "还是让模型保留足够自由度去捕捉短周期行为漂移？这两者在真实商业流量里经常互相拉扯。"
+    )
 
 
 def _candidate_skills(candidate: Candidate) -> list[str]:

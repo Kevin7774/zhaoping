@@ -1,0 +1,942 @@
+{
+  "started_at": "2026-06-09T13:11:58.226484+00:00",
+  "finished_at": "2026-06-09T13:11:58.405112+00:00",
+  "base_url": "http://127.0.0.1:8011",
+  "database": {
+    "project": "artifacts/e2e_evidence/atomic-temp/projects.sqlite3",
+    "task": "artifacts/e2e_evidence/atomic-temp/tasks.sqlite3"
+  },
+  "total": 23,
+  "pass": 23,
+  "fail": 0,
+  "verdict": "PASS",
+  "sessions": {
+    "meta": {
+      "scenario_ids": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "node_counts": {
+        "A": 7,
+        "B": 5,
+        "C": 6,
+        "D": 5
+      }
+    },
+    "session_A": {
+      "task_id": "4eec0e4cd912",
+      "node_ids": [
+        "A.0",
+        "A.1",
+        "A.2",
+        "A.3",
+        "A.4",
+        "A.5",
+        "A.6"
+      ],
+      "status": "processing"
+    },
+    "session_B": {
+      "task_id": "8f7ef97b7120",
+      "node_ids": [
+        "B.0",
+        "B.1",
+        "B.2",
+        "B.3",
+        "B.4"
+      ],
+      "status": "processing"
+    },
+    "session_C": {
+      "task_id": "37dab08d0c2b",
+      "node_ids": [
+        "C.0",
+        "C.1",
+        "C.2",
+        "C.3",
+        "C.4",
+        "C.5"
+      ],
+      "status": "processing"
+    },
+    "session_D": {
+      "task_id": "85cd0296f006",
+      "node_ids": [
+        "D.0",
+        "D.1",
+        "D.2",
+        "D.3",
+        "D.4"
+      ],
+      "status": "processing"
+    },
+    "after_run_A.0": {
+      "task_id": "4eec0e4cd912",
+      "status": "processing",
+      "node_0": {
+        "node_id": "A.0",
+        "scenario": "A",
+        "index": 0,
+        "agent_id": "orchestrator",
+        "agent": {
+          "name_zh": "任务编排 Agent",
+          "persona": "把一句模糊的招聘需求拆解成可执行的子任务，并决定调用哪些下游 Agent。",
+          "icon": "🧭",
+          "output_format": "任务拆解与岗位识别"
+        },
+        "label": "拆解需求",
+        "message": "识别岗位与技术层",
+        "kind": "compute",
+        "inputs": [
+          "input"
+        ],
+        "requires": [],
+        "outputs": [
+          "role_key",
+          "role_name",
+          "tech_layer"
+        ],
+        "requires_human": false,
+        "can_run": true,
+        "can_skip": true,
+        "can_retry": true,
+        "status": "done",
+        "run_count": 1,
+        "output": {
+          "role_key": "vla_embodied_expert",
+          "岗位": "VLA / 具身智能算法工程师",
+          "技术层": [
+            "brain_learning",
+            "foundation_model"
+          ]
+        },
+        "error": null,
+        "updated_at": "2026-06-09T13:11:58.283047+00:00"
+      },
+      "artifact_keys": [
+        "role_key",
+        "role_name",
+        "tech_layer"
+      ]
+    },
+    "after_run_B.0": {
+      "task_id": "8f7ef97b7120",
+      "status": "processing",
+      "node_0": {
+        "node_id": "B.0",
+        "scenario": "B",
+        "index": 0,
+        "agent_id": "orchestrator",
+        "agent": {
+          "name_zh": "任务编排 Agent",
+          "persona": "把一句模糊的招聘需求拆解成可执行的子任务，并决定调用哪些下游 Agent。",
+          "icon": "🧭",
+          "output_format": "任务拆解与岗位识别"
+        },
+        "label": "拆解需求",
+        "message": "识别目标方向",
+        "kind": "compute",
+        "inputs": [
+          "input"
+        ],
+        "requires": [],
+        "outputs": [
+          "role_key",
+          "role_name"
+        ],
+        "requires_human": false,
+        "can_run": true,
+        "can_skip": true,
+        "can_retry": true,
+        "status": "done",
+        "run_count": 1,
+        "output": {
+          "role_key": "slam_navigation_expert",
+          "岗位": "SLAM / 导航算法工程师"
+        },
+        "error": null,
+        "updated_at": "2026-06-09T13:11:58.291839+00:00"
+      },
+      "artifact_keys": [
+        "role_key",
+        "role_name"
+      ]
+    },
+    "after_run_C.0": {
+      "task_id": "37dab08d0c2b",
+      "status": "processing",
+      "node_0": {
+        "node_id": "C.0",
+        "scenario": "C",
+        "index": 0,
+        "agent_id": "orchestrator",
+        "agent": {
+          "name_zh": "任务编排 Agent",
+          "persona": "把一句模糊的招聘需求拆解成可执行的子任务，并决定调用哪些下游 Agent。",
+          "icon": "🧭",
+          "output_format": "任务拆解与岗位识别"
+        },
+        "label": "解析材料",
+        "message": "对标目标岗位",
+        "kind": "compute",
+        "inputs": [
+          "input"
+        ],
+        "requires": [],
+        "outputs": [
+          "role_name"
+        ],
+        "requires_human": false,
+        "can_run": true,
+        "can_skip": true,
+        "can_retry": true,
+        "status": "done",
+        "run_count": 1,
+        "output": {
+          "对标岗位": "世界模型 / 仿真算法工程师"
+        },
+        "error": null,
+        "updated_at": "2026-06-09T13:11:58.300463+00:00"
+      },
+      "artifact_keys": [
+        "role_name"
+      ]
+    },
+    "after_run_D.0": {
+      "task_id": "85cd0296f006",
+      "status": "processing",
+      "node_0": {
+        "node_id": "D.0",
+        "scenario": "D",
+        "index": 0,
+        "agent_id": "orchestrator",
+        "agent": {
+          "name_zh": "任务编排 Agent",
+          "persona": "把一句模糊的招聘需求拆解成可执行的子任务，并决定调用哪些下游 Agent。",
+          "icon": "🧭",
+          "output_format": "任务拆解与岗位识别"
+        },
+        "label": "解析数据",
+        "message": "识别本周关注岗位",
+        "kind": "compute",
+        "inputs": [
+          "input"
+        ],
+        "requires": [],
+        "outputs": [
+          "weekly_summary"
+        ],
+        "requires_human": false,
+        "can_run": true,
+        "can_skip": true,
+        "can_retry": true,
+        "status": "done",
+        "run_count": 1,
+        "output": {
+          "本周招聘结论": "本周围绕VLA / 具身智能算法工程师推进招聘，需同时看岗位进展、候选人质量和市场信号。"
+        },
+        "error": null,
+        "updated_at": "2026-06-09T13:11:58.310161+00:00"
+      },
+      "artifact_keys": [
+        "weekly_summary"
+      ]
+    },
+    "final_A": {
+      "task_id": "4eec0e4cd912",
+      "status": "done",
+      "node_statuses": [
+        "done",
+        "skipped",
+        "skipped",
+        "done",
+        "done",
+        "done",
+        "done"
+      ],
+      "artifact_keys": [
+        "human_decision",
+        "human_report",
+        "jd",
+        "reflection",
+        "role_key",
+        "role_name",
+        "role_profile",
+        "tech_layer"
+      ],
+      "audit_event_count": 25
+    }
+  },
+  "results": [
+    {
+      "label": "server readiness",
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 19.7,
+      "response_keys": [
+        "status"
+      ]
+    },
+    {
+      "label": "atomic workflow meta exposes A-D scenarios",
+      "method": "GET",
+      "path": "/workflow/meta",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 1.7,
+      "response_keys": [
+        "agents",
+        "scenarios",
+        "task_statuses"
+      ]
+    },
+    {
+      "label": "create atomic session A",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 16.5,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "create atomic session B",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 4.4,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "8f7ef97b7120"
+    },
+    {
+      "label": "create atomic session C",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 3.8,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "37dab08d0c2b"
+    },
+    {
+      "label": "create atomic session D",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 3.4,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "85cd0296f006"
+    },
+    {
+      "label": "run first atomic node A.0",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.0/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 9.6,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run first atomic node B.0",
+      "method": "POST",
+      "path": "/workflow/sessions/8f7ef97b7120/nodes/B.0/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 8.2,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "8f7ef97b7120"
+    },
+    {
+      "label": "run first atomic node C.0",
+      "method": "POST",
+      "path": "/workflow/sessions/37dab08d0c2b/nodes/C.0/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 9.4,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "37dab08d0c2b"
+    },
+    {
+      "label": "run first atomic node D.0",
+      "method": "POST",
+      "path": "/workflow/sessions/85cd0296f006/nodes/D.0/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 9.0,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "85cd0296f006"
+    },
+    {
+      "label": "retry atomic node A.0",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.0/retry",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 8.9,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "skip atomic node A.1",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.1/skip",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 5.8,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "skip atomic node A.2",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.2/skip",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 4.9,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run atomic node A.3",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.3/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 9.6,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run atomic node A.4",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.4/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 11.2,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run atomic human gate A.5 awaiting",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.5/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 12.5,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run atomic human gate A.5 edit decision",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.5/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 11.0,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "run atomic final report A.6",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.6/run",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 17.8,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "4eec0e4cd912"
+    },
+    {
+      "label": "create atomic missing-requirements session",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 200,
+      "expected": [
+        200
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 3.7,
+      "response_keys": [
+        "aperture_weight",
+        "audit_events",
+        "awaiting",
+        "created_at",
+        "current_agent",
+        "current_step",
+        "error",
+        "frontend_state",
+        "input",
+        "logs",
+        "result",
+        "scenario",
+        "scenario_id",
+        "status",
+        "steps_done",
+        "task_id",
+        "team_constraint",
+        "total_steps",
+        "updated_at",
+        "workflow"
+      ],
+      "task_id": "eded9f4bc9ad"
+    },
+    {
+      "label": "run A.1 before A.0 returns 409",
+      "method": "POST",
+      "path": "/workflow/sessions/eded9f4bc9ad/nodes/A.1/run",
+      "status": 409,
+      "expected": [
+        409
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 1.3,
+      "response_keys": [
+        "detail"
+      ],
+      "detail": "Atomic node A.1 missing inputs: role_key"
+    },
+    {
+      "label": "create unknown atomic scenario returns 422",
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "status": 422,
+      "expected": [
+        422
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 0.6,
+      "response_keys": [
+        "detail"
+      ],
+      "detail": "Unknown scenario: Z"
+    },
+    {
+      "label": "run wrong-scenario node returns 422",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/B.0/run",
+      "status": 422,
+      "expected": [
+        422
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 2.3,
+      "response_keys": [
+        "detail"
+      ],
+      "detail": "Node B.0 does not belong to scenario A"
+    },
+    {
+      "label": "run nonexistent node returns 404",
+      "method": "POST",
+      "path": "/workflow/sessions/4eec0e4cd912/nodes/A.99/run",
+      "status": 404,
+      "expected": [
+        404
+      ],
+      "verdict": "PASS",
+      "elapsed_ms": 2.3,
+      "response_keys": [
+        "detail"
+      ],
+      "detail": "Node not found: A.99"
+    }
+  ]
+}

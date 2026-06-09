@@ -13,6 +13,7 @@ import {
   getProjectCandidatesPage,
   getProjectJobs,
   getOutreachHistory,
+  uploadProjectResume,
   retryTask,
   runJobMatch,
   runCandidateEvaluation,
@@ -192,6 +193,23 @@ describe("projects api", () => {
       hasMore: true,
       candidates: [expect.objectContaining({ candidateId: "cand_lin_chen" })],
     });
+  });
+
+  it("uploads a resume file to the selected project job using multipart form data", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ taskId: "task_resume", scenario: "RESUME_IMPORT", status: "processing" }));
+    const file = new File(["# Lin Chen"], "lin-chen-resume.md", { type: "text/markdown" });
+
+    await uploadProjectResume("project_2026_ai_team", "job_vla_algorithm", file);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/upload-resumes",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData),
+      }),
+    );
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(request.headers).has("Content-Type")).toBe(false);
   });
 
   it("confirms a human gate task using the backend decision/edits/data payload contract", async () => {

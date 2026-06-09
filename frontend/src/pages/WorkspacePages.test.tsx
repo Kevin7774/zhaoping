@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
@@ -122,6 +122,9 @@ describe("workspace sidebar pages", () => {
           "X-Has-More": "false",
         });
       }
+      if (url === "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/upload-resumes") {
+        return jsonResponse({ taskId: "task_resume", scenario: "RESUME_IMPORT", status: "processing" });
+      }
       if (url === "/api/integrations/status") return jsonResponse(integrationsPayload);
       if (url === "/api/scenarios/meta") {
         return jsonResponse({
@@ -186,5 +189,23 @@ describe("workspace sidebar pages", () => {
 
     expect(await screen.findByRole("heading", { name: title })).toBeTruthy();
     expect(await screen.findByText(marker)).toBeTruthy();
+  });
+
+  it("uploads a resume from the candidates page and refreshes backend candidates", async () => {
+    renderPage(<CandidatesPage />);
+
+    expect(await screen.findByRole("heading", { name: "人群筛选" })).toBeTruthy();
+    const file = new File(["# Lin Chen"], "lin-chen-resume.md", { type: "text/markdown" });
+    fireEvent.change(screen.getByLabelText("简历文件"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "上传简历" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team/jobs/job_vla_algorithm/upload-resumes",
+        expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
+      );
+    });
+    expect(window.localStorage.getItem(RECENT_TASK_IDS_KEY)).toContain("task_resume");
+    expect(await screen.findByText("已创建导入任务：task_resume")).toBeTruthy();
   });
 });

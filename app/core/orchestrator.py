@@ -2308,6 +2308,7 @@ class DBTaskStore:
     ) -> TaskState:
         task_id = uuid.uuid4().hex[:12]
         now = _dt_now()
+        total_steps = len(SCENARIO_PLANS.get(scenario_id, {}).get("steps", []))
         row = TaskModel(
             task_id=task_id,
             scenario_id=scenario_id,
@@ -2317,7 +2318,7 @@ class DBTaskStore:
             aperture_weight=aperture_weight,
             frontend_state=frontend_state or {},
             current_step=-1,
-            total_steps=len(SCENARIO_PLANS[scenario_id]["steps"]),
+            total_steps=total_steps,
             steps_done=[],
             created_at=now,
             updated_at=now,
@@ -2334,7 +2335,7 @@ class DBTaskStore:
                         type="summary",
                         agent_id="orchestrator",
                         message="任务已创建，等待 AgentRunner 调度。",
-                        data={"scenario_id": scenario_id, "total_steps": row.total_steps},
+                        data={"scenario_id": scenario_id, "total_steps": total_steps},
                         status="processing",
                     ),
                 )

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.routers.outreach import router as outreach_router
 from app.api.routers.projects import router as projects_router
 from app.api.routers.reports import router as reports_router
+from app.api.routers.resumes import router as resumes_router
 from app.api.routers.segments import router as segments_router
 from app.db.session import get_project_session
 from app.models import Candidate, Job, JobCandidate
@@ -71,6 +72,7 @@ app.include_router(projects_router)
 app.include_router(outreach_router)
 app.include_router(segments_router)
 app.include_router(reports_router)
+app.include_router(resumes_router)
 
 
 @app.on_event("startup")

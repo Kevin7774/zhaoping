@@ -72,6 +72,13 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     assert "羊小咩" in draft["body"]
     assert "消费撮合决策" in draft["body"]
     assert "AI 应用公司" in draft["body"]
+    assert "量化派技术团队" in draft["body"]
+    assert "行业内部困惑" in draft["body"]
+    assert "Trade-off" in draft["body"]
+    assert "闭门技术探讨" in draft["body"]
+    assert "技术复盘" in draft["body"]
+    assert "招聘团队" not in draft["body"]
+    assert "项目：" not in draft["body"]
 
     patch_response = client.patch(
         f"/outreach/drafts/{draft['draftId']}",

@@ -118,8 +118,9 @@ async function fetchResponse(path: string, config: ApiRequestConfig = {}): Promi
   const { body, query, ...fetchOptions } = intercepted;
   const headers = normalizeHeaders(fetchOptions.headers);
   const method = fetchOptions.method ?? (body === undefined ? "GET" : "POST");
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
-  if (body !== undefined && !headers.has("Content-Type")) {
+  if (body !== undefined && !headers.has("Content-Type") && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -135,7 +136,7 @@ async function fetchResponse(path: string, config: ApiRequestConfig = {}): Promi
     ...fetchOptions,
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
 
   notifyRequestLogListeners({

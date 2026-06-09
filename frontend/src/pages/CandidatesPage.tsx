@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { filterCandidates, defaultFilterCriteria, type FilterCriteria } from "../features/projects/state";
+import { uploadProjectResume } from "../features/projects/api";
 import {
   DataError,
   DataLoading,
@@ -10,6 +11,7 @@ import {
   StatusPill,
   uniqueValues,
   useWorkspaceData,
+  rememberTaskId,
 } from "./projectWorkspace";
 
 function updateCriteria<K extends keyof FilterCriteria>(
@@ -23,6 +25,11 @@ function updateCriteria<K extends keyof FilterCriteria>(
 export function CandidatesPage() {
   const data = useWorkspaceData();
   const [criteria, setCriteria] = useState<FilterCriteria>(defaultFilterCriteria);
+  const [importJobId, setImportJobId] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
+  const [uploadError, setUploadError] = useState("");
 
   const cities = useMemo(() => uniqueValues(data.candidates.map((candidate) => candidate.city)), [data.candidates]);
   const sources = useMemo(
@@ -31,6 +38,34 @@ export function CandidatesPage() {
   );
   const visibleCandidates = useMemo(() => filterCandidates(data.candidates, criteria), [data.candidates, criteria]);
   const emailReadyCount = visibleCandidates.filter((candidate) => candidate.email).length;
+  const canUpload = Boolean(importJobId && resumeFile && !uploading);
+
+  useEffect(() => {
+    if (!importJobId && data.jobs[0]?.jobProfileId) {
+      setImportJobId(data.jobs[0].jobProfileId);
+    }
+  }, [data.jobs, importJobId]);
+
+  async function handleResumeUpload() {
+    if (!resumeFile || !importJobId) {
+      setUploadError("请选择岗位和简历文件。");
+      return;
+    }
+    setUploading(true);
+    setUploadError("");
+    setUploadMessage("");
+    try {
+      const result = await uploadProjectResume(data.projectId, importJobId, resumeFile);
+      rememberTaskId(result.taskId);
+      setUploadMessage(`已创建导入任务：${result.taskId}`);
+      setResumeFile(null);
+      data.reload();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "上传失败");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   if (data.loading) return <DataLoading />;
   if (data.error) return <DataError message={data.error} onRetry={data.reload} />;
@@ -50,6 +85,47 @@ export function CandidatesPage() {
           { label: "后端总数", value: data.candidateTotal ?? "—", helper: data.hasMoreCandidates ? "列表还有更多候选人" : "已加载全部" },
         ]}
       />
+
+      <SectionPanel title="导入简历" subtitle="上传到选定岗位后，后端会创建导入任务并刷新候选人列表。">
+        <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.7fr)_minmax(260px,1fr)_auto] lg:items-end">
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            导入目标岗位
+            <select
+              value={importJobId}
+              onChange={(event) => setImportJobId(event.currentTarget.value)}
+              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+            >
+              {data.jobs.length === 0 ? <option value="">暂无岗位</option> : null}
+              {data.jobs.map((job) => (
+                <option key={job.jobProfileId} value={job.jobProfileId}>
+                  {job.roleName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            简历文件
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.md,.txt"
+              onChange={(event) => setResumeFile(event.currentTarget.files?.[0] ?? null)}
+              className="mt-1 block h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-2 text-[13px] text-[#111827] file:mr-3 file:rounded-[8px] file:border-0 file:bg-[#EFF6FF] file:px-3 file:py-1 file:text-[12px] file:font-medium file:text-[#2563EB]"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={handleResumeUpload}
+            disabled={!canUpload}
+            className="h-10 rounded-[10px] bg-[#2563EB] px-4 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:bg-[#BFDBFE]"
+          >
+            {uploading ? "上传中" : "上传简历"}
+          </button>
+        </div>
+        {uploadMessage ? <div className="mt-3 text-[13px] text-[#16A34A]">{uploadMessage}</div> : null}
+        {uploadError ? <div className="mt-3 text-[13px] text-[#EF4444]">{uploadError}</div> : null}
+      </SectionPanel>
 
       <SectionPanel
         title="筛选条件"

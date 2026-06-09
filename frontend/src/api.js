@@ -126,6 +126,13 @@ export function ingestResume(payload) {
   })
 }
 
+export function importLocalResume(payload) {
+  return request('/resumes/local-import', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
 export function matchJobs(payload) {
   return request('/jobs/match', {
     method: 'POST',
