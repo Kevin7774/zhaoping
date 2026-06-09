@@ -30,7 +30,7 @@ describe("HumanConfirmModal", () => {
     expect(screen.getByText("已为您生成候选人 Alex 的触达邮件草稿")).toBeTruthy();
     const textarea = screen.getByLabelText("草稿正文");
     fireEvent.change(textarea, { target: { value: "Hi Alex, updated." } });
-    fireEvent.click(screen.getByRole("button", { name: "修改并批准 Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑后通过" }));
 
     expect(onApprove).toHaveBeenCalledWith("Hi Alex, updated.");
     expect(onReject).not.toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe("HumanConfirmModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "拒绝 Reject" }));
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
 
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onApprove).not.toHaveBeenCalled();

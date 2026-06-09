@@ -522,7 +522,7 @@ def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
     registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
     backend_paths = sorted(app.openapi()["paths"])
 
-    assert len(backend_paths) == 31
+    assert len(backend_paths) == 32
     for path in backend_paths:
         assert path in registry_source
     for status in ["productized", "system", "closed"]:

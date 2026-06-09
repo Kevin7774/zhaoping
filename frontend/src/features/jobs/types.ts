@@ -19,6 +19,7 @@ export type FunnelStageProgress = {
 export type JobProfile = {
   jobProfileId: string;
   roleName: string;
+  headcount?: number;
   pipelineStatus?: StepStatus;
   candidateCount?: number;
   averageMatchScore?: number;

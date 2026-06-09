@@ -51,6 +51,10 @@ class CandidateCreate(CandidateRequest):
     id: str = Field(min_length=1, max_length=64)
 
 
+class UniqueCandidateResponse(CandidateRequest):
+    id: str
+
+
 class CandidateResponse(CandidateRequest):
     id: str
     job_candidate_id: int

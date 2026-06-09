@@ -115,11 +115,23 @@ describe("projects api", () => {
       targetJobProfileId: "job_vla_algorithm",
       pipelineStatus: "awaiting_human",
       title: "VLA / 具身智能算法工程师",
+      email: "alex.chen@example.com",
       matchScore: 92,
       stage: "human_gate",
       stepStatus: "awaiting_human",
       outreachStatus: "not_sent",
     });
+  });
+
+  it("requests candidate pages with skip and limit query parameters", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await getProjectCandidates("project_2026_ai_team", { skip: 50, limit: 25 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_2026_ai_team/candidates?skip=50&limit=25",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("confirms a human gate task using the action/data payload contract", async () => {

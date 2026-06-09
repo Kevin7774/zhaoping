@@ -31,18 +31,18 @@ export function HumanConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-4 py-6">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#111827]/45 px-4 py-6">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="human-confirm-title"
-        className="w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
       >
-        <div className="border-b border-slate-200 px-5 py-4">
+        <div className="border-b border-[#EEF2F7] px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-normal text-amber-700">Human Gate</div>
-              <h2 id="human-confirm-title" className="mt-1 text-lg font-semibold text-slate-950">
+              <div className="text-[12px] font-semibold uppercase tracking-normal text-[#F59E0B]">Human Gate</div>
+              <h2 id="human-confirm-title" className="mt-1 text-[18px] font-bold text-[#111827]">
                 人工确认
               </h2>
             </div>
@@ -50,20 +50,20 @@ export function HumanConfirmModal({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-[34px] rounded-[10px] border border-[#E5E7EB] bg-white px-3 text-[13px] font-medium text-[#6B7280] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
             >
               关闭
             </button>
           </div>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
-            <div className="text-sm font-semibold text-amber-900">{candidateName || "AI Agent 请求确认"}</div>
-            <p className="mt-1 text-sm leading-6 text-amber-800">{context}</p>
+        <div className="space-y-4 px-6 py-6">
+          <div className="rounded-[12px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
+            <div className="text-[14px] font-semibold text-[#111827]">{candidateName || "AI Agent 请求确认"}</div>
+            <p className="mt-1 text-[13px] leading-5 text-[#92400E]">{context}</p>
           </div>
 
-          <label htmlFor={textareaId} className="block text-sm font-semibold text-slate-700">
+          <label htmlFor={textareaId} className="block text-[13px] font-semibold text-[#374151]">
             草稿正文
           </label>
           <textarea
@@ -71,26 +71,34 @@ export function HumanConfirmModal({
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}
             rows={10}
-            className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="w-full resize-y rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] leading-[22px] text-[#111827] outline-none transition focus:border-[#BFDBFE] focus:ring-2 focus:ring-[#EFF6FF]"
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-6 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onReject}
             disabled={busy}
-            className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-[38px] rounded-[10px] bg-[#EF4444] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            拒绝 Reject
+            拒绝
           </button>
           <button
             type="button"
             onClick={() => onApprove(draftText)}
             disabled={busy}
-            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            修改并批准 Approve
+            编辑后通过
+          </button>
+          <button
+            type="button"
+            onClick={() => onApprove(draftText)}
+            disabled={busy}
+            className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            通过
           </button>
         </div>
       </section>

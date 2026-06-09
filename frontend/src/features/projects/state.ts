@@ -6,6 +6,9 @@ export type FilterCriteria = {
   minScore: number;
   city: string;
   keyword: string;
+  outreachStatus: "all" | "not_sent" | "drafted" | "sent";
+  hasEmail: "all" | "yes" | "no";
+  sourcePlatform: string;
 };
 
 export const defaultFilterCriteria: FilterCriteria = {
@@ -13,6 +16,9 @@ export const defaultFilterCriteria: FilterCriteria = {
   minScore: 0,
   city: "",
   keyword: "",
+  outreachStatus: "all",
+  hasEmail: "all",
+  sourcePlatform: "all",
 };
 
 function includesText(value: string | undefined, keyword: string) {
@@ -26,6 +32,13 @@ export function filterCandidates(candidates: Candidate[], criteria: FilterCriter
       criteria.jobProfileId === "all" || !criteria.jobProfileId || candidate.targetJobProfileId === criteria.jobProfileId;
     const matchesScore = candidate.matchScore >= criteria.minScore;
     const matchesCity = !criteria.city.trim() || includesText(candidate.city, criteria.city);
+    const matchesOutreach =
+      criteria.outreachStatus === "all" || candidate.outreachStatus === criteria.outreachStatus;
+    const matchesEmail =
+      criteria.hasEmail === "all" ||
+      (criteria.hasEmail === "yes" ? Boolean(candidate.email) : !candidate.email);
+    const matchesSource =
+      criteria.sourcePlatform === "all" || candidate.sourcePlatform === criteria.sourcePlatform;
     const keyword = criteria.keyword.trim();
     const matchesKeyword =
       !keyword ||
@@ -38,7 +51,7 @@ export function filterCandidates(candidates: Candidate[], criteria: FilterCriter
         candidate.parsedCapabilities.join(" "),
       ].some((value) => includesText(value, keyword));
 
-    return matchesJob && matchesScore && matchesCity && matchesKeyword;
+    return matchesJob && matchesScore && matchesCity && matchesOutreach && matchesEmail && matchesSource && matchesKeyword;
   });
 }
 

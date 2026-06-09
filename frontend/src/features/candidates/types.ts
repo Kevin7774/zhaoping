@@ -22,6 +22,7 @@ export type Candidate = {
   sourceUrl?: string;
   currentCompany?: string;
   city?: string;
+  email?: string;
   title: string;
   isAiNativeTalent: boolean;
   technicalLayerTags: string[];

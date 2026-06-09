@@ -5,29 +5,26 @@ type CandidateTableProps = {
   onSendEmail: (candidate: Candidate) => void;
   onRunEvaluation?: (candidate: Candidate) => void;
   evaluatingCandidateId?: string | null;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 };
 
 const statusTone: Record<Candidate["stepStatus"], string> = {
-  pending: "bg-slate-100 text-slate-500",
-  processing: "bg-blue-50 text-blue-700",
-  awaiting_human: "bg-amber-50 text-amber-700",
-  done: "bg-emerald-50 text-emerald-700",
-  error: "bg-red-50 text-red-700",
-  cancelled: "bg-slate-100 text-slate-500",
-};
-
-const outreachLabel: Record<Candidate["outreachStatus"], string> = {
-  not_sent: "未发送",
-  drafted: "已起草",
-  sent: "已发送",
+  pending: "bg-[#F3F4F6] text-[#6B7280]",
+  processing: "bg-[#EFF6FF] text-[#2563EB]",
+  awaiting_human: "bg-[#FFFBEB] text-[#F59E0B]",
+  done: "bg-[#ECFDF3] text-[#16A34A]",
+  error: "bg-[#FEF2F2] text-[#EF4444]",
+  cancelled: "bg-[#F3F4F6] text-[#6B7280]",
 };
 
 const pipelineLabel: Record<string, string> = {
-  pending: "待处理",
-  processing: "处理中",
+  pending: "等待中",
+  processing: "评估中",
   awaiting_human: "待确认",
-  done: "已完成",
-  error: "异常",
+  done: "已评估",
+  error: "失败",
   cancelled: "已取消",
   sourced: "已入库",
   screening: "初筛中",
@@ -42,85 +39,129 @@ function statusLabel(candidate: Candidate) {
   return pipelineLabel[status] || status;
 }
 
+function scoreTone(score: number) {
+  if (score >= 85) return "text-[#2563EB]";
+  if (score < 70) return "text-[#6B7280]";
+  return "text-[#111827]";
+}
+
+function avatarText(name: string) {
+  const normalized = name.trim();
+  if (!normalized) return "候";
+  return normalized.slice(0, 1).toUpperCase();
+}
+
 export function CandidateTable({
   candidates,
   onSendEmail,
   onRunEvaluation,
   evaluatingCandidateId = null,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
 }: CandidateTableProps) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-        <h2 className="text-base font-semibold text-slate-950">候选人名单</h2>
-        <span className="text-sm text-slate-500">{candidates.length} 人</span>
+    <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
+        <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">候选人名单</h2>
+        <button type="button" className="text-[13px] font-medium text-[#2563EB]">
+          查看全部
+        </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-5 py-3 text-left font-semibold text-slate-600">姓名</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">当前公司</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">城市</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">匹配分</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">状态</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {candidates.map((candidate) => (
-              <tr key={candidate.candidateId}>
-                <td className="px-5 py-4">
-                  <div className="font-semibold text-slate-950">{candidate.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{candidate.title}</div>
-                </td>
-                <td className="px-4 py-4 text-slate-700">{candidate.currentCompany ?? "未知"}</td>
-                <td className="px-4 py-4 text-slate-600">{candidate.city ?? "-"}</td>
-                <td className="px-4 py-4">
-                  <span className="font-semibold text-slate-950">{candidate.matchScore}</span>
-                </td>
-                <td className="px-4 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${statusTone[candidate.stepStatus]}`}>
-                      {statusLabel(candidate)}
-                    </span>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                      {outreachLabel[candidate.outreachStatus]}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {onRunEvaluation ? (
-                      <button
-                        type="button"
-                        onClick={() => onRunEvaluation(candidate)}
-                        disabled={evaluatingCandidateId === candidate.candidateId}
-                        className="rounded-md border border-slate-300 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {evaluatingCandidateId === candidate.candidateId ? "评估中" : "Agent 评估"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => onSendEmail(candidate)}
-                      className="rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
-                    >
-                      发邮件
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {candidates.length === 0 ? (
+
+      {candidates.length === 0 ? (
+        <div className="px-5 py-10 text-center text-[14px] text-[#6B7280]">暂无候选人，运行找候选人后会显示在这里</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-[768px] w-full text-[13px] leading-5">
+            <thead className="h-11 bg-[#F9FAFB] text-left text-[12px] font-semibold text-[#6B7280]">
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-500">
-                  暂无符合条件的候选人
-                </td>
+                <th className="w-[178px] px-5">姓名</th>
+                <th className="w-[128px] px-2">当前公司</th>
+                <th className="w-[142px] px-2">目标岗位</th>
+                <th className="w-[70px] px-2">匹配分</th>
+                <th className="w-[84px] px-2">状态</th>
+                <th className="w-[166px] px-4 text-right">操作</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-[#EEF2F7]">
+              {candidates.map((candidate) => {
+                const hasEmail = Boolean(candidate.email);
+                const isEvaluating = evaluatingCandidateId === candidate.candidateId;
+
+                return (
+                  <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px]">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
+                          {avatarText(candidate.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-[#111827]">{candidate.name}</div>
+                          <div className="truncate text-[12px] text-[#9CA3AF]">{candidate.title}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-[#374151]">{candidate.currentCompany ?? "未知"}</td>
+                    <td className="px-2 py-3 text-[#374151]">{candidate.title}</td>
+                    <td className={`px-2 py-3 text-[15px] font-bold ${scoreTone(candidate.matchScore)}`}>
+                      {candidate.matchScore}
+                    </td>
+                    <td className="px-2 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium leading-[18px] ${statusTone[candidate.stepStatus]}`}>
+                        {statusLabel(candidate)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1.5">
+                        {onRunEvaluation ? (
+                          <button
+                            type="button"
+                            onClick={() => onRunEvaluation(candidate)}
+                            disabled={isEvaluating}
+                            className="h-[30px] whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isEvaluating ? "评估中" : "Agent 评估"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="h-[30px] whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                        >
+                          查看
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!hasEmail}
+                          title={hasEmail ? undefined : "候选人无邮箱"}
+                          onClick={() => {
+                            if (hasEmail) onSendEmail(candidate);
+                          }}
+                          className="h-[30px] whitespace-nowrap rounded-lg bg-[#2563EB] px-2 text-[12px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          发邮件
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {hasMore ? (
+            <div className="border-t border-[#EEF2F7] bg-[#FCFCFD] px-5 py-3 text-center">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="h-9 rounded-[10px] border border-[#D1D5DB] bg-white px-4 text-[13px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoadingMore ? "加载中..." : "加载更多"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

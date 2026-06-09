@@ -1,65 +1,123 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { navigationItems } from "./navigation";
 
+function activeSection(pathname: string) {
+  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/jobs")) return "jobs";
+  if (pathname.startsWith("/talent-map")) return "talent-map";
+  if (pathname.startsWith("/scenarios")) return "evaluation";
+  if (pathname.startsWith("/candidates")) return "segments";
+  if (pathname.startsWith("/reports")) return "reports";
+  if (pathname.startsWith("/tasks")) return "tasks";
+  if (pathname.startsWith("/integrations")) return "settings";
+  return "dashboard";
+}
+
 export function MainLayout() {
+  const location = useLocation();
+  const currentSection = activeSection(location.pathname);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health")
+      .then((response) => {
+        if (!cancelled) setApiOnline(response.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setApiOnline(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-        <div className="border-b border-slate-200 px-6 py-5">
-          <div className="text-sm font-semibold text-blue-700">AI 招聘助手</div>
-          <div className="mt-1 text-xs text-slate-500">Robot Talent Agent</div>
+    <div className="min-h-screen bg-[#F6F8FB] text-[#111827]">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] border-r border-[#E5E7EB] bg-white lg:flex lg:flex-col">
+        <div className="flex h-16 items-center gap-3 px-5">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#2563EB] text-[13px] font-bold text-white">
+            AI
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[14px] font-semibold leading-5 text-[#111827]">AI 招聘助手</div>
+            <div className="truncate text-[12px] leading-4 text-[#9CA3AF]">Recruiting Assistant</div>
+          </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
-          {navigationItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                [
-                  "rounded-md px-3 py-2 text-sm font-medium transition",
-                  isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                ].join(" ")
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex flex-1 flex-col gap-1 px-3 py-3">
+          {navigationItems.map((item) => {
+            const isActive = item.section === currentSection;
+            return (
+              <Link
+                key={`${item.section}-${item.label}`}
+                to={item.path}
+                className={[
+                  "relative flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14px] font-medium leading-5 transition",
+                  isActive ? "bg-[#EFF6FF] text-[#2563EB]" : "text-[#374151] hover:bg-[#F3F4F6]",
+                ].join(" ")}
+              >
+                {isActive ? <span className="absolute left-0 h-5 w-[3px] rounded-r-full bg-[#2563EB]" /> : null}
+                <span
+                  aria-hidden="true"
+                  className={[
+                    "grid h-[18px] w-[18px] place-items-center rounded-md text-[10px] font-semibold",
+                    isActive ? "bg-white text-[#2563EB]" : "bg-[#F3F4F6] text-[#6B7280]",
+                  ].join(" ")}
+                >
+                  {item.label.slice(0, 1)}
+                </span>
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-            <div>
-              <div className="text-sm font-semibold text-slate-950">招聘项目中台</div>
-              <div className="text-xs text-slate-500">基于现有 A/B/C/D Agent 能力与本地 Mock 聚合</div>
+      <div className="lg:pl-[232px]">
+        <header className="sticky top-0 z-20 h-16 border-b border-[#E5E7EB] bg-white">
+          <div className="flex h-full items-center justify-between gap-4 px-6">
+            <div className="hidden min-w-0 text-[13px] leading-5 text-[#6B7280] md:block">
+              招聘项目 <span className="mx-2 text-[#D1D5DB]">/</span> 实时项目
             </div>
-            <div className="hidden rounded-md border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 sm:block">
-              API: /api
+            <label className="relative hidden w-[360px] max-w-[38vw] md:block">
+              <span className="sr-only">搜索候选人、岗位、项目</span>
+              <input
+                className="h-[38px] w-full rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#BFDBFE] focus:bg-white focus:ring-2 focus:ring-[#EFF6FF]"
+                placeholder="搜索候选人、岗位、项目"
+              />
+            </label>
+            <div className="ml-auto flex items-center gap-3">
+              <span
+                className={[
+                  "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium",
+                  apiOnline === false ? "bg-[#FEF2F2] text-[#EF4444]" : "bg-[#ECFDF3] text-[#16A34A]",
+                ].join(" ")}
+              >
+                {apiOnline === false ? "API 未连接" : "API 在线"}
+              </span>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+              >
+                刷新数据
+              </button>
+              <button
+                type="button"
+                className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8]"
+              >
+                新建项目
+              </button>
+              <div className="grid h-8 w-8 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
+                HR
+              </div>
             </div>
           </div>
-          <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 lg:hidden">
-            {navigationItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  [
-                    "shrink-0 rounded-md px-3 py-2 text-sm font-medium",
-                    isActive ? "bg-blue-50 text-blue-700" : "text-slate-600",
-                  ].join(" ")
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
+        <main className="min-h-[calc(100dvh-64px)] px-6 py-6">
           <Outlet />
         </main>
       </div>

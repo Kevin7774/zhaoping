@@ -4,7 +4,7 @@ import { apiClient } from "../../shared/api/client";
 import type { TaskSnapshot } from "../../shared/hooks/useTaskStream";
 
 export type WeeklyReport = {
-  conclusion: string;
+  conclusion?: string;
   keyProgress: string[];
   topCandidates: string[];
   risks: string[];
@@ -15,7 +15,7 @@ export type ProjectRecord = {
   projectId: string;
   name: string;
   status: string;
-  owner: string;
+  owner?: string;
   updatedAt: string;
   openJobs: number;
   totalCandidates: number;
@@ -35,6 +35,11 @@ export type RunScenarioResponse = {
 export type ScenarioMetaResponse = {
   scenarios?: Array<{ id: string; name_zh?: string; title?: string }>;
   agents?: Record<string, unknown>;
+};
+
+export type ListQueryOptions = {
+  skip?: number;
+  limit?: number;
 };
 
 type ProjectBackendResponse = {
@@ -76,15 +81,15 @@ export function getProject(projectId: string): Promise<ProjectRecord> {
   return apiClient.get<ProjectBackendResponse>(`/projects/${encodeURIComponent(projectId)}`).then(mapProject);
 }
 
-export function getProjectJobs(projectId: string): Promise<JobProfile[]> {
+export function getProjectJobs(projectId: string, options: ListQueryOptions = {}): Promise<JobProfile[]> {
   return apiClient
-    .get<JobBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/jobs`)
+    .get<JobBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/jobs`, { query: options })
     .then((jobs) => jobs.map(mapJob));
 }
 
-export function getProjectCandidates(projectId: string): Promise<Candidate[]> {
+export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {
   return apiClient
-    .get<CandidateBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/candidates`)
+    .get<CandidateBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/candidates`, { query: options })
     .then((candidates) => candidates.map(mapCandidate));
 }
 
@@ -153,23 +158,37 @@ export function runCandidateEvaluation(projectId: string, candidate: Candidate) 
   });
 }
 
+export function runWeeklyReport(projectId: string, projectName: string) {
+  return apiClient.post<RunScenarioResponse>("/scenarios/run", {
+    scenario: "D",
+    input: `请基于「${projectName}」当前真实项目、岗位和候选人数据生成本周招聘周报。`,
+    team_constraint: "真机泛化",
+    aperture_weight: 0.7,
+    frontend_state: {
+      source: "ProjectDetailPage",
+      project_id: projectId,
+      action: "weekly_report",
+    },
+  });
+}
+
 function mapProject(project: ProjectBackendResponse): ProjectRecord {
   return {
     projectId: project.id,
     name: project.name,
     status: project.status,
-    owner: "Recruiting Ops",
+    owner: undefined,
     updatedAt: project.createdAt,
     openJobs: project.openJobs,
     totalCandidates: project.totalCandidates,
     awaitingHuman: project.awaitingHuman,
     averageMatchScore: project.averageMatchScore,
     weeklyReport: {
-      conclusion: `${project.name} 当前开放 ${project.openJobs} 个岗位，已关联 ${project.totalCandidates} 位候选人。`,
-      keyProgress: [`平均匹配分 ${project.averageMatchScore}`, `待人工复核 ${project.awaitingHuman} 人`],
+      conclusion: undefined,
+      keyProgress: [],
       topCandidates: [],
-      risks: project.awaitingHuman > 0 ? ["存在等待人工确认的候选人或任务。"] : [],
-      nextActions: ["运行人才地图或候选人评估任务，持续刷新项目数据。"],
+      risks: [],
+      nextActions: [],
     },
   };
 }
@@ -179,6 +198,7 @@ function mapJob(job: JobBackendResponse): JobProfile {
   return {
     jobProfileId: job.id,
     roleName: job.title,
+    headcount: job.headcount,
     priorityLevel: priorityFromHeadcount(job.headcount),
     pipelineStatus: status,
     candidateCount: job.candidateCount,
@@ -204,6 +224,7 @@ function mapCandidate(candidate: CandidateBackendResponse): Candidate {
     sourcePlatform: "Backend",
     currentCompany: candidate.currentCompany ?? undefined,
     city: candidate.city ?? undefined,
+    email: candidate.email ?? undefined,
     title: candidate.jobTitle,
     isAiNativeTalent: false,
     technicalLayerTags: [],

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { projectMock } from "../../shared/mocks/projectMock";
 import {
   buildCandidateEmailDraft,
+  defaultFilterCriteria,
   filterCandidates,
   markCandidateEmailSent,
   type FilterCriteria,
@@ -11,6 +12,7 @@ import {
 describe("project local state helpers", () => {
   it("filters candidates by job, minimum score, city, and free text", () => {
     const criteria: FilterCriteria = {
+      ...defaultFilterCriteria,
       jobProfileId: "job_vla_algorithm",
       minScore: 85,
       city: "上海",

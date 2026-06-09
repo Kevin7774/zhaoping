@@ -18,6 +18,7 @@ export const PATH_PRODUCTIZATION = {
   '/jobs/match': 'productized',
   '/projects/{project_id}': 'productized',
   '/projects/{project_id}/candidates': 'productized',
+  '/projects/{project_id}/candidates/unique': 'productized',
   '/projects/{project_id}/jobs': 'productized',
   '/resumes/ingest': 'productized',
   '/review/feedback': 'closed',

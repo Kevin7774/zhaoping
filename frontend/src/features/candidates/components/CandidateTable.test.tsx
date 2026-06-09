@@ -13,6 +13,7 @@ const candidate: Candidate = {
   sourcePlatform: "Backend",
   currentCompany: "Robot Foundation Team",
   city: "上海",
+  email: "zhou.han@example.com",
   title: "VLA / 具身智能算法工程师",
   isAiNativeTalent: false,
   technicalLayerTags: [],
@@ -40,5 +41,49 @@ describe("CandidateTable", () => {
 
     expect(onRunEvaluation).toHaveBeenCalledWith(candidate);
     expect(screen.getByText("待触达")).toBeTruthy();
+  });
+
+  it("disables email outreach when the backend candidate has no email", () => {
+    const onSendEmail = vi.fn();
+    const candidateWithoutEmail = { ...candidate, email: undefined };
+
+    render(<CandidateTable candidates={[candidateWithoutEmail]} onSendEmail={onSendEmail} />);
+
+    const button = screen.getByRole("button", { name: "发邮件" });
+    expect(button).toHaveProperty("disabled", true);
+    expect(button.getAttribute("title")).toBe("候选人无邮箱");
+    fireEvent.click(button);
+    expect(onSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("loads more candidates when more pages are available", () => {
+    const onLoadMore = vi.fn();
+
+    render(
+      <CandidateTable
+        candidates={[candidate]}
+        onSendEmail={() => undefined}
+        hasMore
+        onLoadMore={onLoadMore}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a loading state while loading the next candidate page", () => {
+    render(
+      <CandidateTable
+        candidates={[candidate]}
+        onSendEmail={() => undefined}
+        hasMore
+        isLoadingMore
+        onLoadMore={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "加载中..." })).toHaveProperty("disabled", true);
   });
 });

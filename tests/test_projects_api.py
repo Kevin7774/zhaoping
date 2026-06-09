@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
+from app.api.routers.projects import _utc_datetime
 from app.db.session import get_project_session
 from app.models import Candidate, Job, JobCandidate, Project, ProjectBase
 
 
 @pytest.fixture()
-def client() -> Iterator[TestClient]:
+def session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         future=True,
@@ -28,6 +30,14 @@ def client() -> Iterator[TestClient]:
     with session_factory() as session:
         _seed_project(session)
 
+    try:
+        yield session_factory
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture()
+def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     def override_project_session() -> Iterator[Session]:
         with session_factory() as session:
             yield session
@@ -37,7 +47,6 @@ def client() -> Iterator[TestClient]:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
-        engine.dispose()
 
 
 def test_get_project_returns_base_info_and_stats(client: TestClient) -> None:
@@ -67,7 +76,7 @@ def test_get_project_jobs_returns_pipeline_status_and_rollups(client: TestClient
             "title": "VLA / 具身智能算法工程师",
             "headcount": 2,
             "status": "processing",
-            "pipelineStatus": "processing",
+            "pipelineStatus": "awaiting_human",
             "candidateCount": 2,
             "averageMatchScore": 85,
         },
@@ -77,11 +86,68 @@ def test_get_project_jobs_returns_pipeline_status_and_rollups(client: TestClient
             "title": "机器人数据平台工程师",
             "headcount": 1,
             "status": "offer",
-            "pipelineStatus": "offer",
+            "pipelineStatus": "done",
             "candidateCount": 1,
             "averageMatchScore": 85,
         },
     ]
+
+
+def test_get_project_jobs_supports_pagination(client: TestClient) -> None:
+    response = client.get("/projects/project_2026_ai_team/jobs?skip=1&limit=1")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "job_robot_data_platform",
+            "projectId": "project_2026_ai_team",
+            "title": "机器人数据平台工程师",
+            "headcount": 1,
+            "status": "offer",
+            "pipelineStatus": "done",
+            "candidateCount": 1,
+            "averageMatchScore": 85,
+        }
+    ]
+
+
+def test_get_project_jobs_uses_bounded_queries(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add_all(
+            [
+                Job(
+                    id=f"job_extra_{index}",
+                    project_id="project_2026_ai_team",
+                    title=f"Extra role {index}",
+                    headcount=1,
+                    status="sourcing",
+                )
+                for index in range(4)
+            ]
+        )
+        session.commit()
+
+    with session_factory() as session:
+        bind = session.get_bind()
+
+    select_statements: list[str] = []
+
+    def count_selects(conn, cursor, statement, parameters, context, executemany) -> None:  # noqa: ANN001
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_statements.append(statement)
+
+    event.listen(bind, "before_cursor_execute", count_selects)
+    try:
+        response = client.get("/projects/project_2026_ai_team/jobs")
+    finally:
+        event.remove(bind, "before_cursor_execute", count_selects)
+
+    assert response.status_code == 200
+    assert len(response.json()) == 6
+    assert len(select_statements) <= 4
 
 
 def test_get_project_candidates_returns_joined_candidate_matches(client: TestClient) -> None:
@@ -126,6 +192,131 @@ def test_get_project_candidates_returns_joined_candidate_matches(client: TestCli
             "pipelineStatus": "done",
         },
     ]
+
+
+def test_get_project_candidates_supports_pagination(client: TestClient) -> None:
+    response = client.get("/projects/project_2026_ai_team/candidates?skip=1&limit=1")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "cand_zhou_han",
+            "jobCandidateId": 2,
+            "jobId": "job_vla_algorithm",
+            "jobTitle": "VLA / 具身智能算法工程师",
+            "name": "Zhou Han",
+            "currentCompany": "Robot Foundation Team",
+            "city": "上海",
+            "email": "zhou.han@example.com",
+            "matchScore": 78,
+            "pipelineStatus": "awaiting_human",
+        }
+    ]
+
+
+def test_get_project_unique_candidates_deduplicates_candidates(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add(
+            JobCandidate(
+                job_id="job_robot_data_platform",
+                candidate_id="cand_lin_chen",
+                match_score=88,
+                pipeline_status="pending_outreach",
+            )
+        )
+        session.commit()
+
+    response = client.get("/projects/project_2026_ai_team/candidates/unique")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "cand_lin_chen",
+            "name": "Alex Chen",
+            "currentCompany": "Embodied AI Lab",
+            "city": "深圳",
+            "email": "alex.chen@example.com",
+        },
+        {
+            "id": "cand_wang_ke",
+            "name": "Wang Ke",
+            "currentCompany": "Autonomous Driving Data",
+            "city": "上海",
+            "email": "wang.ke@example.com",
+        },
+        {
+            "id": "cand_zhou_han",
+            "name": "Zhou Han",
+            "currentCompany": "Robot Foundation Team",
+            "city": "上海",
+            "email": "zhou.han@example.com",
+        },
+    ]
+
+
+def test_get_project_unique_candidates_supports_pagination(client: TestClient) -> None:
+    response = client.get("/projects/project_2026_ai_team/candidates/unique?skip=1&limit=1")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "cand_wang_ke",
+            "name": "Wang Ke",
+            "currentCompany": "Autonomous Driving Data",
+            "city": "上海",
+            "email": "wang.ke@example.com",
+        }
+    ]
+
+
+def test_empty_project_lists_return_empty_arrays(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add(
+            Project(
+                id="project_empty",
+                name="Empty project",
+                status="active",
+                created_at=datetime(2026, 6, 9, tzinfo=timezone.utc),
+            )
+        )
+        session.commit()
+
+    assert client.get("/projects/project_empty/jobs").json() == []
+    assert client.get("/projects/project_empty/candidates").json() == []
+    assert client.get("/projects/project_empty/candidates/unique").json() == []
+
+
+def test_project_created_at_naive_datetime_is_returned_as_utc(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add(
+            Project(
+                id="project_naive_time",
+                name="Naive time project",
+                status="active",
+                created_at=datetime(2026, 6, 9, 12, 30),
+            )
+        )
+        session.commit()
+
+    response = client.get("/projects/project_naive_time")
+
+    assert response.status_code == 200
+    assert response.json()["createdAt"] == "2026-06-09T12:30:00Z"
+
+
+def test_utc_datetime_converts_aware_datetime_to_utc() -> None:
+    value = datetime(2026, 6, 9, 8, 30, tzinfo=timezone(timedelta(hours=8)))
+
+    assert _utc_datetime(value) == datetime(2026, 6, 9, 0, 30, tzinfo=timezone.utc)
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
