@@ -26,9 +26,14 @@ describe("project local state helpers", () => {
   it("builds a deterministic outreach draft for a selected candidate", () => {
     const candidate = projectMock.candidates[0];
     const job = projectMock.jobs[0];
+    const draft = buildCandidateEmailDraft(candidate, job);
 
-    expect(buildCandidateEmailDraft(candidate, job)).toContain(`Hi ${candidate.name}`);
-    expect(buildCandidateEmailDraft(candidate, job)).toContain(job.roleName);
+    expect(draft).toContain(`${candidate.name} 兄`);
+    expect(draft).toContain("量化派");
+    expect(draft).toContain("羊小咩");
+    expect(draft).toContain("消费撮合决策");
+    expect(draft).toContain(job.roleName);
+    expect(draft).not.toContain(`Hi ${candidate.name}`);
   });
 
   it("keeps candidates without a backend score visible when no score threshold is selected", () => {

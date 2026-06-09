@@ -58,12 +58,18 @@ export function filterCandidates(candidates: Candidate[], criteria: FilterCriter
 export function buildCandidateEmailDraft(candidate: Candidate, job?: JobProfile) {
   const roleName = job?.roleName ?? "AI 招聘助手相关岗位";
   const capability = candidate.parsedCapabilities[0] ?? candidate.technicalLayerTags[0] ?? "工程项目";
+  const secondaryCapability = candidate.parsedCapabilities[1] ?? candidate.technicalLayerTags[1] ?? "复杂业务系统工程";
+  const company = candidate.currentCompany ?? "近期项目";
 
   return [
-    `Hi ${candidate.name},`,
+    `${candidate.name} 兄，`,
     "",
-    `看到你在 ${candidate.currentCompany ?? "近期项目"} 的 ${capability} 经历，我们正在推进「${roleName}」招聘，想和你聊聊真实机器人场景中的落地问题。`,
+    `最近关注到你在 ${company} 的 ${capability} 经历，尤其是关于 ${secondaryCapability} 的处理方式，这种在复杂海量数据下追求极速响应的思路很有价值。`,
     "",
-    "如果你方便，我可以发一份更详细的岗位说明，并约 20 分钟做一次初步沟通。",
+    "我是量化派的招聘团队。我们最近在重构“羊小咩”背后的智能决策引擎，旨在将 AI 从单纯推荐进化为更精准的消费撮合决策。",
+    "",
+    `我们正在推进「${roleName}」相关建设，希望把你的 ${capability} 经验放到“羊小咩”电商平台化和 AI 决策服务结合的场景里讨论，而不是直接进入面试流程。`,
+    "",
+    "如果你这周五下午或者下周一晚上有 20 分钟，我们可以先做一次纯技术推演，不聊面试。",
   ].join("\n");
 }
