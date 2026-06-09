@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { taskStreamUrl } from "../api/client";
+import { apiClient, taskStreamUrl } from "../api/client";
 
 export type TaskStatus = "processing" | "awaiting_human" | "done" | "error" | "cancelled";
 
@@ -29,6 +29,7 @@ export type TaskStreamEvent = {
 
 export type TaskSnapshot = {
   task_id: string;
+  scenario_id?: string;
   status: TaskStatus;
   current_agent?: string | null;
   current_step?: number | null;
@@ -40,11 +41,12 @@ export type TaskSnapshot = {
   steps_done?: unknown[];
 };
 
-export type TaskStreamConnectionState = "idle" | "connecting" | "open" | "retrying" | "closed";
+export type TaskStreamConnectionState = "idle" | "connecting" | "open" | "retrying" | "polling" | "closed";
 
 export type UseTaskStreamOptions = {
   enabled?: boolean;
   maxRetries?: number;
+  fallbackPollIntervalMs?: number;
   onEvent?: (event: TaskStreamEvent) => void;
 };
 
@@ -155,15 +157,18 @@ export function applyTaskStreamEvent(
 }
 
 export function useTaskStream(taskId: string | null | undefined, options: UseTaskStreamOptions = {}) {
-  const { enabled = true, maxRetries = 6, onEvent } = options;
+  const { enabled = true, maxRetries = 6, fallbackPollIntervalMs = 600, onEvent } = options;
   const [events, setEvents] = useState<TaskStreamEvent[]>([]);
   const [taskSnapshot, setTaskSnapshot] = useState<TaskSnapshot | null>(null);
   const [connectionState, setConnectionState] = useState<TaskStreamConnectionState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [usedFallbackPolling, setUsedFallbackPolling] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<number | null>(null);
+  const pollingTimerRef = useRef<number | null>(null);
+  const snapshotRefreshTimerRef = useRef<number | null>(null);
   const retryCountRef = useRef(0);
   const closedRef = useRef(false);
   const latestStatusRef = useRef<TaskStatus | null>(null);
@@ -182,17 +187,34 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
     }
   }, []);
 
+  const clearPollingTimer = useCallback(() => {
+    if (pollingTimerRef.current !== null) {
+      window.clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
+
+  const clearSnapshotRefreshTimer = useCallback(() => {
+    if (snapshotRefreshTimerRef.current !== null) {
+      window.clearTimeout(snapshotRefreshTimerRef.current);
+      snapshotRefreshTimerRef.current = null;
+    }
+  }, []);
+
   const resetStream = useCallback(() => {
     clearRetryTimer();
+    clearPollingTimer();
+    clearSnapshotRefreshTimer();
     closeStream();
     retryCountRef.current = 0;
     latestStatusRef.current = null;
     setRetryCount(0);
+    setUsedFallbackPolling(false);
     setEvents([]);
     setTaskSnapshot(null);
     setError(null);
     setConnectionState("idle");
-  }, [clearRetryTimer, closeStream]);
+  }, [clearPollingTimer, clearRetryTimer, clearSnapshotRefreshTimer, closeStream]);
 
   const handleEvent = useCallback(
     (event: TaskStreamEvent, activeTaskId: string) => {
@@ -204,14 +226,15 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
       });
       onEvent?.(event);
 
-      const status = event.status ?? (event.type === "done" ? "done" : null);
+      const status = event.status ?? (["done", "error", "cancelled"].includes(event.type) ? event.type : null);
       if (isTerminalTaskStatus(status)) {
         closeStream();
         clearRetryTimer();
+        clearSnapshotRefreshTimer();
         setConnectionState("closed");
       }
     },
-    [clearRetryTimer, closeStream, onEvent],
+    [clearRetryTimer, clearSnapshotRefreshTimer, closeStream, onEvent],
   );
 
   useEffect(() => {
@@ -221,6 +244,77 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
 
     closedRef.current = false;
 
+    const stopForTerminal = (snapshot: TaskSnapshot) => {
+      latestStatusRef.current = snapshot.status;
+      if (isTerminalTaskStatus(snapshot.status)) {
+        closeStream();
+        clearRetryTimer();
+        clearPollingTimer();
+        clearSnapshotRefreshTimer();
+        setConnectionState("closed");
+        return true;
+      }
+      return false;
+    };
+
+    const loadSnapshot = async () => {
+      try {
+        const snapshot = await apiClient.get<TaskSnapshot>(`/tasks/${encodeURIComponent(taskId)}`);
+        if (closedRef.current || !taskId) return null;
+        setError(null);
+        setTaskSnapshot(snapshot);
+        setEvents(snapshot.audit_events ?? []);
+        stopForTerminal(snapshot);
+        return snapshot;
+      } catch (snapshotError) {
+        if (!closedRef.current) {
+          setError(snapshotError instanceof Error ? snapshotError.message : "Failed to load task snapshot.");
+        }
+        return null;
+      }
+    };
+
+    const poll = async () => {
+      if (closedRef.current || !taskId || isTerminalTaskStatus(latestStatusRef.current)) return;
+
+      setConnectionState("polling");
+      setUsedFallbackPolling(true);
+
+      const snapshot = await loadSnapshot();
+      if (snapshot && stopForTerminal(snapshot)) return;
+
+      if (!closedRef.current && !isTerminalTaskStatus(latestStatusRef.current)) {
+        pollingTimerRef.current = window.setTimeout(poll, fallbackPollIntervalMs);
+      }
+    };
+
+    const startFallbackPolling = () => {
+      closeStream();
+      clearRetryTimer();
+      clearPollingTimer();
+      clearSnapshotRefreshTimer();
+      void poll();
+    };
+
+    const scheduleSnapshotRefresh = () => {
+      clearSnapshotRefreshTimer();
+      if (closedRef.current || !taskId || isTerminalTaskStatus(latestStatusRef.current)) return;
+      snapshotRefreshTimerRef.current = window.setTimeout(async () => {
+        if (closedRef.current || !taskId || isTerminalTaskStatus(latestStatusRef.current)) return;
+        const snapshot = await loadSnapshot();
+        if (snapshot && !isTerminalTaskStatus(snapshot.status)) {
+          scheduleSnapshotRefresh();
+        }
+      }, fallbackPollIntervalMs);
+    };
+
+    let initialSnapshotRequested = false;
+    const loadInitialSnapshotOnce = () => {
+      if (initialSnapshotRequested) return;
+      initialSnapshotRequested = true;
+      void loadSnapshot();
+    };
+
     const open = () => {
       if (closedRef.current || !taskId) return;
 
@@ -229,12 +323,15 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
 
       const source = new EventSource(taskStreamUrl(taskId));
       eventSourceRef.current = source;
+      loadInitialSnapshotOnce();
+      scheduleSnapshotRefresh();
 
       source.onopen = () => {
         retryCountRef.current = 0;
         setRetryCount(0);
         setError(null);
         setConnectionState("open");
+        loadInitialSnapshotOnce();
       };
 
       for (const eventName of TASK_STREAM_EVENT_NAMES) {
@@ -256,8 +353,8 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
         }
 
         if (retryCountRef.current >= maxRetries) {
-          setError("Task stream disconnected and retry limit was reached.");
-          setConnectionState("closed");
+          setError("Task stream disconnected; falling back to task polling.");
+          startFallbackPolling();
           return;
         }
 
@@ -274,10 +371,23 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
     return () => {
       closedRef.current = true;
       clearRetryTimer();
+      clearPollingTimer();
+      clearSnapshotRefreshTimer();
       closeStream();
       setConnectionState("closed");
     };
-  }, [clearRetryTimer, closeStream, enabled, handleEvent, maxRetries, resetStream, taskId]);
+  }, [
+    clearPollingTimer,
+    clearRetryTimer,
+    clearSnapshotRefreshTimer,
+    closeStream,
+    enabled,
+    fallbackPollIntervalMs,
+    handleEvent,
+    maxRetries,
+    resetStream,
+    taskId,
+  ]);
 
   return {
     events,
@@ -285,6 +395,7 @@ export function useTaskStream(taskId: string | null | undefined, options: UseTas
     connectionState,
     error,
     retryCount,
+    usedFallbackPolling,
     reset: resetStream,
     close: closeStream,
   };

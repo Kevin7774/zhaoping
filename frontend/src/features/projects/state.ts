@@ -30,7 +30,7 @@ export function filterCandidates(candidates: Candidate[], criteria: FilterCriter
   return candidates.filter((candidate) => {
     const matchesJob =
       criteria.jobProfileId === "all" || !criteria.jobProfileId || candidate.targetJobProfileId === criteria.jobProfileId;
-    const matchesScore = candidate.matchScore >= criteria.minScore;
+    const matchesScore = candidate.matchScore === null ? criteria.minScore <= 0 : candidate.matchScore >= criteria.minScore;
     const matchesCity = !criteria.city.trim() || includesText(candidate.city, criteria.city);
     const matchesOutreach =
       criteria.outreachStatus === "all" || candidate.outreachStatus === criteria.outreachStatus;
@@ -66,10 +66,4 @@ export function buildCandidateEmailDraft(candidate: Candidate, job?: JobProfile)
     "",
     "如果你方便，我可以发一份更详细的岗位说明，并约 20 分钟做一次初步沟通。",
   ].join("\n");
-}
-
-export function markCandidateEmailSent(candidates: Candidate[], candidateId: string) {
-  return candidates.map((candidate) =>
-    candidate.candidateId === candidateId ? { ...candidate, outreachStatus: "sent" as const } : candidate,
-  );
 }

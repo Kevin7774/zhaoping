@@ -1,6 +1,7 @@
 import type { Candidate } from "../candidates/types";
 import type { FunnelStageKey, JobProfile, StepStatus } from "../jobs/types";
-import { apiClient } from "../../shared/api/client";
+import type { FilterCriteria } from "./state";
+import { ApiError, apiClient } from "../../shared/api/client";
 import type { TaskSnapshot } from "../../shared/hooks/useTaskStream";
 
 export type WeeklyReport = {
@@ -24,12 +25,28 @@ export type ProjectRecord = {
   weeklyReport: WeeklyReport;
 };
 
-export type RunProjectScenarioAction = "find_candidates" | "candidate_evaluation";
+export type RunProjectScenarioAction = "job_analysis" | "find_candidates" | "candidate_evaluation";
 
 export type RunScenarioResponse = {
   task_id: string;
   scenario: string;
   status: string;
+};
+
+export type IntegrationCapabilityStatus = {
+  id: string;
+  service_type: string;
+  label?: string;
+  name_zh?: string;
+  status: "active" | "available" | "missing_key" | "disabled" | "not_configured" | "manual_setup" | "missing_tool" | string;
+  connected?: boolean;
+  connected_name_zh?: string;
+  code_path?: string | null;
+};
+
+export type IntegrationsStatusResponse = {
+  capabilities?: IntegrationCapabilityStatus[];
+  services?: Array<Record<string, unknown>>;
 };
 
 export type ScenarioMetaResponse = {
@@ -48,39 +65,112 @@ export type CandidatePage = {
   hasMore: boolean;
 };
 
-type ProjectBackendResponse = {
-  id: string;
-  name: string;
+export type OutreachDraft = {
+  draftId: string;
+  projectId: string;
+  jobId: string;
+  candidateId: string;
+  segmentId?: string | null;
+  subject: string;
+  body: string;
   status: string;
-  createdAt: string;
-  openJobs: number;
-  totalCandidates: number;
-  awaitingHuman: number;
-  averageMatchScore: number;
+  backendGenerated: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type OutreachHistoryItem = {
+  historyId: string;
+  projectId: string;
+  jobId?: string | null;
+  candidateId?: string | null;
+  draftId?: string | null;
+  segmentId?: string | null;
+  email?: string | null;
+  subject: string;
+  body: string;
+  status: string;
+  deliveryMode: string;
+  providerStatus?: string | null;
+  createdAt?: string;
+};
+
+export type OutreachHistoryResponse = {
+  items: OutreachHistoryItem[];
+};
+
+export type SegmentQueryResponse = {
+  projectId: string;
+  criteria: Record<string, unknown>;
+  total: number;
+  candidates: Candidate[];
+};
+
+export type SegmentRecord = {
+  segmentId: string;
+  projectId: string;
+  name: string;
+  criteria: Record<string, unknown>;
+  candidateIds: string[];
+  candidateCount: number;
+  createdAt?: string;
+  candidates?: Candidate[];
+};
+
+export type WeeklyReportRecord = {
+  reportId: string;
+  projectId: string;
+  sourceTaskId?: string | null;
+  content: WeeklyReport;
+  createdAt?: string;
+};
+
+export type JobMatchResponse = {
+  results?: unknown[];
+  [key: string]: unknown;
+};
+
+type ProjectBackendResponse = {
+  id?: string;
+  name?: string;
+  status?: string;
+  createdAt?: string;
+  openJobs?: number;
+  totalCandidates?: number;
+  awaitingHuman?: number;
+  averageMatchScore?: number;
 };
 
 type JobBackendResponse = {
   id: string;
   projectId: string;
-  title: string;
-  headcount: number;
-  status: string;
-  pipelineStatus: string;
-  candidateCount: number;
-  averageMatchScore: number;
+  title?: string;
+  headcount?: number | null;
+  status?: string | null;
+  pipelineStatus?: string | null;
+  candidateCount?: number | null;
+  averageMatchScore?: number | null;
 };
 
 type CandidateBackendResponse = {
   id: string;
   jobCandidateId: number;
   jobId: string;
-  jobTitle: string;
-  name: string;
+  jobTitle?: string | null;
+  name?: string | null;
+  sourcePlatform?: string | null;
+  sourceUrl?: string | null;
   currentCompany?: string | null;
   city?: string | null;
   email?: string | null;
-  matchScore: number;
-  pipelineStatus: string;
+  matchScore?: number | null;
+  pipelineStatus?: string | null;
+  outreachStatus?: "not_sent" | "drafted" | "sent" | null;
+  evidence?: Array<{
+    label?: string;
+    source?: string;
+    summary?: string;
+  }> | null;
 };
 
 export function getProject(projectId: string): Promise<ProjectRecord> {
@@ -124,20 +214,130 @@ export function getTask(taskId: string) {
 
 export function confirmTask(
   taskId: string,
-  action: "approve" | "edit" | "reject" = "approve",
+  decision: "approve" | "edit" | "reject" = "approve",
   data: Record<string, unknown> = {},
+  edits?: string,
 ) {
+  const normalizedEdits =
+    edits ??
+    readStringValue(data.draft) ??
+    readStringValue(data.body) ??
+    readStringValue(data.edits);
+
   return apiClient.post<TaskSnapshot>(`/tasks/${encodeURIComponent(taskId)}/confirm`, {
-    action,
+    decision,
+    edits: normalizedEdits,
     data,
   });
 }
 
+export function cancelTask(taskId: string) {
+  return apiClient.post<TaskSnapshot>(`/tasks/${encodeURIComponent(taskId)}/cancel`);
+}
+
+export function retryTask(taskId: string) {
+  return apiClient.post<RunScenarioResponse>(`/tasks/${encodeURIComponent(taskId)}/retry`);
+}
+
+export function getIntegrationsStatus() {
+  return apiClient.get<IntegrationsStatusResponse>("/integrations/status");
+}
+
+export function createOutreachDraft(request: {
+  projectId: string;
+  jobId: string;
+  candidateId: string;
+  segmentId?: string | null;
+}) {
+  return apiClient.post<OutreachDraft>("/outreach/draft", request);
+}
+
+export function updateOutreachDraft(draftId: string, request: { subject?: string; body?: string }) {
+  return apiClient.patch<OutreachDraft>(`/outreach/drafts/${encodeURIComponent(draftId)}`, request);
+}
+
+export function sendOutreachDraft(request: {
+  draftId: string;
+  decision: "approve" | "edit" | "reject";
+  simulate: boolean;
+}) {
+  return apiClient.post<OutreachHistoryItem>("/outreach/send", request);
+}
+
+export function getOutreachHistory(query: { projectId: string; candidateId?: string; segmentId?: string }) {
+  return apiClient.get<OutreachHistoryResponse>("/outreach/history", { query });
+}
+
+export async function querySegmentCandidates(projectId: string, criteria: FilterCriteria): Promise<SegmentQueryResponse> {
+  const response = await apiClient.post<Omit<SegmentQueryResponse, "candidates"> & { candidates: CandidateBackendResponse[] }>(
+    "/segments/query",
+    {
+      projectId,
+      criteria,
+    },
+  );
+  return {
+    ...response,
+    candidates: response.candidates.map(mapCandidate),
+  };
+}
+
+export async function createSegment(request: {
+  projectId: string;
+  name: string;
+  criteria: FilterCriteria;
+  candidateIds?: string[];
+}): Promise<SegmentRecord> {
+  const response = await apiClient.post<Omit<SegmentRecord, "candidates"> & { candidates?: CandidateBackendResponse[] }>(
+    "/segments",
+    request,
+  );
+  return {
+    ...response,
+    candidates: response.candidates?.map(mapCandidate),
+  };
+}
+
+export async function saveWeeklyReport(
+  projectId: string,
+  sourceTaskId: string | null,
+  report: WeeklyReport,
+): Promise<WeeklyReportRecord> {
+  const response = await apiClient.post<WeeklyReportRecord>("/reports/weekly", {
+    projectId,
+    sourceTaskId,
+    report,
+  });
+  return mapWeeklyReportRecord(response);
+}
+
+export async function getLatestWeeklyReport(projectId: string): Promise<WeeklyReportRecord | null> {
+  try {
+    const response = await apiClient.get<WeeklyReportRecord>(`/projects/${encodeURIComponent(projectId)}/reports/latest`);
+    return mapWeeklyReportRecord(response);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export function runJobMatch(query: string, topK = 5) {
+  return apiClient.post<JobMatchResponse>("/jobs/match", {
+    query,
+    top_k: topK,
+  });
+}
+
 function scenarioForAction(action: RunProjectScenarioAction) {
-  return action === "find_candidates" ? "B" : "C";
+  if (action === "job_analysis") return "A";
+  if (action === "find_candidates") return "B";
+  return "C";
 }
 
 function inputForAction(action: RunProjectScenarioAction, job: JobProfile) {
+  if (action === "job_analysis") {
+    return `请对「${job.roleName}」岗位进行岗位画像、能力约束、搜索策略和风险点分析。`;
+  }
   if (action === "find_candidates") {
     return `请围绕「${job.roleName}」生成人才地图、候选人来源、搜索关键词和触达策略。`;
   }
@@ -156,6 +356,8 @@ export function runProjectScenario(projectId: string, job: JobProfile, action: R
       source: "ProjectDetailPage",
       project_id: projectId,
       job_profile_id: job.jobProfileId,
+      job_title: job.roleName,
+      jobTitle: job.roleName,
       action,
     },
   });
@@ -195,21 +397,34 @@ export function runWeeklyReport(projectId: string, projectName: string) {
 
 function mapProject(project: ProjectBackendResponse): ProjectRecord {
   return {
-    projectId: project.id,
-    name: project.name,
-    status: project.status,
+    projectId: project.id || "—",
+    name: project.name || "—",
+    status: project.status || "—",
     owner: undefined,
-    updatedAt: project.createdAt,
-    openJobs: project.openJobs,
-    totalCandidates: project.totalCandidates,
-    awaitingHuman: project.awaitingHuman,
-    averageMatchScore: project.averageMatchScore,
+    updatedAt: project.createdAt || "",
+    openJobs: project.openJobs ?? 0,
+    totalCandidates: project.totalCandidates ?? 0,
+    awaitingHuman: project.awaitingHuman ?? 0,
+    averageMatchScore: project.averageMatchScore ?? 0,
     weeklyReport: {
       conclusion: undefined,
       keyProgress: [],
       topCandidates: [],
       risks: [],
       nextActions: [],
+    },
+  };
+}
+
+function mapWeeklyReportRecord(record: WeeklyReportRecord): WeeklyReportRecord {
+  return {
+    ...record,
+    content: {
+      conclusion: record.content?.conclusion,
+      keyProgress: record.content?.keyProgress ?? [],
+      topCandidates: record.content?.topCandidates ?? [],
+      risks: record.content?.risks ?? [],
+      nextActions: record.content?.nextActions ?? [],
     },
   };
 }
@@ -230,55 +445,76 @@ function readBooleanHeader(headers: Headers, name: string): boolean | null {
 }
 
 function mapJob(job: JobBackendResponse): JobProfile {
-  const status = normalizeStepStatus(job.pipelineStatus || job.status);
+  const status = normalizeStepStatus(job.pipelineStatus || job.status || "pending");
+  const headcount = job.headcount ?? undefined;
+  const candidateCount = job.candidateCount ?? 0;
   return {
     jobProfileId: job.id,
-    roleName: job.title,
-    headcount: job.headcount,
-    priorityLevel: priorityFromHeadcount(job.headcount),
+    roleName: job.title || "—",
+    headcount,
+    priorityLevel: priorityFromHeadcount(headcount ?? 0),
     pipelineStatus: status,
-    candidateCount: job.candidateCount,
-    averageMatchScore: job.averageMatchScore,
+    candidateCount,
+    averageMatchScore: job.averageMatchScore ?? undefined,
     isAiNativeFriendly: true,
     essentialCapabilities: [],
     preferredCapabilities: [],
     exclusionTags: [],
-    targetCompanyTypes: ["真实后端岗位"],
+    // Frontend projection label only; detailed target company types are not exposed by the current backend endpoint.
+    targetCompanyTypes: [],
     targetSchoolsLabs: [],
     salaryRangeMin: 0,
     salaryRangeMax: 0,
-    funnel: buildFunnel(status, job.candidateCount, job.headcount),
+    funnel: buildFunnel(status, candidateCount, headcount ?? 0),
   };
 }
 
 function mapCandidate(candidate: CandidateBackendResponse): Candidate {
-  const stepStatus = normalizeStepStatus(candidate.pipelineStatus);
+  const pipelineStatus = candidate.pipelineStatus || "pending";
+  const stepStatus = normalizeStepStatus(pipelineStatus);
+  const matchScore = typeof candidate.matchScore === "number" && Number.isFinite(candidate.matchScore) ? candidate.matchScore : null;
   return {
     candidateId: candidate.id,
-    name: candidate.name,
+    name: candidate.name || "—",
     targetJobProfileId: candidate.jobId,
-    sourcePlatform: "Backend",
+    // Frontend projection: current project candidate API does not expose a normalized source platform.
+    sourcePlatform: candidate.sourcePlatform || "Backend",
+    sourceUrl: candidate.sourceUrl ?? undefined,
     currentCompany: candidate.currentCompany ?? undefined,
     city: candidate.city ?? undefined,
     email: candidate.email ?? undefined,
-    title: candidate.jobTitle,
+    title: candidate.jobTitle || "—",
     isAiNativeTalent: false,
     technicalLayerTags: [],
     parsedCapabilities: [],
-    matchScore: candidate.matchScore,
-    pipelineStatus: candidate.pipelineStatus,
-    stage: candidateStage(candidate.pipelineStatus),
+    matchScore,
+    pipelineStatus,
+    stage: candidateStage(pipelineStatus),
     stepStatus,
-    outreachStatus: "not_sent",
+    // Frontend UI projection only. This is not a real email-delivery status unless backend returns it.
+    outreachStatus: candidate.outreachStatus ?? "not_sent",
     riskAlerts: [],
-    evidence: [
-      {
-        label: "后端关联",
-        source: "manual",
-        summary: `${candidate.jobTitle} · 匹配分 ${candidate.matchScore}`,
-      },
-    ],
+    evidence: Array.isArray(candidate.evidence)
+      ? candidate.evidence
+          .filter((item) => item.summary)
+          .map((item) => ({
+            label: item.label || "后端证据",
+            source: normalizeEvidenceSource(item.source),
+            summary: item.summary || "",
+          }))
+      : [],
   };
+}
+
+function readStringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function normalizeEvidenceSource(source: string | undefined): Candidate["evidence"][number]["source"] {
+  if (["resume", "github", "paper", "demo", "interview", "manual"].includes(source ?? "")) {
+    return source as Candidate["evidence"][number]["source"];
+  }
+  return "manual";
 }
 
 function normalizeStepStatus(status: string): StepStatus {

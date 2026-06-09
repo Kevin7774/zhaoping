@@ -35,7 +35,7 @@ export type Candidate = {
     papers: number;
     citations: number;
   };
-  matchScore: number;
+  matchScore: number | null;
   pipelineStatus?: string;
   stage: CandidateStage;
   stepStatus: StepStatus;

@@ -2,13 +2,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Candidate } from "../candidates/types";
 import {
+  cancelTask,
   confirmTask,
+  createOutreachDraft,
+  createSegment,
+  getIntegrationsStatus,
+  getLatestWeeklyReport,
   getProject,
   getProjectCandidates,
   getProjectCandidatesPage,
   getProjectJobs,
+  getOutreachHistory,
+  retryTask,
+  runJobMatch,
   runCandidateEvaluation,
+  runProjectScenario,
+  runWeeklyReport,
+  saveWeeklyReport,
+  sendOutreachDraft,
+  updateOutreachDraft,
+  querySegmentCandidates,
 } from "./api";
+import type { JobProfile } from "../jobs/types";
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -179,7 +194,7 @@ describe("projects api", () => {
     });
   });
 
-  it("confirms a human gate task using the action/data payload contract", async () => {
+  it("confirms a human gate task using the backend decision/edits/data payload contract", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         task_id: "task_1",
@@ -195,11 +210,99 @@ describe("projects api", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          action: "approve",
+          decision: "approve",
+          edits: "updated message",
           data: { draft: "updated message" },
         }),
       }),
     );
+  });
+
+  it("cancels and retries tasks through real task endpoints", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ task_id: "task_1", status: "cancelled", audit_events: [] }))
+      .mockResolvedValueOnce(jsonResponse({ task_id: "task_2", scenario: "B", status: "processing" }));
+
+    await cancelTask("task_1");
+    await retryTask("task_1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/tasks/task_1/cancel",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/tasks/task_1/retry",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("loads integration status from the real backend capability endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        capabilities: [{ id: "search_api", service_type: "search", status: "missing_key", connected: false }],
+        services: [],
+      }),
+    );
+
+    await expect(getIntegrationsStatus()).resolves.toMatchObject({
+      capabilities: [expect.objectContaining({ id: "search_api", status: "missing_key" })],
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/integrations/status", expect.objectContaining({ method: "GET" }));
+  });
+
+  it.each([
+    ["job_analysis", "A"],
+    ["find_candidates", "B"],
+    ["candidate_evaluation", "C"],
+  ] as const)("starts %s through /scenarios/run scenario %s", async (action, scenario) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: `task_${scenario}`, scenario, status: "processing" }));
+    const job = {
+      jobProfileId: "job_vla_algorithm",
+      roleName: "VLA / 具身智能算法工程师",
+      headcount: 2,
+      priorityLevel: "P0",
+      isAiNativeFriendly: true,
+      essentialCapabilities: [],
+      preferredCapabilities: [],
+      exclusionTags: [],
+      targetCompanyTypes: [],
+      targetSchoolsLabs: [],
+      salaryRangeMin: 0,
+      salaryRangeMax: 0,
+      funnel: [],
+    } satisfies JobProfile;
+
+    await runProjectScenario("project_2026_ai_team", job, action);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(fetchMock).toHaveBeenCalledWith("/api/scenarios/run", expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      scenario,
+      frontend_state: {
+        project_id: "project_2026_ai_team",
+        job_profile_id: "job_vla_algorithm",
+        job_title: "VLA / 具身智能算法工程师",
+        action,
+      },
+    });
+  });
+
+  it("starts weekly report through scenario D", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_weekly", scenario: "D", status: "processing" }));
+
+    await runWeeklyReport("project_2026_ai_team", "2026 AI 团队招聘");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(fetchMock).toHaveBeenCalledWith("/api/scenarios/run", expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      scenario: "D",
+      frontend_state: {
+        project_id: "project_2026_ai_team",
+        action: "weekly_report",
+      },
+    });
   });
 
   it("starts candidate evaluation with candidate and job identifiers", async () => {
@@ -240,5 +343,186 @@ describe("projects api", () => {
         action: "candidate_evaluation",
       },
     });
+  });
+
+  it("uses backend generated outreach drafts, editable drafts, send, and history endpoints", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          draftId: "draft_1",
+          projectId: "project_2026_ai_team",
+          jobId: "job_vla_algorithm",
+          candidateId: "cand_zhou_han",
+          subject: "沟通邀请",
+          body: "后端草稿",
+          status: "draft",
+          backendGenerated: true,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          draftId: "draft_1",
+          subject: "更新主题",
+          body: "更新正文",
+          status: "draft",
+          backendGenerated: true,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          historyId: "history_1",
+          draftId: "draft_1",
+          status: "simulated",
+          deliveryMode: "simulated",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ items: [{ historyId: "history_1", status: "simulated" }] }));
+
+    await createOutreachDraft({
+      projectId: "project_2026_ai_team",
+      jobId: "job_vla_algorithm",
+      candidateId: "cand_zhou_han",
+    });
+    await updateOutreachDraft("draft_1", { subject: "更新主题", body: "更新正文" });
+    await sendOutreachDraft({ draftId: "draft_1", decision: "approve", simulate: true });
+    await getOutreachHistory({ projectId: "project_2026_ai_team" });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/outreach/draft",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          projectId: "project_2026_ai_team",
+          jobId: "job_vla_algorithm",
+          candidateId: "cand_zhou_han",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/outreach/drafts/draft_1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ subject: "更新主题", body: "更新正文" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/outreach/send",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ draftId: "draft_1", decision: "approve", simulate: true }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/outreach/history?projectId=project_2026_ai_team",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("uses backend segment query, save, and list endpoints", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ candidates: [], total: 0, criteria: { minScore: 80 } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          segmentId: "segment_1",
+          projectId: "project_2026_ai_team",
+          name: "高匹配人群",
+          candidateIds: ["cand_zhou_han"],
+          candidateCount: 1,
+        }),
+      );
+
+    await querySegmentCandidates("project_2026_ai_team", { jobProfileId: "all", minScore: 80, city: "", keyword: "", outreachStatus: "all", hasEmail: "yes", sourcePlatform: "all" });
+    await createSegment({
+      projectId: "project_2026_ai_team",
+      name: "高匹配人群",
+      criteria: { jobProfileId: "all", minScore: 80, city: "", keyword: "", outreachStatus: "all", hasEmail: "yes", sourcePlatform: "all" },
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/segments/query",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({
+      projectId: "project_2026_ai_team",
+      criteria: { minScore: 80, hasEmail: "yes" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/segments",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("persists and reloads weekly reports through backend report endpoints", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          reportId: "report_1",
+          projectId: "project_2026_ai_team",
+          content: { conclusion: "真实周报", keyProgress: [], topCandidates: [], risks: [], nextActions: [] },
+          sourceTaskId: "task_weekly",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          reportId: "report_1",
+          projectId: "project_2026_ai_team",
+          content: { conclusion: "真实周报", keyProgress: [], topCandidates: [], risks: [], nextActions: [] },
+        }),
+      );
+
+    await saveWeeklyReport("project_2026_ai_team", "task_weekly", {
+      conclusion: "真实周报",
+      keyProgress: [],
+      topCandidates: [],
+      risks: [],
+      nextActions: [],
+    });
+    await getLatestWeeklyReport("project_2026_ai_team");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/reports/weekly",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          projectId: "project_2026_ai_team",
+          sourceTaskId: "task_weekly",
+          report: {
+            conclusion: "真实周报",
+            keyProgress: [],
+            topCandidates: [],
+            risks: [],
+            nextActions: [],
+          },
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project_2026_ai_team/reports/latest",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("calls the existing jobs match endpoint without frontend generated scores", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [{ candidate_id: "cand_1", score: 0.82 }] }));
+
+    await expect(runJobMatch("VLA / 具身智能算法工程师", 5)).resolves.toEqual({
+      results: [{ candidate_id: "cand_1", score: 0.82 }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/jobs/match",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ query: "VLA / 具身智能算法工程师", top_k: 5 }),
+      }),
+    );
   });
 });

@@ -4,6 +4,8 @@ type CandidateTableProps = {
   candidates: Candidate[];
   onSendEmail: (candidate: Candidate) => void;
   onRunEvaluation?: (candidate: Candidate) => void;
+  canRunEvaluation?: boolean;
+  evaluationDisabledReason?: string;
   evaluatingCandidateId?: string | null;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -41,7 +43,8 @@ function statusLabel(candidate: Candidate) {
   return pipelineLabel[status] || status;
 }
 
-function scoreTone(score: number) {
+function scoreTone(score: number | null) {
+  if (score === null) return "text-[#6B7280]";
   if (score >= 85) return "text-[#2563EB]";
   if (score < 70) return "text-[#6B7280]";
   return "text-[#111827]";
@@ -57,6 +60,8 @@ export function CandidateTable({
   candidates,
   onSendEmail,
   onRunEvaluation,
+  canRunEvaluation = true,
+  evaluationDisabledReason,
   evaluatingCandidateId = null,
   hasMore = false,
   isLoadingMore = false,
@@ -99,6 +104,7 @@ export function CandidateTable({
               {candidates.map((candidate) => {
                 const hasEmail = Boolean(candidate.email);
                 const isEvaluating = evaluatingCandidateId === candidate.candidateId;
+                const evaluationDisabled = isEvaluating || !canRunEvaluation;
 
                 return (
                   <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px]">
@@ -108,15 +114,15 @@ export function CandidateTable({
                           {avatarText(candidate.name)}
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate font-semibold text-[#111827]">{candidate.name}</div>
-                          <div className="truncate text-[12px] text-[#9CA3AF]">{candidate.title}</div>
+                          <div className="truncate font-semibold text-[#111827]">{candidate.name || "—"}</div>
+                          <div className="truncate text-[12px] text-[#9CA3AF]">{candidate.title || "—"}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-3 text-[#374151]">{candidate.currentCompany ?? "未知"}</td>
-                    <td className="px-2 py-3 text-[#374151]">{candidate.title}</td>
+                    <td className="px-2 py-3 text-[#374151]">{candidate.currentCompany ?? "—"}</td>
+                    <td className="px-2 py-3 text-[#374151]">{candidate.title || "—"}</td>
                     <td className={`px-2 py-3 text-[15px] font-bold ${scoreTone(candidate.matchScore)}`}>
-                      {candidate.matchScore}
+                      {candidate.matchScore ?? "—"}
                     </td>
                     <td className="px-2 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium leading-[18px] ${statusTone[candidate.stepStatus]}`}>
@@ -129,10 +135,11 @@ export function CandidateTable({
                           <button
                             type="button"
                             onClick={() => onRunEvaluation(candidate)}
-                            disabled={isEvaluating}
+                            disabled={evaluationDisabled}
+                            title={!canRunEvaluation ? evaluationDisabledReason : undefined}
                             className="h-[30px] whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {isEvaluating ? "评估中" : "Agent 评估"}
+                            {isEvaluating ? "评估中" : "候选人评估"}
                           </button>
                         ) : null}
                         <button
@@ -150,7 +157,7 @@ export function CandidateTable({
                           }}
                           className="h-[30px] whitespace-nowrap rounded-lg bg-[#2563EB] px-2 text-[12px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          发邮件
+                          生成草稿
                         </button>
                       </div>
                     </td>

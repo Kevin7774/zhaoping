@@ -228,6 +228,6 @@ export const projectSummary = {
   totalCandidates: projectMock.candidates.length,
   awaitingHuman: projectMock.candidates.filter((candidate) => candidate.stepStatus === "awaiting_human").length,
   averageMatchScore: Math.round(
-    projectMock.candidates.reduce((sum, candidate) => sum + candidate.matchScore, 0) / projectMock.candidates.length,
+    projectMock.candidates.reduce((sum, candidate) => sum + (candidate.matchScore ?? 0), 0) / projectMock.candidates.length,
   ),
 };

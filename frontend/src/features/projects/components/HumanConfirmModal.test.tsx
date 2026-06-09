@@ -32,7 +32,7 @@ describe("HumanConfirmModal", () => {
     fireEvent.change(textarea, { target: { value: "Hi Alex, updated." } });
     fireEvent.click(screen.getByRole("button", { name: "编辑后通过" }));
 
-    expect(onApprove).toHaveBeenCalledWith("Hi Alex, updated.");
+    expect(onApprove).toHaveBeenCalledWith("Hi Alex, updated.", "edit");
     expect(onReject).not.toHaveBeenCalled();
   });
 

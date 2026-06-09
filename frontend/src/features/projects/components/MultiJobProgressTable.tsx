@@ -4,11 +4,15 @@ import type { RunProjectScenarioAction } from "../api";
 type MultiJobProgressTableProps = {
   jobs: JobProfile[];
   candidateCounts: Record<string, number>;
+  actionAvailability?: Partial<Record<RunProjectScenarioAction, { enabled: boolean; reason?: string }>>;
+  matchAvailability?: { enabled: boolean; reason?: string };
   runningJobAction?: {
     jobProfileId: string;
     action: RunProjectScenarioAction;
   } | null;
+  matchingJobId?: string | null;
   onRunAction?: (job: JobProfile, action: RunProjectScenarioAction) => void;
+  onRunMatch?: (job: JobProfile) => void;
   onRefresh?: () => void;
 };
 
@@ -49,10 +53,16 @@ function MiniStatus({ status }: { status: StepStatus }) {
 export function MultiJobProgressTable({
   jobs,
   candidateCounts,
+  actionAvailability = {},
+  matchAvailability = { enabled: true },
   runningJobAction,
+  matchingJobId = null,
   onRunAction,
+  onRunMatch,
   onRefresh,
 }: MultiJobProgressTableProps) {
+  const availabilityFor = (action: RunProjectScenarioAction) => actionAvailability[action] ?? { enabled: true };
+
   return (
     <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
@@ -76,17 +86,21 @@ export function MultiJobProgressTable({
                 <th className="w-[76px] px-2">评估</th>
                 <th className="w-[76px] px-2">邮件</th>
                 <th className="w-[72px] px-2">状态</th>
-                <th className="w-[132px] px-3 text-right">操作</th>
+                <th className="w-[324px] px-3 text-right">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EEF2F7]">
               {jobs.map((job) => {
+                const jobAnalysisRunning =
+                  runningJobAction?.jobProfileId === job.jobProfileId && runningJobAction.action === "job_analysis";
                 const findCandidatesRunning =
-                  runningJobAction?.jobProfileId === job.jobProfileId &&
-                  runningJobAction.action === "find_candidates";
+                  runningJobAction?.jobProfileId === job.jobProfileId && runningJobAction.action === "find_candidates";
                 const evaluationRunning =
-                  runningJobAction?.jobProfileId === job.jobProfileId &&
-                  runningJobAction.action === "candidate_evaluation";
+                  runningJobAction?.jobProfileId === job.jobProfileId && runningJobAction.action === "candidate_evaluation";
+                const matchRunning = matchingJobId === job.jobProfileId;
+                const jobAnalysisAvailability = availabilityFor("job_analysis");
+                const findCandidatesAvailability = availabilityFor("find_candidates");
+                const evaluationAvailability = availabilityFor("candidate_evaluation");
 
                 return (
                   <tr key={job.jobProfileId} className="h-[52px]">
@@ -106,19 +120,39 @@ export function MultiJobProgressTable({
                       <div className="flex justify-end gap-1.5">
                         <button
                           type="button"
-                          disabled={findCandidatesRunning}
-                          onClick={() => onRunAction?.(job, "find_candidates")}
-                          className="h-[30px] shrink-0 whitespace-nowrap rounded-lg bg-[#2563EB] px-2.5 text-[12px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={jobAnalysisRunning || !jobAnalysisAvailability.enabled}
+                          title={!jobAnalysisAvailability.enabled ? jobAnalysisAvailability.reason : undefined}
+                          onClick={() => onRunAction?.(job, "job_analysis")}
+                          className="h-[30px] shrink-0 whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {findCandidatesRunning ? "运行中" : "运行"}
+                          {jobAnalysisRunning ? "分析中" : "岗位分析"}
                         </button>
                         <button
                           type="button"
-                          disabled={evaluationRunning}
+                          disabled={findCandidatesRunning || !findCandidatesAvailability.enabled}
+                          title={!findCandidatesAvailability.enabled ? findCandidatesAvailability.reason : undefined}
+                          onClick={() => onRunAction?.(job, "find_candidates")}
+                          className="h-[30px] shrink-0 whitespace-nowrap rounded-lg bg-[#2563EB] px-2.5 text-[12px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {findCandidatesRunning ? "搜索中" : "找候选人"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={evaluationRunning || !evaluationAvailability.enabled}
+                          title={!evaluationAvailability.enabled ? evaluationAvailability.reason : undefined}
                           onClick={() => onRunAction?.(job, "candidate_evaluation")}
                           className="h-[30px] shrink-0 whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {evaluationRunning ? "评估中" : "查看"}
+                          {evaluationRunning ? "评估中" : "候选人评估"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={matchRunning || !matchAvailability.enabled}
+                          title={!matchAvailability.enabled ? matchAvailability.reason : undefined}
+                          onClick={() => onRunMatch?.(job)}
+                          className="h-[30px] shrink-0 whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {matchRunning ? "匹配中" : "岗位匹配"}
                         </button>
                       </div>
                     </td>

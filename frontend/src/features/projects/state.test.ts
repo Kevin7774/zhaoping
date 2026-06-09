@@ -5,7 +5,6 @@ import {
   buildCandidateEmailDraft,
   defaultFilterCriteria,
   filterCandidates,
-  markCandidateEmailSent,
   type FilterCriteria,
 } from "./state";
 
@@ -32,12 +31,9 @@ describe("project local state helpers", () => {
     expect(buildCandidateEmailDraft(candidate, job)).toContain(job.roleName);
   });
 
-  it("marks one candidate as sent without mutating the original list", () => {
-    const updated = markCandidateEmailSent(projectMock.candidates, "cand_lin_chen");
+  it("keeps candidates without a backend score visible when no score threshold is selected", () => {
+    const result = filterCandidates([{ ...projectMock.candidates[0], matchScore: null }], defaultFilterCriteria);
 
-    expect(updated.find((candidate) => candidate.candidateId === "cand_lin_chen")?.outreachStatus).toBe("sent");
-    expect(projectMock.candidates.find((candidate) => candidate.candidateId === "cand_lin_chen")?.outreachStatus).toBe(
-      "not_sent",
-    );
+    expect(result).toHaveLength(1);
   });
 });

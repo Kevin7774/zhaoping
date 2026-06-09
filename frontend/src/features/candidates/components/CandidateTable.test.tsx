@@ -37,7 +37,7 @@ describe("CandidateTable", () => {
 
     render(<CandidateTable candidates={[candidate]} onSendEmail={() => undefined} onRunEvaluation={onRunEvaluation} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Agent 评估" }));
+    fireEvent.click(screen.getByRole("button", { name: "候选人评估" }));
 
     expect(onRunEvaluation).toHaveBeenCalledWith(candidate);
     expect(screen.getByText("待触达")).toBeTruthy();
@@ -49,11 +49,28 @@ describe("CandidateTable", () => {
 
     render(<CandidateTable candidates={[candidateWithoutEmail]} onSendEmail={onSendEmail} />);
 
-    const button = screen.getByRole("button", { name: "发邮件" });
+    const button = screen.getByRole("button", { name: "生成草稿" });
     expect(button).toHaveProperty("disabled", true);
     expect(button.getAttribute("title")).toBe("候选人无邮箱");
     fireEvent.click(button);
     expect(onSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("labels email outreach as draft generation instead of real sending", () => {
+    const onSendEmail = vi.fn();
+
+    render(<CandidateTable candidates={[candidate]} onSendEmail={onSendEmail} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    expect(onSendEmail).toHaveBeenCalledWith(candidate);
+    expect(screen.queryByText("已发送")).toBeNull();
+  });
+
+  it("shows a dash when the backend candidate has no match score", () => {
+    render(<CandidateTable candidates={[{ ...candidate, matchScore: null }]} onSendEmail={() => undefined} />);
+
+    expect(screen.getByText("—")).toBeTruthy();
   });
 
   it("loads more candidates when more pages are available", () => {

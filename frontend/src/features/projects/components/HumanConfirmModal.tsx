@@ -6,7 +6,7 @@ type HumanConfirmModalProps = {
   context: string;
   draft: string;
   candidateName?: string;
-  onApprove: (draft: string) => void;
+  onApprove: (draft: string, decision: "approve" | "edit") => void;
   onReject: () => void;
   onClose: () => void;
 };
@@ -86,7 +86,7 @@ export function HumanConfirmModal({
           </button>
           <button
             type="button"
-            onClick={() => onApprove(draftText)}
+            onClick={() => onApprove(draftText, "edit")}
             disabled={busy}
             className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -94,7 +94,7 @@ export function HumanConfirmModal({
           </button>
           <button
             type="button"
-            onClick={() => onApprove(draftText)}
+            onClick={() => onApprove(draftText, "approve")}
             disabled={busy}
             className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-60"
           >

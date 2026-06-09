@@ -7,12 +7,19 @@ from pathlib import Path
 from queue import Empty
 from typing import Any, Literal, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.api.routers.outreach import router as outreach_router
 from app.api.routers.projects import router as projects_router
+from app.api.routers.reports import router as reports_router
+from app.api.routers.segments import router as segments_router
+from app.db.session import get_project_session
+from app.models import Candidate, Job, JobCandidate
 from app.core.env_store import save_env_values
 from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
@@ -59,6 +66,9 @@ app.add_middleware(
 )
 
 app.include_router(projects_router)
+app.include_router(outreach_router)
+app.include_router(segments_router)
+app.include_router(reports_router)
 
 
 @app.middleware("http")
@@ -646,11 +656,48 @@ def ingest_resume(request: IngestRequest) -> dict:
 
 
 @app.post("/jobs/match")
-def match_candidates(request: MatchRequest) -> dict:
+def match_candidates(request: MatchRequest, session: Session = Depends(get_project_session)) -> dict:
     router = get_router()
-    embedding = router.embedding().embed_texts([request.query])
-    results = router.vector_store().search(embedding[0].tolist(), top_k=request.top_k)
-    return {"results": results}
+    try:
+        embedding = router.embedding().embed_texts([request.query])
+        results = router.vector_store().search(embedding[0].tolist(), top_k=request.top_k)
+        return {"results": results, "source": "vector_store"}
+    except Exception as exc:
+        fallback_results = _match_candidates_from_project_database(session, request.query, request.top_k)
+        if fallback_results:
+            return {
+                "results": fallback_results,
+                "source": "project_database_fallback",
+                "provider_error": str(exc),
+            }
+        detail = str(exc) if isinstance(exc, RuntimeError) else f"Job match failed: {exc}"
+        raise HTTPException(status_code=503, detail=detail) from exc
+
+
+def _match_candidates_from_project_database(session: Session, query: str, top_k: int) -> list[dict[str, Any]]:
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+    rows = session.execute(
+        select(JobCandidate, Candidate, Job)
+        .join(Candidate, Candidate.id == JobCandidate.candidate_id)
+        .join(Job, Job.id == JobCandidate.job_id)
+        .where(Job.title.like(f"%{normalized_query}%"))
+        .order_by(JobCandidate.match_score.desc(), JobCandidate.id)
+        .limit(_normalized_limit(top_k))
+    ).all()
+    return [
+        {
+            "candidate_id": candidate.id,
+            "candidate_name": candidate.name,
+            "job_id": job.id,
+            "job_title": job.title,
+            "match_score": job_candidate.match_score,
+            "pipeline_status": job_candidate.pipeline_status,
+            "source": "project_database",
+        }
+        for job_candidate, candidate, job in rows
+    ]
 
 
 @app.get("/review/feedback")

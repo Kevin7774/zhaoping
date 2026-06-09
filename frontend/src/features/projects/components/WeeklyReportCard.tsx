@@ -3,6 +3,8 @@ import type { WeeklyReport } from "../api";
 type WeeklyReportCardProps = {
   report: WeeklyReport;
   onGenerate?: () => void;
+  canGenerate?: boolean;
+  disabledReason?: string;
 };
 
 function hasReport(report: WeeklyReport) {
@@ -34,14 +36,20 @@ function ReportBlock({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-export function WeeklyReportCard({ report, onGenerate }: WeeklyReportCardProps) {
+export function WeeklyReportCard({ report, onGenerate, canGenerate = true, disabledReason }: WeeklyReportCardProps) {
   const reportReady = hasReport(report);
 
   return (
     <aside className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">本周招聘周报</h2>
-        <button type="button" onClick={onGenerate} className="text-[13px] font-medium text-[#2563EB]">
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={!canGenerate}
+          title={!canGenerate ? disabledReason : undefined}
+          className="text-[13px] font-medium text-[#2563EB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
+        >
           生成周报
         </button>
       </div>
