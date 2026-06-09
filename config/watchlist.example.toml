@@ -1,0 +1,16 @@
+[watchlist]
+limit = 6
+service = "due_diligence_federated_search"
+archive = true
+
+[[items]]
+name = "机器人融资"
+query = "机器人 公司 融资 年报 研发人员"
+claim = "机器人公司融资和研发投入变化"
+tags = ["funding", "robotics"]
+
+[[items]]
+name = "VLA 人才"
+query = "VLA 机器人 招聘 薪酬"
+claim = "VLA 人才供给和薪酬变化"
+tags = ["talent", "vla"]

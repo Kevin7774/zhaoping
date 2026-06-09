@@ -67,3 +67,49 @@ CREATE TABLE IF NOT EXISTS agent_evaluation_feedback (
         human_status IN ('pending','approved','rejected_overruled','modified')
     )
 );
+
+CREATE TABLE IF NOT EXISTS tasks (
+    task_id VARCHAR(64) PRIMARY KEY,
+    scenario_id VARCHAR(32) NOT NULL,
+    input TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    team_constraint VARCHAR(256) NOT NULL DEFAULT '真机泛化',
+    aperture_weight DOUBLE PRECISION NOT NULL DEFAULT 0.7,
+    frontend_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+    current_agent VARCHAR(64),
+    current_step INT NOT NULL DEFAULT -1,
+    total_steps INT NOT NULL DEFAULT 0,
+    awaiting JSONB,
+    result JSONB,
+    error TEXT,
+    steps_done JSONB NOT NULL DEFAULT '[]'::jsonb,
+    human_decision JSONB,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_tasks_status CHECK (
+        status IN ('processing','awaiting_human','done','error','cancelled')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS ix_tasks_scenario_id ON tasks (scenario_id);
+CREATE INDEX IF NOT EXISTS ix_tasks_status ON tasks (status);
+
+CREATE TABLE IF NOT EXISTS agent_events (
+    id BIGSERIAL PRIMARY KEY,
+    task_id VARCHAR(64) NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    type VARCHAR(32) NOT NULL,
+    agent_id VARCHAR(64),
+    step_index INT,
+    step_label VARCHAR(128),
+    message TEXT NOT NULL,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status VARCHAR(32),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_agent_events_type CHECK (
+        type IN ('step_start','tool_call','evidence','summary','human_gate','error','cancelled')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS ix_agent_events_task_id ON agent_events (task_id);
+CREATE INDEX IF NOT EXISTS ix_agent_events_type ON agent_events (type);
+CREATE INDEX IF NOT EXISTS ix_agent_events_task_id_id ON agent_events (task_id, id);

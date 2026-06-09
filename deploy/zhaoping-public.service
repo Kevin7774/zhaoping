@@ -1,0 +1,14 @@
+[Unit]
+Description=Zhaoping public Cloudflare quick tunnel watcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lison/Desktop/zhaoping
+ExecStart=/home/lison/Desktop/zhaoping/scripts/watch_public_cloudflare.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

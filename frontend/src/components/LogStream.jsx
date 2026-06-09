@@ -9,24 +9,33 @@ function fmtTime(ts) {
 }
 
 export default function LogStream({ logs }) {
-  const endRef = useRef(null)
+  const bodyRef = useRef(null)
+  const stickToBottomRef = useRef(true)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [logs])
+    const body = bodyRef.current
+    if (!body || !stickToBottomRef.current) return
+    body.scrollTop = body.scrollHeight
+  }, [logs?.length])
+
+  function handleScroll() {
+    const body = bodyRef.current
+    if (!body) return
+    const distanceToBottom = body.scrollHeight - body.scrollTop - body.clientHeight
+    stickToBottomRef.current = distanceToBottom < 24
+  }
 
   return (
     <div className="log-stream">
-      <div className="log-title">实时日志</div>
-      <div className="log-body">
-        {(!logs || logs.length === 0) && <div className="log-empty">暂无日志，运行后实时显示 Agent 执行过程。</div>}
+      <div className="log-title">执行事件</div>
+      <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
+        {(!logs || logs.length === 0) && <div className="log-empty">无执行事件</div>}
         {logs?.map((log, i) => (
           <div className={`log-line level-${log.level || 'info'}`} key={i}>
             <span className="log-ts">{fmtTime(log.ts)}</span>
             <span className="log-msg">{log.message}</span>
           </div>
         ))}
-        <div ref={endRef} />
       </div>
     </div>
   )

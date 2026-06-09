@@ -11,17 +11,27 @@ export default function HumanGate({ awaiting, busy, onConfirm }) {
 
   return (
     <div className="human-gate">
-      <div className="gate-tag">🧑‍⚖️ Human-in-the-loop · 流程已暂停</div>
+      <div className="gate-tag">Human-in-the-loop · 流程已暂停</div>
       <div className="gate-prompt">{awaiting.prompt}</div>
+
+      <div className="gate-primary-actions">
+        <button className="btn btn-approve" disabled={busy} onClick={() => onConfirm('approve', null)}>
+          通过并继续
+        </button>
+      </div>
 
       <div className="gate-draft">
         <div className="gate-draft-title">待确认草稿</div>
         <JsonView value={awaiting.draft} />
       </div>
 
+      <label className="field-label" htmlFor="human-edits">
+        修改意见
+      </label>
       <textarea
+        id="human-edits"
         className="gate-input"
-        placeholder="（可选）填写修改意见 / 人工补充，点“按修改继续”后会并入结果"
+        placeholder="可选：填写人工补充，点击“按修改继续”后并入结果"
         value={edits}
         onChange={(e) => setEdits(e.target.value)}
         rows={3}

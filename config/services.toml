@@ -1,13 +1,18 @@
 [defaults]
 document_parser = "auto_document_parser"
 embedding = "bge_m3_local"
+evaluation = "self_rsi_evaluator"
 vector_store = "qdrant_local"
 ocr = "aliyun_ocr"
-search = "talent_source_catalog"
+search = "due_diligence_federated_search"
 mcp = "disabled_mcp"
 structured_output = "outlines_structured_output"
 database = "disabled_database"
-llm = "token_plan_anthropic"
+llm = "openrouter_auto_reasoning"
+email_discovery = "hunter_email_finder"
+email_verification = "zerobounce_email_validation"
+email_delivery = "postmark_compliant_email"
+scraping = "firecrawl_scrape"
 
 [services.auto_document_parser]
 type = "document_parser"
@@ -33,6 +38,13 @@ batch_size = 8
 vector_size = 1024
 show_progress_bar = true
 description = "Local multilingual embedding model, optimized for the 4090 MVP."
+
+[services.self_rsi_evaluator]
+type = "evaluation"
+provider = "self_rsi"
+suite_id = "candidate_evaluation_core"
+baseline_threshold = 0.8
+description = "Deterministic self-RSI evaluator for evaluation, test, feedback, and iteration loops."
 
 [services.qdrant_local]
 type = "vector_store"
@@ -69,6 +81,633 @@ provider = "source_catalog"
 skill_name = "search_data_sources"
 description = "Local search source catalog for recruiting, company, academic, patent, funding, and conference intelligence."
 
+[services.agent_reach_social_search]
+type = "search"
+provider = "agent_reach_social"
+tool_name = "Agent-Reach"
+source_key = "agent_reach_social_search"
+display_name_zh = "Agent-Reach 社媒搜索"
+source_type = "social_platform_search"
+project_url = "https://github.com/Panniantong/Agent-Reach"
+supported_platforms = ["微博", "B站", "V2EX", "知乎", "掘金", "CSDN", "SegmentFault", "X/Twitter", "Reddit", "YouTube", "小红书", "抖音", "微信公众号"]
+required_commands = ["agent-reach", "mcporter", "opencli"]
+install_hint = "pip install agent-reach && agent-reach install；npm install -g @jackwener/opencli"
+manual_setup_required = false
+execute_enabled = true
+timeout_seconds = 60
+purpose = "External CLI/MCP scaffold for social and niche platform search/read workflows."
+access_pattern = "Install Agent-Reach and use only platform-compliant public pages, official APIs, user-authorized login state, or user-provided exports."
+risk_level = "high"
+freshness = "daily"
+setup_steps = ["Install Agent-Reach and OpenCLI.", "Run platform-specific login/setup only with user authorization.", "Keep per-platform commands configurable and review platform terms before scheduled runs."]
+guardrails = ["不绕过平台登录、付费墙、robots.txt、访问控制或服务条款。", "社媒内容只能作为线索，关键结论必须回看原文并交叉验证。", "候选人相关信息仅限公开职业信息和岗位相关能力证据。"]
+description = "Executable Agent-Reach/OpenCLI adapter for social platform search/read workflows across 微博、B站、V2EX、知乎、掘金、CSDN、SegmentFault and retained social channels."
+
+[services.agent_reach_social_search.platform_commands.weibo]
+name_zh = "微博"
+command = "mcporter"
+args = ["call", 'weibo.search_content(keyword: {query_json}, limit: {limit})']
+
+[services.agent_reach_social_search.platform_commands.bilibili]
+name_zh = "B站"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:bilibili.com/video {query_mcporter}", numResults: {limit})']
+
+[services.agent_reach_social_search.platform_commands.v2ex]
+name_zh = "V2EX"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:v2ex.com/t {query_mcporter}", numResults: {limit})']
+
+[services.agent_reach_social_search.platform_commands.zhihu]
+name_zh = "知乎"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:zhihu.com {query_mcporter}", numResults: {limit})']
+
+[services.agent_reach_social_search.platform_commands.juejin]
+name_zh = "掘金"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:juejin.cn {query_mcporter}", numResults: {limit})']
+
+[services.agent_reach_social_search.platform_commands.csdn]
+name_zh = "CSDN"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:blog.csdn.net {query_mcporter}", numResults: {limit})']
+
+[services.agent_reach_social_search.platform_commands.segmentfault]
+name_zh = "SegmentFault"
+command = "mcporter"
+args = ["call", 'exa.web_search_exa(query: "site:segmentfault.com {query_mcporter}", numResults: {limit})']
+
+[services.scrapling_adaptive_scrape]
+type = "search"
+provider = "external_search_tool"
+tool_name = "Scrapling"
+source_key = "scrapling_adaptive_scrape"
+display_name_zh = "Scrapling 自适应抓取"
+source_type = "adaptive_web_scraping"
+project_url = "https://github.com/D4Vinci/Scrapling"
+supported_platforms = ["Public web pages", "Rendered pages", "Structured extraction"]
+install_hint = 'pip install "scrapling[fetchers]" && scrapling install'
+required_python_module = "scrapling"
+manual_setup_required = false
+execute_enabled = false
+purpose = "Adaptive web scraping and structured extraction for public or authorized pages after compliance review."
+access_pattern = "Use Scrapling only for public or explicitly authorized pages; obey robots.txt, crawl delays, platform terms, and data minimization."
+risk_level = "high"
+freshness = "daily"
+setup_steps = ["Install Scrapling with fetcher extras.", "Install browser dependencies with scrapling install.", "Define per-site selectors, rate limits, robots handling, and data retention before enabling execution."]
+guardrails = ["不把反爬能力用于绕过访问控制、付费墙、登录限制或平台条款。", "批量抓取必须设置速率限制、域名边界、数据最小化和失败恢复。", "网页改版后的自适应定位结果必须抽样复核。"]
+description = "External Scrapling adapter for adaptive public/authorized web extraction planning."
+
+[services.browser_use_agent_search]
+type = "search"
+provider = "external_search_tool"
+tool_name = "Browser-use"
+source_key = "browser_use_agent_search"
+display_name_zh = "Browser-use 浏览器操作"
+source_type = "browser_automation"
+project_url = "https://github.com/browser-use/browser-use"
+supported_platforms = ["Logged-in websites", "Forms", "Back-office pages", "Public web apps"]
+install_hint = "uv add browser-use && uvx browser-use install"
+required_python_module = "browser_use"
+manual_setup_required = true
+execute_enabled = false
+purpose = "LLM-driven browser automation for multi-step web tasks and authorized logged-in pages."
+access_pattern = "Use Browser-use only with explicit user authorization, domain allowlists, least-privilege browser profiles, and human review for sensitive actions."
+risk_level = "high"
+freshness = "on_demand"
+setup_steps = ["Install Browser-use and browser dependencies.", "Configure an approved LLM provider or Browser Use Cloud key outside source control.", "Set domain allowlists and decide whether existing Chrome login state may be reused."]
+guardrails = ["涉及登录态、财务、个人、工作关键系统或后台操作时必须人工确认。", "不要让模型读取或提交不必要的敏感字段。", "执行前限制域名、动作范围、超时和截图/日志保留策略。"]
+description = "External Browser-use adapter for authorized browser automation and logged-in page operation planning."
+
+[services.claude_chrome_supervised_search]
+type = "search"
+provider = "external_search_tool"
+tool_name = "Claude in Chrome"
+source_key = "claude_chrome_supervised_search"
+display_name_zh = "Claude in Chrome 监督操作"
+source_type = "supervised_browser_operation"
+project_url = "https://claude.ai/chrome"
+supported_platforms = ["User-supervised Chrome tabs", "Complex authentication pages", "Manual review workflows"]
+install_hint = "Install the official Claude in Chrome extension from claude.ai/chrome."
+manual_setup_required = true
+execute_enabled = false
+purpose = "Human-supervised browser operation path for complex authentication or workflows the user must watch."
+access_pattern = "Use the official Claude in Chrome extension only in the user's real browser with explicit site permission and user supervision."
+risk_level = "high"
+freshness = "on_demand"
+setup_steps = ["Install the official extension.", "Grant permissions only to trusted sites.", "Keep the user watching for sensitive clicks, form submissions, downloads, and account actions."]
+guardrails = ["这不是后端可自动调用的 API；必须由用户在真实 Chrome 中监督。", "高风险网站、财务、个人、工作关键动作必须人工确认。", "不要采集或回传不必要的账号、Cookie、密码或私密内容。"]
+description = "Manual supervised browser-operation entry for Claude in Chrome workflows."
+
+[services.web_access_cdp_search]
+type = "search"
+provider = "external_search_tool"
+tool_name = "Web-access"
+source_key = "web_access_cdp_search"
+display_name_zh = "Web-access Chrome 联网"
+source_type = "chrome_cdp_web_access"
+project_url = "https://github.com/eze-is/web-access"
+supported_platforms = ["WebSearch", "WebFetch", "curl", "Chrome CDP", "Local bookmarks/history"]
+install_hint = "pnpm dlx skills add eze-is/web-access -g --all --copy 或 npx skills add eze-is/web-access"
+required_command = "node"
+required_skill_path = "~/.agents/skills/web-access/SKILL.md"
+manual_setup_required = true
+execute_enabled = false
+purpose = "SKILL-based web access path that can route between search, fetch, curl, and Chrome CDP with user-authorized browser state."
+access_pattern = "Install the skill, enable Chrome remote debugging only when approved, and restrict CDP access to user-authorized browsing contexts."
+risk_level = "high"
+freshness = "daily"
+setup_steps = ["Install the web-access skill.", "Enable Chrome remote debugging only on trusted local machines.", "Review which bookmarks, history, tabs, and logged-in pages can be used."]
+guardrails = ["CDP 接管真实浏览器前必须获得用户授权。", "不要读取无关书签、历史、标签页、Cookie 或私密页面。", "公开搜索优先，只有公开搜索不足且用户授权时才使用登录态浏览器。"]
+description = "External Web-access skill adapter for search/fetch/curl/CDP planning."
+
+[services.brave_web_search]
+type = "search"
+provider = "brave_web"
+api_key_env = "BRAVE_SEARCH_API_KEY"
+endpoint = "https://api.search.brave.com/res/v1/web/search"
+country = "US"
+search_lang = "en"
+ui_lang = "en-US"
+safesearch = "moderate"
+timeout_seconds = 20
+description = "Live Brave Web Search API provider for open-web evidence retrieval."
+
+[services.github_repositories]
+type = "search"
+provider = "github_repositories"
+endpoint = "https://api.github.com/search/repositories"
+token_env = "GITHUB_TOKEN"
+timeout_seconds = 20
+description = "Live GitHub repository search provider for open-source adoption, stars, forks, topics, maintainers, and code ecosystem signals."
+
+[services.huggingface_models]
+type = "search"
+provider = "huggingface_models"
+endpoint = "https://huggingface.co/api/models"
+token_env = "HF_TOKEN"
+timeout_seconds = 20
+description = "Live Hugging Face model search provider for model releases, downloads, likes, tags, authors, and ML ecosystem signals."
+
+[services.pdl_people_search]
+type = "search"
+provider = "people_data_labs_people"
+endpoint = "https://api.peopledatalabs.com/v5/person/search"
+enrich_endpoint = "https://api.peopledatalabs.com/v5/person/enrich"
+api_key_env = "PDL_API_KEY"
+dataset = "all"
+timeout_seconds = 30
+description = "People Data Labs person search/enrichment provider for candidate identity, company, work-history, social-link, and public contact fields."
+
+[services.x_recent_posts_search]
+type = "search"
+provider = "x_recent_posts"
+endpoint = "https://api.x.com/2/tweets/search/recent"
+bearer_token_env = "X_BEARER_TOKEN"
+sort_order = "recency"
+timeout_seconds = 20
+description = "X API v2 recent Posts search provider for KOL, keyword, community, and market-dynamic discovery."
+
+[services.crustdata_signal_search]
+type = "search"
+provider = "crustdata_signals"
+endpoint = "https://api.crustdata.com/web/search/live"
+api_key_env = "CRUSTDATA_API_KEY"
+api_version = "2025-11-01"
+sources = ["web", "news", "social"]
+location = "US"
+timeout_seconds = 30
+description = "Crustdata live web/news/social signal provider for fresh people, company, hiring, funding, and market-change intelligence."
+
+[services.companies_house_search]
+type = "search"
+provider = "companies_house"
+endpoint = "https://api.company-information.service.gov.uk/search/companies"
+api_key_env = "COMPANIES_HOUSE_API_KEY"
+timeout_seconds = 20
+description = "Live UK Companies House company search provider for legal entity, status, company number, creation date, type, and registered address signals."
+
+[services.courtlistener_search]
+type = "search"
+provider = "courtlistener"
+endpoint = "https://www.courtlistener.com/api/rest/v4/search/"
+token_env = "COURTLISTENER_TOKEN"
+timeout_seconds = 20
+description = "Live CourtListener legal search provider for U.S. opinions, dockets, case names, courts, citations, and litigation risk signals."
+
+[services.openalex_works_search]
+type = "search"
+provider = "openalex_works"
+endpoint = "https://api.openalex.org/works"
+timeout_seconds = 20
+description = "Live OpenAlex Works API provider for academic papers, authors, citations, venues, and technical evidence."
+
+[services.openalex_authors_search]
+type = "search"
+provider = "openalex_authors"
+endpoint = "https://api.openalex.org/authors"
+timeout_seconds = 20
+description = "Live OpenAlex Authors API provider for author identity, affiliations, citation counts, works, and research topics."
+
+[services.openalex_institutions_search]
+type = "search"
+provider = "openalex_institutions"
+endpoint = "https://api.openalex.org/institutions"
+timeout_seconds = 20
+description = "Live OpenAlex Institutions API provider for schools, labs, affiliations, country, works, citations, and homepage signals."
+
+[services.semantic_scholar_papers_search]
+type = "search"
+provider = "semantic_scholar_papers"
+endpoint = "https://api.semanticscholar.org/graph/v1/paper/search"
+fields = "title,year,authors,url,abstract,citationCount,venue,publicationTypes,externalIds,openAccessPdf"
+timeout_seconds = 20
+description = "Live Semantic Scholar paper search provider for papers, authors, venues, abstracts, citations, and open-access links."
+
+[services.semantic_scholar_authors_search]
+type = "search"
+provider = "semantic_scholar_authors"
+endpoint = "https://api.semanticscholar.org/graph/v1/author/search"
+fields = "name,url,paperCount,citationCount,hIndex,aliases,affiliations"
+timeout_seconds = 20
+description = "Live Semantic Scholar author search provider for researchers, aliases, affiliations, h-index, paper count, and citation signals."
+
+[services.education_competition_monitor]
+type = "search"
+provider = "education_competition_monitor"
+targets = [
+  { category = "university_lab", name = "清华大学智能产业研究院 / AIR", url = "https://air.tsinghua.edu.cn/", keywords = ["清华", "Tsinghua", "AIR", "机器人", "具身智能", "实验室", "学生"], purpose = "监控清华 AI/机器人方向团队、论文、成员和公开项目动态。" },
+  { category = "university_lab", name = "北京大学人工智能学院", url = "https://www.ai.pku.edu.cn/", keywords = ["北大", "PKU", "人工智能", "机器人", "实验室", "学生"], purpose = "监控北大 AI 学院实验室、导师、学生和学术动态。" },
+  { category = "university_lab", name = "上海交通大学", url = "https://www.sjtu.edu.cn/", keywords = ["上交", "SJTU", "机器人", "自动化", "实验室", "学生"], purpose = "监控上交机器人、自动化、具身智能相关院系和实验室线索。" },
+  { category = "university_lab", name = "浙江大学", url = "https://www.zju.edu.cn/", keywords = ["浙大", "ZJU", "机器人", "控制", "实验室", "学生"], purpose = "监控浙大机器人、控制、视觉和具身智能相关团队动态。" },
+  { category = "competition", name = "阿里云天池竞赛", url = "https://tianchi.aliyun.com/", keywords = ["天池", "竞赛", "算法", "数据", "获奖", "排行榜"], purpose = "监控算法竞赛、获奖团队、排行榜和参赛项目线索。" },
+  { category = "competition", name = "DataFountain 竞赛", url = "https://www.datafountain.cn/competitions", keywords = ["DataFountain", "竞赛", "CCF", "BDCI", "获奖", "排行榜"], purpose = "监控数据智能竞赛、BDCI/CCF 相关赛题和获奖名单。" },
+  { category = "competition", name = "CCF 大数据与计算智能大赛", url = "https://www.datafountain.cn/special/BDCI", keywords = ["CCF", "BDCI", "大数据", "计算智能", "获奖"], purpose = "监控 CCF BDCI 赛题、团队和获奖信息。" },
+  { category = "competition", name = "ICPC Global", url = "https://icpc.global/", keywords = ["ICPC", "ACM", "程序设计", "竞赛", "rank", "team"], purpose = "监控国际大学生程序设计竞赛队伍、成绩和高潜算法人才。" },
+  { category = "competition", name = "CCPC 中国大学生程序设计竞赛", url = "https://ccpc.io/", keywords = ["CCPC", "程序设计", "竞赛", "队伍", "获奖"], purpose = "监控国内程序设计竞赛队伍和获奖线索。" },
+  { category = "competition", name = "蓝桥杯大赛", url = "https://dasai.lanqiao.cn/", keywords = ["蓝桥杯", "算法", "软件", "竞赛", "获奖"], purpose = "监控蓝桥杯软件算法方向获奖和参赛线索。" },
+  { category = "competition", name = "Kaggle Competitions", url = "https://www.kaggle.com/competitions", keywords = ["Kaggle", "competition", "leaderboard", "robotics", "AI"], purpose = "监控 Kaggle 竞赛、排行榜、Notebook 和团队公开资料。" },
+]
+description = "Curated school/lab/competition monitoring targets for public university pages, lab member pages, Tianchi, DataFountain, CCF, ICPC/CCPC, Lanqiao, and Kaggle."
+
+[services.sec_edgar_company_filings]
+type = "search"
+provider = "sec_edgar_company_filings"
+company_tickers_url = "https://www.sec.gov/files/company_tickers.json"
+submissions_url_template = "https://data.sec.gov/submissions/CIK{cik}.json"
+archives_url_template = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{primary_document}"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 20
+description = "Live SEC EDGAR provider for public-company ticker/CIK lookup and recent filing metadata."
+
+[services.sec_company_facts]
+type = "search"
+provider = "sec_company_facts"
+company_tickers_url = "https://www.sec.gov/files/company_tickers.json"
+companyfacts_url_template = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 20
+description = "Live SEC Company Facts provider for XBRL revenue, income, assets, liabilities, cash, R&D, EPS, and other financial fact signals."
+
+[services.sec_insider_transactions]
+type = "search"
+provider = "sec_insider_transactions"
+company_tickers_url = "https://www.sec.gov/files/company_tickers.json"
+submissions_url_template = "https://data.sec.gov/submissions/CIK{cik}.json"
+archives_url_template = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{primary_document}"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 20
+description = "Live SEC ownership disclosure provider focused on Forms 3, 4, and 5 for insider transaction and governance monitoring."
+
+[services.sec_ownership_activism]
+type = "search"
+provider = "sec_ownership_activism"
+company_tickers_url = "https://www.sec.gov/files/company_tickers.json"
+submissions_url_template = "https://data.sec.gov/submissions/CIK{cik}.json"
+archives_url_template = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{primary_document}"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 20
+description = "Live SEC ownership and control disclosure provider focused on Schedule 13D/13G, 13F, and Form 144 filer monitoring."
+
+[services.sec_investment_adviser_reports]
+type = "search"
+provider = "sec_investment_adviser_reports"
+report_url = "https://www.sec.gov/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers/ia060126.zip"
+landing_page_url = "https://www.sec.gov/data-research/sec-markets-data/information-about-registered-investment-advisers-exempt-reporting-advisers"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 30
+description = "Live SEC Investment Adviser Information Report provider for registered investment advisers and exempt reporting advisers using official Form ADV subset data."
+
+[services.fdic_bankfind_institutions]
+type = "search"
+provider = "fdic_bankfind_institutions"
+endpoint = "https://api.fdic.gov/banks/institutions"
+timeout_seconds = 20
+description = "Live FDIC BankFind provider for insured depository institution identity, FDIC certificate, activity status, regulator, assets, deposits, profitability, locations, and website signals."
+
+[services.federal_register_documents]
+type = "search"
+provider = "federal_register_documents"
+endpoint = "https://www.federalregister.gov/api/v1/documents.json"
+timeout_seconds = 20
+description = "Live Federal Register provider for regulatory rules, proposed rules, notices, agencies, citations, and policy risk signals."
+
+[services.cpsc_recalls]
+type = "search"
+provider = "cpsc_recalls"
+endpoint = "https://www.saferproducts.gov/RestWebServices/Recall"
+timeout_seconds = 20
+description = "Live CPSC recall provider for consumer product safety recalls, hazards, remedies, affected products, and company role signals."
+
+[services.fda_enforcement_recalls]
+type = "search"
+provider = "fda_enforcement_recalls"
+endpoints = { device = "https://api.fda.gov/device/enforcement.json", food = "https://api.fda.gov/food/enforcement.json", drug = "https://api.fda.gov/drug/enforcement.json" }
+timeout_seconds = 20
+description = "Live openFDA enforcement report provider for device, food, and drug recalls, classifications, recalling firms, reasons, distribution, and status signals."
+
+[services.fda_device_510k]
+type = "search"
+provider = "fda_device_510k"
+endpoint = "https://api.fda.gov/device/510k.json"
+timeout_seconds = 20
+description = "Live openFDA Device 510(k) Clearances provider for medical device premarket notification, applicant, product code, decision, receipt, and regulatory classification signals."
+
+[services.fda_device_events]
+type = "search"
+provider = "fda_device_events"
+endpoint = "https://api.fda.gov/device/event.json"
+timeout_seconds = 20
+description = "Live openFDA Device Adverse Events provider for MAUDE medical device reports, event type, device details, product codes, report dates, and postmarket safety signals."
+
+[services.fda_device_classification]
+type = "search"
+provider = "fda_device_classification"
+endpoint = "https://api.fda.gov/device/classification.json"
+timeout_seconds = 20
+description = "Live openFDA Device Classification provider for product codes, device names, device class, regulation number, medical specialty, submission type, and review panel signals."
+
+[services.fda_device_registration_listing]
+type = "search"
+provider = "fda_device_registration_listing"
+endpoint = "https://api.fda.gov/device/registrationlisting.json"
+timeout_seconds = 20
+description = "Live openFDA Device Registration and Listing provider for establishment registration, FEI, owner/operator, facility location, establishment type, product codes, and listed device signals."
+
+[services.cfpb_consumer_complaints]
+type = "search"
+provider = "cfpb_consumer_complaints"
+endpoint = "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/"
+timeout_seconds = 20
+description = "Live CFPB Consumer Complaint Database provider for financial product complaints, company responses, timely response, dispute, issue, product, and geography signals."
+
+[services.nhtsa_recalls]
+type = "search"
+provider = "nhtsa_recalls"
+endpoint = "https://api.nhtsa.gov/recalls/recallsByVehicle"
+timeout_seconds = 20
+description = "Live NHTSA vehicle recall provider for model-year make/model safety recall campaigns, components, consequences, remedies, and manufacturers."
+
+[services.epa_echo_facilities]
+type = "search"
+provider = "epa_echo_facilities"
+endpoint = "https://echodata.epa.gov/echo/echo_rest_services.get_facilities"
+timeout_seconds = 20
+description = "Live EPA ECHO facility compliance provider for regulated facility identity, program IDs, location, noncompliance, formal action, and penalty signals."
+
+[services.clinicaltrials_studies]
+type = "search"
+provider = "clinicaltrials_studies"
+endpoint = "https://clinicaltrials.gov/api/v2/studies"
+timeout_seconds = 20
+description = "Live ClinicalTrials.gov API v2 provider for clinical study registration, sponsors, status, phases, interventions, outcomes, enrollment, dates, and locations."
+
+[services.cms_openpayments]
+type = "search"
+provider = "cms_openpayments"
+metastore_endpoint = "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items"
+datastore_endpoint_template = "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0"
+dataset_limit = 100
+timeout_seconds = 20
+description = "Live CMS Open Payments provider for drug and medical device company payments, transfers of value, research payments, ownership interests, covered recipients, and teaching hospital relationship signals."
+
+[services.census_international_trade]
+type = "search"
+provider = "census_international_trade"
+imports_endpoint = "https://api.census.gov/data/timeseries/intltrade/imports/hs"
+exports_endpoint = "https://api.census.gov/data/timeseries/intltrade/exports/hs"
+api_key_env = "CENSUS_API_KEY"
+timeout_seconds = 30
+description = "Live U.S. Census International Trade provider for import/export country, commodity, monthly value, and year-to-date trade flow signals."
+
+[services.fred_series_search]
+type = "search"
+provider = "fred_series_search"
+search_endpoint = "https://api.stlouisfed.org/fred/series/search"
+observations_endpoint = "https://api.stlouisfed.org/fred/series/observations"
+api_key_env = "FRED_API_KEY"
+timeout_seconds = 20
+description = "Live FRED provider for macroeconomic time series discovery and latest observations, including rates, inflation, labor, credit spreads, market stress, and yield curve signals."
+
+[services.gdelt_doc_news]
+type = "search"
+provider = "gdelt_doc_news"
+endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
+timespan = "7d"
+timeout_seconds = 20
+description = "Live GDELT DOC provider for global news article monitoring and market event discovery."
+
+[services.gnews_funding_news]
+type = "search"
+provider = "gnews_funding_news"
+endpoint = "https://gnews.io/api/v4/search"
+api_key_env = "GNEWS_API_KEY"
+lang = "en"
+timeout_seconds = 20
+description = "Live GNews provider for funding, financing, acquisition, merger, investment, and venture news event discovery."
+
+[services.sec_enforcement_search]
+type = "search"
+provider = "sec_enforcement"
+endpoint = "https://www.sec.gov/enforcement-litigation/litigation-releases"
+user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
+timeout_seconds = 20
+description = "Live SEC website search provider focused on enforcement, litigation releases, penalties, settled charges, fraud, and regulatory action signals."
+
+[services.usajobs_search]
+type = "search"
+provider = "usajobs"
+endpoint = "https://data.usajobs.gov/api/Search"
+api_key_env = "USAJOBS_API_KEY"
+user_agent_env = "USAJOBS_USER_AGENT"
+timeout_seconds = 20
+description = "Live USAJOBS search provider for U.S. federal job postings, salary ranges, agencies, locations, and labor demand signals."
+
+[services.usaspending_awards]
+type = "search"
+provider = "usaspending_awards"
+endpoint = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
+fiscal_years = [2024, 2025, 2026]
+timeout_seconds = 30
+description = "Live USAspending provider for U.S. federal contracts, grants, recipients, agencies, and award amounts."
+
+[services.sam_gov_opportunities]
+type = "search"
+provider = "sam_gov_opportunities"
+endpoint = "https://api.sam.gov/opportunities/v2/search"
+api_key_env = "SAM_GOV_API_KEY"
+posted_from = "01/01/2025"
+posted_to = "12/31/2026"
+timeout_seconds = 30
+description = "Live SAM.gov Contract Opportunities provider for solicitations, pre-solicitations, sources sought, sole-source/special notices, set-asides, NAICS/PSC, deadlines, contacts, and forward demand signals."
+
+[services.grants_gov_opportunities]
+type = "search"
+provider = "grants_gov_opportunities"
+endpoint = "https://api.grants.gov/v1/api/search2"
+opportunity_statuses = "forecasted|posted"
+timeout_seconds = 30
+description = "Live Grants.gov provider for forecasted and posted federal grant opportunities, agency, opportunity number, ALN/CFDA, open/close dates, and non-dilutive funding pipeline signals."
+
+[services.patentsview_patents]
+type = "search"
+provider = "patentsview_patents"
+endpoint = "https://search.patentsview.org/api/v1/patent/"
+timeout_seconds = 30
+description = "Live PatentsView provider for U.S. patent titles, abstracts, assignees, inventors, and grant dates."
+
+[services.ofac_sanctions_lists]
+type = "search"
+provider = "ofac_sanctions_lists"
+sdn_xml_url = "https://www.treasury.gov/ofac/downloads/sdn.xml"
+consolidated_xml_url = "https://www.treasury.gov/ofac/downloads/consolidated/consolidated.xml"
+timeout_seconds = 30
+description = "Live OFAC sanctions list provider using official SDN and consolidated XML downloads for compliance screening."
+
+[services.due_diligence_federated_search]
+type = "search"
+provider = "due_diligence_federated"
+source_catalog_service = "talent_source_catalog"
+web_search_service = "brave_web_search"
+live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "census_international_trade", "fred_series_search", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usajobs_search", "usaspending_awards", "sam_gov_opportunities", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_repositories", "huggingface_models", "pdl_people_search", "x_recent_posts_search", "crustdata_signal_search", "companies_house_search", "courtlistener_search", "agent_reach_social_search", "education_competition_monitor", "scrapling_adaptive_scrape", "browser_use_agent_search", "claude_chrome_supervised_search", "web_access_cdp_search"]
+web_enabled_by_default = false
+live_enabled_by_default = false
+description = "Compliance-first federated intelligence search for financial due diligence, primary/secondary market research, recruiting, technical evidence, and source coverage planning."
+
+[services.hunter_email_finder]
+type = "email_discovery"
+provider = "hunter_email_finder"
+endpoint = "https://api.hunter.io/v2/email-finder"
+api_key_env = "HUNTER_API_KEY"
+timeout_seconds = 20
+description = "Hunter email finder provider for work-email discovery from name plus company domain or company name."
+
+[services.zerobounce_email_validation]
+type = "email_verification"
+provider = "zerobounce_email_validation"
+endpoint = "https://api.zerobounce.net/v2/validate"
+api_key_env = "ZEROBOUNCE_API_KEY"
+timeout_seconds = 30
+description = "ZeroBounce real-time email validation provider for deliverability and sender-reputation protection."
+
+[services.neverbounce_email_validation]
+type = "email_verification"
+provider = "neverbounce_email_validation"
+endpoint = "https://api.neverbounce.com/v4.2/single/check"
+api_key_env = "NEVERBOUNCE_API_KEY"
+timeout_seconds = 30
+description = "NeverBounce single-email verification provider for secondary deliverability checks."
+
+[services.postmark_compliant_email]
+type = "email_delivery"
+provider = "postmark_compliant_email"
+endpoint = "https://api.postmarkapp.com/email"
+server_token_env = "POSTMARK_SERVER_TOKEN"
+from_email_env = "RECRUITING_CONTACT_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/outreach/suppression_list.jsonl"
+audit_log_path = "data/outreach/email_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+timeout_seconds = 20
+description = "Postmark email sender wrapped with manual approval, unsubscribe, suppression-list, daily-limit, and audit-log guardrails."
+
+[services.sendgrid_compliant_email]
+type = "email_delivery"
+provider = "sendgrid_compliant_email"
+endpoint = "https://api.sendgrid.com/v3/mail/send"
+api_key_env = "SENDGRID_API_KEY"
+from_email_env = "RECRUITING_CONTACT_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/outreach/suppression_list.jsonl"
+audit_log_path = "data/outreach/email_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+timeout_seconds = 20
+description = "SendGrid email sender wrapped with manual approval, unsubscribe, suppression-list, daily-limit, and audit-log guardrails."
+
+[services.firecrawl_scrape]
+type = "scraping"
+provider = "firecrawl_scrape"
+endpoint = "https://api.firecrawl.dev/v2/scrape"
+api_key_env = "FIRECRAWL_API_KEY"
+timeout_seconds = 60
+description = "Firecrawl scrape provider for converting public or authorized web pages into Markdown and structured metadata."
+
+[services.opencli_crawl_scrape]
+type = "scraping"
+provider = "opencli_crawl"
+required_command = "opencli"
+command_args = ["web", "read", "--url", "{url}", "-f", "json"]
+timeout_seconds = 60
+manual_setup_required = false
+purpose = "Local OpenCLI crawl/scrape adapter for public or authorized pages when the CLI is installed."
+access_pattern = "Run opencli only against public or explicitly authorized URLs; obey robots.txt, platform terms, rate limits, and data minimization."
+risk_level = "high"
+freshness = "on_demand"
+description = "OpenCLI local web read provider for converting public or authorized URLs into Markdown/HTML/metadata through a local command."
+
+[services.public_web_snapshot_monitor]
+type = "scraping"
+provider = "public_web_snapshot_monitor"
+primary_scraping_service = "firecrawl_scrape"
+browser_session_service = "browserbase_session"
+snapshot_dir = "data/snapshots/public_web"
+target_groups = { schools = ["https://air.tsinghua.edu.cn/", "https://www.ai.pku.edu.cn/", "https://www.sjtu.edu.cn/", "https://www.zju.edu.cn/"], competitions = ["https://tianchi.aliyun.com/", "https://www.datafountain.cn/competitions", "https://www.datafountain.cn/special/BDCI", "https://icpc.global/", "https://ccpc.io/", "https://dasai.lanqiao.cn/", "https://www.kaggle.com/competitions"] }
+manual_setup_required = false
+purpose = "Run scheduled public-web snapshots for school, lab, competition, careers, and forum pages through Firecrawl with optional Browserbase session metadata."
+access_pattern = "Only snapshot public or explicitly authorized URLs; respect robots.txt, site terms, rate limits, domain allowlists, and data minimization."
+risk_level = "high"
+freshness = "daily"
+description = "Public web snapshot monitor for recurring Firecrawl/Browserbase-backed captures and manifest files."
+
+[services.apify_actor_run]
+type = "scraping"
+provider = "apify_actor_run"
+endpoint_template = "https://api.apify.com/v2/acts/{actor_id}/runs"
+api_token_env = "APIFY_API_TOKEN"
+timeout_seconds = 60
+description = "Apify Actor run provider for compliant actor-based scraping jobs."
+
+[services.brightdata_web_unlocker]
+type = "scraping"
+provider = "brightdata_web_unlocker"
+endpoint = "https://api.brightdata.com/request"
+api_key_env = "BRIGHTDATA_API_KEY"
+zone_env = "BRIGHTDATA_ZONE"
+timeout_seconds = 60
+description = "Bright Data Web Unlocker provider for approved public-web access where normal retrieval is blocked."
+
+[services.browserbase_session]
+type = "scraping"
+provider = "browserbase_session"
+endpoint = "https://api.browserbase.com/v1/sessions"
+api_key_env = "BROWSERBASE_API_KEY"
+project_id_env = "BROWSERBASE_PROJECT_ID"
+timeout_seconds = 30
+description = "Browserbase session provider for managed cloud browser sessions used by approved browser automation."
+
 [services.disabled_mcp]
 type = "mcp"
 provider = "disabled"
@@ -77,7 +716,7 @@ description = "Placeholder. Configure MCP servers/tools before use."
 [services.outlines_structured_output]
 type = "structured_output"
 provider = "outlines"
-model_service = "token_plan_anthropic"
+model_service = "openrouter_auto_reasoning"
 description = "Structured generation facade using Outlines. Requires a configured model service before live generation."
 
 [services.token_plan_anthropic]
@@ -89,6 +728,37 @@ model = "mimo-v2.5-pro"
 anthropic_version = "2023-06-01"
 timeout_seconds = 60
 description = "Anthropic-compatible token-plan endpoint."
+
+[services.openrouter_auto_reasoning]
+type = "llm"
+provider = "openrouter_chat"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+model = "openrouter/auto"
+timeout_seconds = 90
+app_title = "Zhaoping Robot Talent Agent"
+description = "OpenRouter auto-routed reasoning model for capability calibration, evidence synthesis, and planning."
+
+[services.openrouter_online_research]
+type = "llm"
+provider = "openrouter_chat"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+model = "openrouter/auto"
+timeout_seconds = 120
+app_title = "Zhaoping Robot Talent Agent"
+tools = [{ type = "openrouter:web_search" }]
+description = "OpenRouter reasoning with server-side web search tool for exploratory research. Use deliberately because it may add search cost."
+
+[services.openrouter_evidence_judge]
+type = "llm"
+provider = "openrouter_chat"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+model = "openrouter/auto"
+timeout_seconds = 90
+app_title = "Zhaoping Robot Talent Agent"
+description = "OpenRouter judge for cross-source evidence review and capability upgrade recommendations."
 
 [services.disabled_llm]
 type = "llm"
@@ -114,6 +784,21 @@ description = "Six cross-disciplinary team profiles for embodied AI commercializ
 module = "app.skills.tech_space"
 entrypoint = "CAPABILITY_STANDARDS"
 description = "Canonical capability IDs, keywords, and evaluation nodes."
+
+[skills.robot_capability_governance]
+module = "app.skills.tech_space"
+entrypoint = "STATIC_DYNAMIC_DECISION_TABLE"
+description = "Static/dynamic ownership, verification, and memory policy for capability intelligence."
+
+[skills.robot_capability_traceability]
+module = "app.skills.tech_space"
+entrypoint = "CAPABILITY_TRACEABILITY_OVERRIDES"
+description = "Capability route breakdowns, evidence requirements, open assumptions, and traceability overrides."
+
+[skills.evidence_record_schema]
+module = "app.skills.tech_space"
+entrypoint = "EVIDENCE_RECORD_SCHEMA"
+description = "Required fields and statuses for traceable search, academic, industry, candidate, and human feedback evidence."
 
 [skills.search_data_sources]
 module = "app.skills.search_sources"

@@ -3,9 +3,16 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.venv/
 
 .env
 .env.*
+!.env.example
 
 qdrant_mvp_store/
+data/*.sqlite3
+data/*.sqlite3-*
+data/runtime/
+data/snapshots/
+data/e2e_test_results/
 test_readme.md

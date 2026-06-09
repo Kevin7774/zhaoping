@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict, List
 
 CAPABILITY_STANDARDS: Dict[str, Dict[str, Any]] = {
@@ -278,6 +279,321 @@ CAPABILITY_STANDARDS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+
+STATIC_DYNAMIC_DECISION_TABLE: List[Dict[str, Any]] = [
+    {
+        "item": "技术层分类",
+        "classification": "static_base",
+        "search_verification": "low",
+        "long_term_memory": "low",
+        "update_policy": "人工版本化更新",
+    },
+    {
+        "item": "岗位大类",
+        "classification": "semi_static_base",
+        "search_verification": "medium",
+        "long_term_memory": "medium",
+        "update_policy": "允许新增和合并，但不随单次搜索波动",
+    },
+    {
+        "item": "能力 ID / 能力名称",
+        "classification": "semi_static_base",
+        "search_verification": "medium",
+        "long_term_memory": "medium",
+        "update_policy": "名称稳定，定义和证据版本化",
+    },
+    {
+        "item": "能力与岗位映射",
+        "classification": "dynamic_calibration",
+        "search_verification": "high",
+        "long_term_memory": "high",
+        "update_policy": "由 JD、论文、开源、面试反馈和人工修订共同校准",
+    },
+    {
+        "item": "必备 / 加分 / 排除项",
+        "classification": "dynamic_calibration",
+        "search_verification": "high",
+        "long_term_memory": "high",
+        "update_policy": "随岗位级别、公司阶段、市场供给和成功画像调整",
+    },
+    {
+        "item": "技术路线覆盖范围",
+        "classification": "dynamic_evidence",
+        "search_verification": "high",
+        "long_term_memory": "medium",
+        "update_policy": "定期用学术、开源、产业资料补充和淘汰路线",
+    },
+    {
+        "item": "目标公司 / 实验室 / 次优来源",
+        "classification": "dynamic_market_fact",
+        "search_verification": "high",
+        "long_term_memory": "high",
+        "update_policy": "由招聘、官网、新闻、论文、专利和实际触达结果更新",
+    },
+    {
+        "item": "证据链记录",
+        "classification": "dynamic_traceable_record",
+        "search_verification": "high",
+        "long_term_memory": "high",
+        "update_policy": "每条结论保留来源、时间、摘录、置信度和验证状态",
+    },
+    {
+        "item": "人工修订 / 面试反馈 / offer 或 reject / 入职表现",
+        "classification": "long_term_memory",
+        "search_verification": "medium",
+        "long_term_memory": "high",
+        "update_policy": "持续回流 Memory，反向修正能力权重和岗位标准",
+    },
+]
+
+
+EVIDENCE_RECORD_SCHEMA: Dict[str, Any] = {
+    "required_fields": [
+        "source_type",
+        "source_key",
+        "title",
+        "url_or_reference",
+        "published_at",
+        "retrieved_at",
+        "claim",
+        "evidence_excerpt",
+        "confidence",
+        "validation_status",
+    ],
+    "source_types": [
+        "academic",
+        "industry_jd",
+        "company_official",
+        "open_source",
+        "patent",
+        "filing_or_report",
+        "news",
+        "candidate_material",
+        "human_feedback",
+    ],
+    "validation_statuses": [
+        "unverified",
+        "single_source",
+        "cross_validated",
+        "human_approved",
+        "deprecated",
+    ],
+    "confidence_scale": "0.0-1.0，先按来源可信度、独立来源数量、时间新鲜度和人工确认加权。",
+}
+
+
+CROSS_VALIDATION_RULES: List[Dict[str, Any]] = [
+    {
+        "rule_id": "must_have_cross_domain_evidence",
+        "description": "把某能力标为必备前，至少需要学术/开源/产业/候选人反馈中的两个独立来源域支持。",
+        "minimum_domains": 2,
+    },
+    {
+        "rule_id": "industry_priority_requires_market_signal",
+        "description": "调整能力重要性排序前，必须有 JD、公司官网、招聘热度、面试反馈或 offer 结果之一作为产业信号。",
+        "minimum_domains": 1,
+    },
+    {
+        "rule_id": "long_term_memory_overrides_single_search",
+        "description": "单次搜索不能覆盖长期面试和入职表现记忆；冲突时输出冲突并等待人工确认。",
+        "requires_human_review": True,
+    },
+    {
+        "rule_id": "route_coverage_requires_explicit_scope",
+        "description": "技术路线覆盖必须说明适用边界，例如室内低速、家庭动态障碍、长期地图、端侧算力或真实底盘。",
+        "requires_scope": True,
+    },
+]
+
+
+DEFAULT_CAPABILITY_TRACEABILITY: Dict[str, Any] = {
+    "static_parts": ["capability_id", "capability_name_zh", "capability_name_en", "tech_layer"],
+    "dynamic_parts": ["is_required", "importance_rank", "route_coverage", "evidence_records", "market_weight"],
+    "evidence_requirements": [
+        {
+            "source_type": "academic",
+            "source_keys": ["scholar_arxiv", "conference_paper_lists"],
+            "minimum_items": 1,
+            "validates": "学术可行性和技术路线演进",
+        },
+        {
+            "source_type": "industry_jd",
+            "source_keys": ["recruitment_boards_cn", "company_websites"],
+            "minimum_items": 1,
+            "validates": "岗位市场需求和产业落地权重",
+        },
+        {
+            "source_type": "human_feedback",
+            "source_keys": ["interview_feedback", "offer_reject", "hire_performance"],
+            "minimum_items": 1,
+            "validates": "能力标准是否预测真实招聘和入职表现",
+        },
+    ],
+    "route_breakdown": [],
+    "open_assumptions": ["当前能力标准是专家启发式基线，需要证据链和人工反馈持续校准。"],
+    "memory_signals": ["人工修订意见", "面试反馈", "offer/reject 结果", "入职后表现"],
+}
+
+
+CAPABILITY_TRACEABILITY_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "cap_laser_visual_slam": {
+        "route_breakdown": [
+            {
+                "route_id": "sensor_calibration_sync",
+                "name_zh": "传感器标定与时间同步",
+                "keywords": ["相机-LiDAR-IMU外参", "时间戳同步", "rolling shutter", "硬件触发"],
+                "validation_questions": ["是否做过真实传感器外参标定", "是否定位过不同频率传感器的时间漂移"],
+            },
+            {
+                "route_id": "state_estimation",
+                "name_zh": "状态估计与后端优化",
+                "keywords": ["VIO", "LIO", "RGB-D SLAM", "EKF", "因子图", "回环检测"],
+                "validation_questions": ["是否能解释退化场景", "是否能权衡前端里程计和后端图优化"],
+            },
+            {
+                "route_id": "map_representation",
+                "name_zh": "地图表示与更新接口",
+                "keywords": ["稀疏地图", "稠密地图", "占据栅格", "语义地图", "拓扑图"],
+                "validation_questions": ["是否能说明地图如何服务导航和操作", "是否处理过地图尺寸和端侧算力约束"],
+            },
+            {
+                "route_id": "engineering_observability",
+                "name_zh": "工程部署与可观测性",
+                "keywords": ["ROS2", "日志回放", "定位健康度", "漂移报警", "端侧部署"],
+                "validation_questions": ["是否能用日志复现定位失败", "是否定义过重定位成功率和漂移指标"],
+            },
+        ],
+        "evidence_requirements": [
+            {
+                "source_type": "academic",
+                "source_keys": ["scholar_arxiv", "conference_paper_lists"],
+                "minimum_items": 3,
+                "validates": "VIO/LIO/RGB-D/图优化路线是否仍是主流候选路线",
+            },
+            {
+                "source_type": "open_source",
+                "source_keys": ["github"],
+                "minimum_items": 2,
+                "validates": "候选人是否能落到可运行 SLAM 系统和真实工程 issue",
+            },
+            {
+                "source_type": "industry_jd",
+                "source_keys": ["recruitment_boards_cn", "company_websites"],
+                "minimum_items": 3,
+                "validates": "多传感器建图是否被目标公司明确写入岗位要求",
+            },
+        ],
+        "open_assumptions": [
+            "家庭机器人 SLAM 岗通常需要真实传感器标定和端侧部署经验。",
+            "单一视觉或单一激光路线是否足够，需要根据目标硬件配置和家庭场景重新验证。",
+        ],
+    },
+    "cap_dynamic_obstacle_avoidance": {
+        "route_breakdown": [
+            {
+                "route_id": "local_planner",
+                "name_zh": "局部规划器与控制接口",
+                "keywords": ["DWA", "TEB", "MPC local planner", "Nav2", "速度障碍"],
+                "validation_questions": ["是否调过局部规划器参数", "是否处理过规划振荡和原地转圈"],
+            },
+            {
+                "route_id": "costmap_dynamic_layer",
+                "name_zh": "动态障碍代价地图",
+                "keywords": ["costmap layer", "动态障碍", "膨胀半径", "障碍预测", "实时分割"],
+                "validation_questions": ["是否能解释代价地图参数", "是否处理过人宠动态干扰"],
+            },
+            {
+                "route_id": "recovery_behavior",
+                "name_zh": "失败恢复与重规划策略",
+                "keywords": ["behavior tree", "recovery", "replanning", "deadlock", "狭窄通道"],
+                "validation_questions": ["是否设计过恢复行为", "是否能定义可回归的失败场景库"],
+            },
+            {
+                "route_id": "safety_boundary",
+                "name_zh": "家庭场景安全边界",
+                "keywords": ["低速安全", "儿童/宠物", "急停", "软硬件协同", "碰撞风险"],
+                "validation_questions": ["是否考虑过人机安全边界", "是否能联动底盘控制和急停策略"],
+            },
+        ],
+        "evidence_requirements": [
+            {
+                "source_type": "industry_jd",
+                "source_keys": ["recruitment_boards_cn", "company_websites"],
+                "minimum_items": 3,
+                "validates": "实时局部避障是否是家庭/服务机器人岗位高频要求",
+            },
+            {
+                "source_type": "open_source",
+                "source_keys": ["github"],
+                "minimum_items": 2,
+                "validates": "Nav2、costmap、局部规划相关工程能力是否可从项目证据识别",
+            },
+            {
+                "source_type": "human_feedback",
+                "source_keys": ["interview_feedback", "field_failures"],
+                "minimum_items": 1,
+                "validates": "面试题能否区分只会调用导航栈和能定位真实失败的人",
+            },
+        ],
+        "open_assumptions": [
+            "家庭高动态环境比仓储静态环境更强调局部避障和失败恢复。",
+            "是否必须会 Nav2 取决于目标公司技术栈，不能把框架名等同于能力本身。",
+        ],
+    },
+    "cap_long_term_localization": {
+        "route_breakdown": [
+            {
+                "route_id": "long_term_map_lifecycle",
+                "name_zh": "长期地图生命周期管理",
+                "keywords": ["地图版本", "变化检测", "增量更新", "家具变化", "地图回滚"],
+                "validation_questions": ["是否处理过环境长期变化", "是否定义过地图更新触发条件"],
+            },
+            {
+                "route_id": "relocalization",
+                "name_zh": "高精重定位与失效恢复",
+                "keywords": ["重定位", "place recognition", "回环", "定位丢失恢复", "全局定位"],
+                "validation_questions": ["是否量化过重定位成功率", "是否处理过低纹理和重复结构环境"],
+            },
+            {
+                "route_id": "semantic_memory",
+                "name_zh": "语义空间记忆",
+                "keywords": ["语义地图", "房间拓扑", "物体位置记忆", "家庭空间记忆"],
+                "validation_questions": ["是否能把地图变化服务于任务规划", "是否能处理物体/家具位置长期漂移"],
+            },
+            {
+                "route_id": "fleet_feedback_loop",
+                "name_zh": "设备数据回流与评测闭环",
+                "keywords": ["日志回流", "失败案例库", "A/B测试", "定位健康度", "线上回归"],
+                "validation_questions": ["是否建立过定位失败案例库", "是否能把线上数据反馈到地图和参数更新"],
+            },
+        ],
+        "evidence_requirements": [
+            {
+                "source_type": "academic",
+                "source_keys": ["scholar_arxiv", "conference_paper_lists"],
+                "minimum_items": 2,
+                "validates": "长期定位、变化检测和语义地图路线是否有持续研究基础",
+            },
+            {
+                "source_type": "company_official",
+                "source_keys": ["company_websites", "filings_annual_reports"],
+                "minimum_items": 2,
+                "validates": "目标公司产品是否真的需要长期地图更新能力",
+            },
+            {
+                "source_type": "human_feedback",
+                "source_keys": ["interview_feedback", "hire_performance"],
+                "minimum_items": 1,
+                "validates": "该能力是否能预测候选人在真实产品中的表现",
+            },
+        ],
+        "open_assumptions": [
+            "长期地图能力对家庭机器人高价值，但对短周期 demo 岗位可能不是入门必备。",
+            "高精重定位指标需要和硬件传感器、家庭面积、任务类型一起定义。",
+        ],
+    },
+}
+
 ROBOT_TEAM_PROFILES: Dict[str, Dict[str, Any]] = {
     "system_architect": {
         "name_zh": "系统级总架构师",
@@ -473,6 +789,64 @@ ROBOT_ROLES_METADATA: Dict[str, Dict[str, Any]] = {
 def get_capabilities_for_role(role_key: str) -> List[Dict[str, Any]]:
     role = ROBOT_ROLES_METADATA[role_key]
     return [CAPABILITY_STANDARDS[capability_id] | {"capability_id": capability_id} for capability_id in role["capability_requirements"]]
+
+
+def get_capability_traceability(capability_id: str) -> Dict[str, Any]:
+    capability = CAPABILITY_STANDARDS[capability_id]
+    profile = deepcopy(DEFAULT_CAPABILITY_TRACEABILITY)
+    override = CAPABILITY_TRACEABILITY_OVERRIDES.get(capability_id, {})
+    for key, value in override.items():
+        profile[key] = deepcopy(value)
+
+    return {
+        "capability_id": capability_id,
+        "capability_name_zh": capability["capability_name_zh"],
+        "capability_name_en": capability["capability_name_en"],
+        "tech_layer": capability["tech_layer"],
+        "keywords": capability["keywords"],
+        "evaluation_nodes": capability["evaluation_nodes"],
+        "static_parts": profile["static_parts"],
+        "dynamic_parts": profile["dynamic_parts"],
+        "route_breakdown": profile["route_breakdown"],
+        "evidence_requirements": profile["evidence_requirements"],
+        "open_assumptions": profile["open_assumptions"],
+        "memory_signals": profile["memory_signals"],
+        "evidence_record_schema": EVIDENCE_RECORD_SCHEMA,
+        "validation_status": "unverified_static_baseline",
+    }
+
+
+def get_role_capability_traceability(role_key: str) -> Dict[str, Any]:
+    role = ROBOT_ROLES_METADATA[role_key]
+    capability_profiles = [
+        get_capability_traceability(capability_id)
+        for capability_id in role["capability_requirements"]
+    ]
+    return {
+        "role_key": role_key,
+        "role_name_zh": role["name_zh"],
+        "static_base": {
+            "tech_layer": role["tech_layer"],
+            "role_definition": role["name_zh"],
+            "capability_ids": role["capability_requirements"],
+        },
+        "dynamic_calibration_targets": [
+            "能力是否仍应列为必备",
+            "必备/加分/排除项边界",
+            "能力重要性排序",
+            "技术路线覆盖范围",
+            "目标公司、实验室和次优来源迁移价值",
+        ],
+        "capabilities": capability_profiles,
+        "cross_validation_rules": CROSS_VALIDATION_RULES,
+        "long_term_memory_targets": [
+            "人工修订意见",
+            "面试反馈",
+            "offer/reject 结果",
+            "入职后表现",
+            "搜索证据链版本",
+        ],
+    }
 
 
 def validate_role_capabilities() -> None:
