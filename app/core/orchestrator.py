@@ -2706,6 +2706,35 @@ class DBTaskStore:
                     select(TaskModel).where(TaskModel.status.in_(["processing", "awaiting_human"]))
                 ).scalars().all()
                 for row in rows:
+                    frontend_state = row.frontend_state or {}
+                    json_runtime = frontend_state.get("json_workflow_runtime")
+                    if isinstance(json_runtime, dict):
+                        workflow_id = str(json_runtime.get("workflow_id") or "")
+                        if row.status == "awaiting_human":
+                            continue
+                        if row.status == "processing":
+                            row.status = "error"
+                            row.current_agent = None
+                            row.awaiting = None
+                            row.error = "JSON workflow interrupted by backend restart. Please retry the workflow task."
+                            row.updated_at = _dt_now()
+                            event = self._insert_event(
+                                session,
+                                row.task_id,
+                                AgentEventCreate(
+                                    type="error",
+                                    agent_id="json_workflow",
+                                    message=row.error,
+                                    data={
+                                        "recovery": "json_workflow_interrupted",
+                                        "workflow_id": workflow_id,
+                                        "json_workflow": True,
+                                    },
+                                    status="error",
+                                ),
+                            )
+                            recovery_events.append((row.task_id, event))
+                            continue
                     updated_at = row.updated_at
                     if updated_at is not None and updated_at.tzinfo is None:
                         updated_at = updated_at.replace(tzinfo=timezone.utc)

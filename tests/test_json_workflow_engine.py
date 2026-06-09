@@ -10,6 +10,7 @@ from app.core.workflow_executor import (
     StepExecutor,
     WorkflowRuntimeState,
 )
+from app.core.workflow_runner import WorkflowTaskRunner
 
 
 def valid_workflow() -> dict:
@@ -195,3 +196,101 @@ def test_structured_extract_exhaustion_can_raise_human_gate() -> None:
         StepExecutor(router=router).execute_step(workflow.steps[0], state)
     assert exc.value.awaiting["agent"] == "json_workflow"
     assert exc.value.awaiting["draft"]["step_id"] == "extract_entities"
+
+
+def test_runner_creates_task_and_checkpoints_runtime_state() -> None:
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["summary"]))
+    task_id = runner.start(workflow, {"user_input": "robotics"}, auto_run=False)
+    snapshot = runner.snapshot(task_id)
+    runtime = snapshot["frontend_state"]["json_workflow_runtime"]
+    assert snapshot["scenario_id"] == "json_workflow"
+    assert snapshot["frontend_state"]["json_workflow"]["workflow_id"] == "research_report"
+    assert runtime["workflow_id"] == "research_report"
+    assert runtime["current_step_index"] == 0
+    assert runtime["context"]["user_input"] == "robotics"
+    json.dumps(runtime, ensure_ascii=False)
+
+
+def test_runner_runs_to_done_and_writes_task_result() -> None:
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["summary"]))
+    task_id = runner.start(workflow, {"user_input": "robotics"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+    snapshot = runner.snapshot(task_id)
+    assert snapshot["status"] == "done"
+    assert snapshot["result"]["workflow_id"] == "research_report"
+    assert snapshot["result"]["final_output"] == "summary"
+    json.dumps(snapshot["result"], ensure_ascii=False)
+
+
+def test_runner_human_gate_checkpoints_without_waiting() -> None:
+    payload = {
+        "id": "approval_flow",
+        "inputs": {"draft": {"type": "string"}},
+        "steps": [
+            {"id": "gate", "type": "human_gate", "prompt": "Approve {{ draft }}", "output_key": "approval"},
+            {"id": "final", "type": "llm_prompt", "prompt": "Decision {{ approval }}", "output_key": "done"},
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["finished"]))
+    task_id = runner.start(workflow, {"draft": "hello"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+    snapshot = runner.snapshot(task_id)
+    assert snapshot["status"] == "awaiting_human"
+    assert snapshot["awaiting"]["prompt"] == "Approve hello"
+    assert snapshot["awaiting"]["workflow_id"] == "approval_flow"
+    assert snapshot["frontend_state"]["json_workflow_runtime"]["current_step_index"] == 0
+    json.dumps(snapshot["awaiting"], ensure_ascii=False)
+
+
+def test_runner_resume_continues_after_human_gate() -> None:
+    payload = {
+        "id": "approval_flow",
+        "inputs": {"draft": {"type": "string"}},
+        "steps": [
+            {"id": "gate", "type": "human_gate", "prompt": "Approve {{ draft }}", "output_key": "approval"},
+            {"id": "final", "type": "llm_prompt", "prompt": "Decision {{ approval }}", "output_key": "done"},
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["finished"]))
+    task_id = runner.start(workflow, {"draft": "hello"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+    snapshot = runner.resume(task_id, "approve", {"note": "ok"}, auto_run=False)
+    assert snapshot["frontend_state"]["json_workflow_runtime"]["context"]["approval"]["decision"] == "approve"
+    runner.run_until_blocked_or_done(task_id)
+    done = runner.snapshot(task_id)
+    assert done["status"] == "done"
+    assert done["result"]["final_output"] == "finished"
+
+
+def test_runner_error_on_structured_extract_failure_emits_error_event() -> None:
+    payload = {
+        "id": "extract_error",
+        "inputs": {"source": {"type": "string"}},
+        "steps": [
+            {
+                "id": "extract_entities",
+                "type": "structured_extract",
+                "input": "{{ source }}",
+                "schema": {
+                    "type": "object",
+                    "required": ["entities"],
+                    "properties": {"entities": {"type": "array"}},
+                },
+                "max_retries": 1,
+                "on_failure": "error",
+                "output_key": "entities",
+            }
+        ],
+    }
+    workflow = WorkflowDefinition.model_validate(payload)
+    runner = WorkflowTaskRunner(router=FakeRouter(llm_outputs=["bad", "{\"wrong\": []}"]))
+    task_id = runner.start(workflow, {"source": "bad"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+    snapshot = runner.snapshot(task_id)
+    assert snapshot["status"] == "error"
+    assert snapshot["error"]
+    assert any(event["type"] == "error" and event["data"]["workflow_id"] == "extract_error" for event in snapshot["audit_events"])
