@@ -522,7 +522,7 @@ def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
     registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
     backend_paths = sorted(app.openapi()["paths"])
 
-    assert len(backend_paths) == 44
+    assert len(backend_paths) == 45
     for path in backend_paths:
         assert path in registry_source
     for status in ["productized", "system", "closed"]:
@@ -617,6 +617,7 @@ def test_run_request_scenario_is_dynamic_in_openapi() -> None:
     assert "/search/archive/diff" in schema["paths"]
     assert "/search/watchlist/run" in schema["paths"]
     assert "/tasks/{task_id}/probe-feedback" in schema["paths"]
+    assert "/tasks/{task_id}/artifacts" in schema["paths"]
     assert "/tasks/{task_id}/stream" in schema["paths"]
     assert "/tasks/{task_id}/cancel" in schema["paths"]
     assert "/tasks/{task_id}/retry" in schema["paths"]

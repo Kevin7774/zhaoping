@@ -166,11 +166,14 @@ type CandidateBackendResponse = {
   matchScore?: number | null;
   pipelineStatus?: string | null;
   outreachStatus?: "not_sent" | "drafted" | "sent" | null;
-  evidence?: Array<{
-    label?: string;
-    source?: string;
-    summary?: string;
-  }> | null;
+  evidence?: Array<
+    | string
+    | {
+        label?: string;
+        source?: string;
+        summary?: string;
+      }
+  > | null;
 };
 
 export function getProject(projectId: string): Promise<ProjectRecord> {
@@ -496,12 +499,12 @@ function mapCandidate(candidate: CandidateBackendResponse): Candidate {
     riskAlerts: [],
     evidence: Array.isArray(candidate.evidence)
       ? candidate.evidence
-          .filter((item) => item.summary)
           .map((item) => ({
-            label: item.label || "后端证据",
-            source: normalizeEvidenceSource(item.source),
-            summary: item.summary || "",
+            label: typeof item === "string" ? "搜索证据" : item.label || "后端证据",
+            source: typeof item === "string" ? normalizeEvidenceSource(candidate.sourcePlatform ?? undefined) : normalizeEvidenceSource(item.source),
+            summary: typeof item === "string" ? item : item.summary || "",
           }))
+          .filter((item) => item.summary)
       : [],
   };
 }

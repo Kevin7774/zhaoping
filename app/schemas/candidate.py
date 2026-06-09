@@ -42,9 +42,19 @@ class CandidateProfileEvaluation(BaseModel):
 
 class CandidateRequest(CamelModel):
     name: str = Field(min_length=1, max_length=128)
+    title: str | None = Field(default=None, max_length=128)
     current_company: str | None = Field(default=None, max_length=128)
+    location: str | None = Field(default=None, max_length=128)
     city: str | None = Field(default=None, max_length=64)
     email: str | None = Field(default=None, max_length=256)
+    github_url: str | None = Field(default=None, max_length=512)
+    linkedin_url: str | None = Field(default=None, max_length=512)
+    homepage_url: str | None = Field(default=None, max_length=512)
+    source_platform: str | None = Field(default=None, max_length=64)
+    source_url: str | None = Field(default=None, max_length=512)
+    evidence: list[str] | None = None
+    skills: list[str] | None = None
+    created_from_task_id: str | None = Field(default=None, max_length=64)
 
 
 class CandidateCreate(CandidateRequest):
@@ -62,3 +72,5 @@ class CandidateResponse(CandidateRequest):
     job_title: str
     match_score: int = Field(ge=0, le=100)
     pipeline_status: str
+    job_evidence: list[str] | None = None
+    source_task_id: str | None = Field(default=None, max_length=64)

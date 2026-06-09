@@ -445,11 +445,11 @@ def _store_step_result(
 
 
 def _step_output_storage(step: StepDefinition) -> str:
-    storage = (step.metadata or {}).get("output_storage", CONTEXT_OUTPUT_STORAGE)
+    storage = step.output_type
     if storage not in {CONTEXT_OUTPUT_STORAGE, ARTIFACT_OUTPUT_STORAGE}:
         raise WorkflowFatalException(
-            f"Unsupported output_storage for step {step.id}: {storage}",
-            {"step_id": step.id, "output_storage": storage},
+            f"Unsupported output_type for step {step.id}: {storage}",
+            {"step_id": step.id, "output_type": storage},
         )
     return storage
 
@@ -505,8 +505,12 @@ def _artifact_path(task_id: str, artifact_key: str) -> Path:
     return _artifact_base_dir() / _safe_artifact_component(task_id) / f"{artifact_key}.json"
 
 
-def _artifact_base_dir() -> Path:
+def workflow_artifact_base_dir() -> Path:
     return Path(os.environ.get("WORKFLOW_ARTIFACT_DIR", "data/workflow_artifacts"))
+
+
+def _artifact_base_dir() -> Path:
+    return workflow_artifact_base_dir()
 
 
 def _safe_artifact_component(value: str) -> str:

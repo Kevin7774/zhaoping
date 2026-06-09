@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -14,6 +15,7 @@ from app.core.workflow_context import render_template, render_value
 from app.core.workflow_executor import (
     HumanGateRequiredException,
     StepExecutor,
+    WorkflowFatalException,
     WorkflowRuntimeState,
 )
 from app.core.workflow_runner import WorkflowTaskRunner
@@ -36,6 +38,7 @@ def valid_workflow() -> dict:
                 "type": "search",
                 "input": "{{ user_input }}",
                 "limit": 5,
+                "output_type": "artifact",
                 "output_key": "search_results",
             },
             {
@@ -52,6 +55,8 @@ def test_workflow_definition_accepts_valid_minimal_workflow() -> None:
     workflow = WorkflowDefinition.model_validate(valid_workflow())
     assert workflow.id == "research_report"
     assert [step.id for step in workflow.steps] == ["search", "summary"]
+    assert workflow.steps[0].output_type == "artifact"
+    assert workflow.steps[1].output_type == "context"
     assert workflow.dependency_summary()["declared_inputs"] == ["user_input"]
     assert workflow.dependency_summary()["produced_outputs"] == ["search_results", "summary"]
 
@@ -74,6 +79,61 @@ def test_workflow_definition_rejects_future_dependency() -> None:
     payload = valid_workflow()
     payload["steps"][0]["input"] = "{{ summary }}"
     with pytest.raises(WorkflowValidationException, match="future output"):
+        WorkflowDefinition.model_validate(payload)
+
+
+def test_workflow_definition_rejects_search_context_output() -> None:
+    payload = valid_workflow()
+    payload["steps"][0]["output_type"] = "context"
+    with pytest.raises(WorkflowValidationException, match="search step output_type must be artifact"):
+        WorkflowDefinition.model_validate(payload)
+
+
+def test_workflow_definition_maps_legacy_output_storage_metadata_to_output_type() -> None:
+    payload = valid_workflow()
+    payload["steps"][0].pop("output_type")
+    payload["steps"][0]["metadata"] = {"output_storage": "artifact"}
+    workflow = WorkflowDefinition.model_validate(payload)
+    assert workflow.steps[0].output_type == "artifact"
+
+
+def test_workflow_definition_rejects_invalid_structured_extract_schema_type() -> None:
+    payload = {
+        "id": "bad_extract_schema",
+        "inputs": {"source": {"type": "string"}},
+        "steps": [
+            {
+                "id": "extract",
+                "type": "structured_extract",
+                "input": "{{ source }}",
+                "schema": {"type": "object_bad"},
+                "output_key": "entities",
+            }
+        ],
+    }
+    with pytest.raises(WorkflowValidationException, match="Unsupported schema type"):
+        WorkflowDefinition.model_validate(payload)
+
+
+def test_workflow_definition_rejects_required_schema_field_not_declared_in_properties() -> None:
+    payload = {
+        "id": "bad_extract_schema",
+        "inputs": {"source": {"type": "string"}},
+        "steps": [
+            {
+                "id": "extract",
+                "type": "structured_extract",
+                "input": "{{ source }}",
+                "schema": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {},
+                },
+                "output_key": "entities",
+            }
+        ],
+    }
+    with pytest.raises(WorkflowValidationException, match="required field 'name' must be declared in properties"):
         WorkflowDefinition.model_validate(payload)
 
 
@@ -444,10 +504,63 @@ def test_workflows_run_api_creates_task() -> None:
     assert payload["task_id"]
 
 
+def test_workflows_run_api_returns_safe_payload_for_fatal_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FatalRunner:
+        def start(self, *args, **kwargs):
+            raise WorkflowFatalException(
+                "database password leaked in raw exception",
+                {"message": "workflow failed safely", "code": "workflow_fatal"},
+            )
+
+    monkeypatch.setattr(api_main, "WorkflowTaskRunner", FatalRunner)
+    client = TestClient(app)
+    response = client.post(
+        "/workflows/run",
+        json={"workflow": valid_workflow(), "input": {"user_input": "robotics"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {"message": "workflow failed safely", "code": "workflow_fatal"}
+
+
+def test_task_artifact_api_returns_registered_artifact_and_rejects_unsafe_paths(
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("WORKFLOW_ARTIFACT_DIR", str(tmp_path / "workflow_artifacts"))
+    workflow = WorkflowDefinition.model_validate(valid_workflow())
+    runner = WorkflowTaskRunner(router=FakeRouter())
+    task_id = runner.start(workflow, {"user_input": "robotics"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+
+    snapshot = runner.snapshot(task_id)
+    runtime = snapshot["frontend_state"]["json_workflow_runtime"]
+    artifact_metadata = runtime["artifacts"][runtime["context"]["search_results"]["artifact_key"]]
+    artifact_path = artifact_metadata["path"]
+
+    client = TestClient(app)
+    response = client.get(f"/tasks/{task_id}/artifacts", params={"path": artifact_path})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task_id"] == task_id
+    assert body["artifact_key"] == artifact_metadata["artifact_key"]
+    assert body["mime_type"] == "application/json"
+    assert body["content"][0]["snippet"] == "robotics"
+
+    traversal_response = client.get(f"/tasks/{task_id}/artifacts", params={"path": "../../etc/passwd"})
+    assert traversal_response.status_code == 400
+
+    other_task_id = runner.start(workflow, {"user_input": "other"}, auto_run=False)
+    other_response = client.get(f"/tasks/{other_task_id}/artifacts", params={"path": artifact_path})
+    assert other_response.status_code == 403
+
+
 def test_openapi_exposes_json_workflow_routes() -> None:
     schema = app.openapi()
     assert "/workflows/validate" in schema["paths"]
     assert "/workflows/run" in schema["paths"]
+    assert "/tasks/{task_id}/artifacts" in schema["paths"]
 
 
 def test_confirm_route_checks_json_workflow_before_legacy_confirm() -> None:
@@ -456,6 +569,59 @@ def test_confirm_route_checks_json_workflow_before_legacy_confirm() -> None:
     json_runtime_check = source.index("json_workflow_runtime", confirm_start)
     legacy_confirm = source.index("task_store.confirm", confirm_start)
     assert json_runtime_check < legacy_confirm
+
+
+def test_task_event_bus_uses_asyncio_queue_without_threadpool_bridge() -> None:
+    async def scenario() -> None:
+        bus = orchestrator.TaskEventBus()
+        queue = bus.subscribe("task_1")
+        assert isinstance(queue, asyncio.Queue)
+        bus.publish("task_1", {"id": 1, "type": "summary"})
+        event = await asyncio.wait_for(queue.get(), timeout=0.1)
+        assert event == {"id": 1, "type": "summary"}
+        bus.unsubscribe("task_1", queue)
+
+    asyncio.run(scenario())
+    stream_source = Path("app/api/main.py").read_text(encoding="utf-8")
+    stream_block = stream_source[
+        stream_source.index("async def stream_task") : stream_source.index("@app.post(\"/tasks/{task_id}/cancel\")")
+    ]
+    assert "asyncio.to_thread" not in stream_block
+
+
+def test_confirm_api_returns_safe_payload_for_json_workflow_fatal_exception(
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "id": "fatal_confirm",
+        "inputs": {"candidate": {"type": "string"}},
+        "steps": [
+            {
+                "id": "hr_gate",
+                "type": "human_gate",
+                "prompt": "Review {{ candidate }}",
+                "output_key": "hr_decision",
+            }
+        ],
+    }
+    runner = WorkflowTaskRunner()
+    task_id = runner.start(WorkflowDefinition.model_validate(payload), {"candidate": "Lin Chen"}, auto_run=False)
+    runner.run_until_blocked_or_done(task_id)
+
+    class FatalResumeRunner:
+        def resume(self, *args, **kwargs):
+            raise WorkflowFatalException(
+                "raw stack includes provider token",
+                {"message": "resume failed safely", "code": "workflow_fatal"},
+            )
+
+    monkeypatch.setattr(api_main, "WorkflowTaskRunner", FatalResumeRunner)
+    client = TestClient(app)
+    response = client.post(f"/tasks/{task_id}/confirm", json={"action": "approve"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {"message": "resume failed safely", "code": "workflow_fatal"}
 
 
 def test_recruiting_custom_pipeline_json_fixture_validates_runs_and_resumes(
@@ -514,7 +680,12 @@ def test_recruiting_custom_pipeline_json_fixture_validates_runs_and_resumes(
     assert task_id not in isolated_task_store._wait_events
 
     runtime = awaiting["frontend_state"]["json_workflow_runtime"]
-    assert runtime["context"]["candidate_signals"][0]["snippet"] == "GitHub VLA robot manipulation diffusion policy candidate"
+    candidate_signal_ref = runtime["context"]["candidate_signals"]
+    assert candidate_signal_ref["type"] == "artifact_ref"
+    assert candidate_signal_ref["artifact_key"] in runtime["artifacts"]
+    candidate_signal_artifact = runtime["artifacts"][candidate_signal_ref["artifact_key"]]
+    candidate_signal_payload = json.loads(Path(candidate_signal_artifact["path"]).read_text(encoding="utf-8"))
+    assert candidate_signal_payload[0]["snippet"] == "GitHub VLA robot manipulation diffusion policy candidate"
     assert runtime["context"]["project_review"].startswith("Lin Chen")
     assert runtime["context"]["candidate_profile"] == candidate_profile
     assert "hr_decision" not in runtime["context"]
@@ -571,6 +742,7 @@ def test_json_workflow_human_gate_survives_store_restart_and_api_confirm_resumes
                 "type": "search",
                 "input": "{{ candidate_summary }}",
                 "limit": 1,
+                "output_type": "artifact",
                 "output_key": "search_hits",
             },
             {

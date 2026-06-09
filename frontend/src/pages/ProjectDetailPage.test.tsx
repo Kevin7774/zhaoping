@@ -137,11 +137,13 @@ describe("ProjectDetailPage backend hardening", () => {
 
   function mockBackend(options: {
     candidates?: unknown[];
+    candidateResponses?: unknown[][];
     projectStatus?: number;
     integrations?: Record<string, string>;
     latestReport?: unknown;
     taskSnapshots?: Record<string, unknown>;
   } = {}) {
+    let candidateResponseIndex = 0;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/integrations/status") return jsonResponse(integrationsPayload(options.integrations));
@@ -153,8 +155,14 @@ describe("ProjectDetailPage backend hardening", () => {
           : jsonResponse({ detail: "Weekly report not found for project: project_2026_ai_team" }, 404);
       }
       if (url.startsWith("/api/projects/project_2026_ai_team/candidates")) {
-        return jsonResponse(options.candidates ?? candidatesPayload, 200, {
-          "X-Total-Count": String((options.candidates ?? candidatesPayload).length),
+        const candidates =
+          options.candidateResponses?.[
+            Math.min(candidateResponseIndex++, Math.max(0, options.candidateResponses.length - 1))
+          ] ??
+          options.candidates ??
+          candidatesPayload;
+        return jsonResponse(candidates, 200, {
+          "X-Total-Count": String(candidates.length),
           "X-Has-More": "false",
         });
       }
@@ -304,6 +312,65 @@ describe("ProjectDetailPage backend hardening", () => {
     const button = await screen.findByRole("button", { name: "找候选人" });
     expect(button).toHaveProperty("disabled", true);
     expect(button.getAttribute("title")).toContain("缺少 Key");
+  });
+
+  it("shows lead ingestion stats and refreshes candidates from the backend after candidate search", async () => {
+    const refreshedCandidates = [
+      ...candidatesPayload,
+      {
+        id: "cand_lead_alice",
+        jobCandidateId: 2,
+        jobId: "job_vla_algorithm",
+        jobTitle: "VLA / 具身智能算法工程师",
+        name: "Alice Wang",
+        currentCompany: "Open Robotics",
+        city: "深圳",
+        email: "alice@example.com",
+        sourcePlatform: "github_repositories",
+        sourceUrl: "https://github.com/alicewang/robot-vla",
+        evidence: ["Maintains robot-vla with diffusion policy examples."],
+        matchScore: 91,
+        pipelineStatus: "sourced",
+      },
+    ];
+    mockBackend({
+      candidateResponses: [candidatesPayload, refreshedCandidates],
+      taskSnapshots: {
+        task_B: {
+          task_id: "task_B",
+          status: "done",
+          result: {
+            lead_ingestion: {
+              found: 2,
+              normalized: 2,
+              inserted_candidates: 1,
+              updated_candidates: 0,
+              linked_job_candidates: 1,
+              duplicates: 1,
+              rejected: 0,
+              rejected_reasons: {},
+              source_task_id: "task_B",
+            },
+          },
+          audit_events: [],
+        },
+      },
+    });
+
+    renderProjectPage();
+
+    await screen.findByRole("heading", { name: "真实后端项目" });
+    expect(screen.queryByText("Alice Wang")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "找候选人" }));
+
+    expect(await screen.findByText("候选人线索入库")).toBeTruthy();
+    expect(screen.getByText("新增候选人")).toBeTruthy();
+    expect(screen.getByText("关联岗位")).toBeTruthy();
+    expect(await screen.findByText("Alice Wang")).toBeTruthy();
+    const candidateApiCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).startsWith("/api/projects/project_2026_ai_team/candidates"),
+    );
+    expect(candidateApiCalls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("starts candidate evaluation and weekly report through backend scenarios", async () => {

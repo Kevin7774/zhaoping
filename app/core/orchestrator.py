@@ -11,6 +11,7 @@ task so the UI behaves like an agent runtime dashboard instead of a video player
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import threading
@@ -19,12 +20,16 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from queue import Empty, Queue
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from sqlalchemy import select
 
+from app.core.candidate_lead_ingestion import (
+    empty_lead_ingestion_result,
+    extract_candidate_leads,
+    ingest_candidate_leads,
+)
 from app.db.session import project_session_factory
 from app.db.task_models import AgentEventModel, TaskModel, make_task_session_factory
 from app.models import Candidate, Job, JobCandidate, Project
@@ -707,9 +712,52 @@ def _b_finalize(ctx: Dict[str, Any]) -> Any:
     if ctx["data"].get("industry_intelligence"):
         result["搜索证据"] = ctx["data"]["industry_intelligence"]
     _apply_human_edits(ctx, result)
+    ingestion = _ingest_scenario_b_candidate_leads(ctx, result)
+    result["lead_ingestion"] = ingestion
     _attach_human_report(ctx, result)
-    ctx["log"] = "已汇总生成最终人才地图报告"
+    _emit_audit_event(
+        ctx,
+        "evidence",
+        "talent_map",
+        (
+            "候选人线索入库完成："
+            f"发现 {ingestion['found']}，新增 {ingestion['inserted_candidates']}，"
+            f"更新 {ingestion['updated_candidates']}，关联 {ingestion['linked_job_candidates']}，"
+            f"去重 {ingestion['duplicates']}，拒绝 {ingestion['rejected']}"
+        ),
+        {"lead_ingestion": ingestion},
+    )
+    ctx["log"] = (
+        "已汇总生成最终人才地图报告；"
+        f"候选人入库新增 {ingestion['inserted_candidates']} 人，"
+        f"关联岗位 {ingestion['linked_job_candidates']} 条"
+    )
     return result
+
+
+def _ingest_scenario_b_candidate_leads(ctx: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    task_id = str(ctx.get("task_id") or "")
+    target = _project_sourcing_target(ctx.get("frontend_state"))
+    if target is None:
+        return empty_lead_ingestion_result(task_id, "project_id/job_id not provided")
+    project_id, job_id = target
+    raw_leads = extract_candidate_leads(result)
+    with project_session_factory()() as session:
+        return ingest_candidate_leads(
+            session,
+            project_id=project_id,
+            job_id=job_id,
+            source_task_id=task_id,
+            raw_leads=raw_leads,
+        )
+
+
+def _project_sourcing_target(frontend_state: Optional[Dict[str, Any]]) -> tuple[str, str] | None:
+    project_id = _frontend_state_value(frontend_state, "project_id", "projectId")
+    job_id = _frontend_state_value(frontend_state, "job_id", "jobId", "job_profile_id", "jobProfileId", "jobProfileID")
+    if project_id and job_id:
+        return project_id, job_id
+    return None
 
 
 # ---- Scenario C: candidate evaluation ------------------------------------- #
@@ -2169,38 +2217,62 @@ class TaskState:
         return self.scenario_id
 
 
+@dataclass
+class AsyncTaskSubscriber:
+    queue: asyncio.Queue
+    loop: asyncio.AbstractEventLoop
+
+    def publish(self, event: dict[str, Any]) -> None:
+        if self.loop.is_closed():
+            return
+        try:
+            self.loop.call_soon_threadsafe(self._put_event, event)
+        except RuntimeError:
+            return
+
+    def _put_event(self, event: dict[str, Any]) -> None:
+        try:
+            self.queue.put_nowait(event)
+            return
+        except asyncio.QueueFull:
+            pass
+
+        try:
+            self.queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            self.queue.put_nowait(event)
+        except asyncio.QueueFull:
+            return
+
+
 class TaskEventBus:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._subscribers: dict[str, set[Queue]] = {}
+        self._subscribers: dict[str, dict[asyncio.Queue, AsyncTaskSubscriber]] = {}
 
-    def subscribe(self, task_id: str) -> Queue:
-        queue: Queue = Queue(maxsize=200)
+    def subscribe(self, task_id: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+        subscriber = AsyncTaskSubscriber(queue=queue, loop=asyncio.get_running_loop())
         with self._lock:
-            self._subscribers.setdefault(task_id, set()).add(queue)
+            self._subscribers.setdefault(task_id, {})[queue] = subscriber
         return queue
 
-    def unsubscribe(self, task_id: str, queue: Queue) -> None:
+    def unsubscribe(self, task_id: str, queue: asyncio.Queue) -> None:
         with self._lock:
             subscribers = self._subscribers.get(task_id)
             if not subscribers:
                 return
-            subscribers.discard(queue)
+            subscribers.pop(queue, None)
             if not subscribers:
                 self._subscribers.pop(task_id, None)
 
     def publish(self, task_id: str, event: dict[str, Any]) -> None:
         with self._lock:
-            subscribers = list(self._subscribers.get(task_id, set()))
-        for queue in subscribers:
-            try:
-                queue.put_nowait(event)
-            except Exception:
-                try:
-                    queue.get_nowait()
-                    queue.put_nowait(event)
-                except Exception:
-                    continue
+            subscribers = list(self._subscribers.get(task_id, {}).values())
+        for subscriber in subscribers:
+            subscriber.publish(event)
 
 
 class DBTaskStore:
@@ -2313,10 +2385,10 @@ class DBTaskStore:
             ).scalars().all()
             return [self._event_to_dict(event) for event in events]
 
-    def subscribe(self, task_id: str) -> Queue:
+    def subscribe(self, task_id: str) -> asyncio.Queue:
         return self._bus.subscribe(task_id)
 
-    def unsubscribe(self, task_id: str, queue: Queue) -> None:
+    def unsubscribe(self, task_id: str, queue: asyncio.Queue) -> None:
         self._bus.unsubscribe(task_id, queue)
 
     def append_event(self, task_id: str, event: AgentEventCreate) -> dict[str, Any] | None:

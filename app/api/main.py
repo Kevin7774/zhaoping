@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from queue import Empty
 from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -37,7 +36,8 @@ from app.core.orchestrator import (
 )
 from app.core.router import get_router
 from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
-from app.core.workflow_runner import WorkflowTaskRunner
+from app.core.workflow_executor import WorkflowFatalException
+from app.core.workflow_runner import WorkflowTaskRunner, workflow_artifact_base_dir
 from app.rag.ingest_worker import process_and_vectorize_resume
 from app.schemas.workflows import (
     WorkflowRunRequest,
@@ -440,12 +440,15 @@ def workflows_run(request: WorkflowRunRequest) -> WorkflowRunResponse:
         workflow = WorkflowDefinition.model_validate(request.workflow)
     except WorkflowValidationException as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    task_id = WorkflowTaskRunner().start(
-        workflow,
-        request.input,
-        auto_run=request.auto_run,
-        conversation_id=request.conversation_id,
-    )
+    try:
+        task_id = WorkflowTaskRunner().start(
+            workflow,
+            request.input,
+            auto_run=request.auto_run,
+            conversation_id=request.conversation_id,
+        )
+    except WorkflowFatalException as exc:
+        raise HTTPException(status_code=400, detail=exc.safe_payload) from exc
     snapshot = task_store.snapshot(task_id)
     if snapshot is None:
         raise HTTPException(status_code=500, detail="JSON workflow task creation failed")
@@ -536,6 +539,42 @@ def get_task(task_id: str) -> dict:
     return snapshot
 
 
+@app.get("/tasks/{task_id}/artifacts")
+def get_task_artifact(task_id: str, path: str) -> dict:
+    snapshot = task_store.snapshot(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+
+    requested_path = _resolve_artifact_request_path(path)
+    artifacts = _registered_task_artifacts(snapshot)
+    metadata = artifacts.get(requested_path)
+    if metadata is None:
+        raise HTTPException(status_code=403, detail="Artifact path is not registered for this task")
+    if not requested_path.is_file():
+        raise HTTPException(status_code=404, detail="Artifact file not found")
+
+    try:
+        raw_content = requested_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Artifact file not found") from exc
+
+    content: Any = raw_content
+    if metadata.get("mime_type") == "application/json" or requested_path.suffix == ".json":
+        try:
+            content = json.loads(raw_content)
+        except json.JSONDecodeError:
+            content = raw_content
+
+    return {
+        "task_id": task_id,
+        "artifact_key": metadata.get("artifact_key"),
+        "path": metadata.get("path"),
+        "mime_type": metadata.get("mime_type", "text/plain"),
+        "size_chars": metadata.get("size_chars"),
+        "content": content,
+    }
+
+
 @app.get("/tasks/{task_id}/stream")
 async def stream_task(task_id: str, request: Request):
     if task_store.snapshot(task_id) is None:
@@ -557,8 +596,8 @@ async def stream_task(task_id: str, request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    event = await asyncio.to_thread(queue.get, True, 5)
-                except Empty:
+                    event = await asyncio.wait_for(queue.get(), timeout=5.0)
+                except asyncio.TimeoutError:
                     yield "event: heartbeat\ndata: {}\n\n"
                     continue
                 event_id = int(event["id"])
@@ -607,11 +646,14 @@ def confirm_task(task_id: str, request: ConfirmRequest) -> dict:
         raise HTTPException(status_code=409, detail=f"Task is not awaiting human input (status={task.status})")
     runtime = (task.frontend_state or {}).get("json_workflow_runtime")
     if runtime:
-        return WorkflowTaskRunner().resume(
-            task_id,
-            request.decision,
-            {"edits": request.edits, "data": request.data},
-        )
+        try:
+            return WorkflowTaskRunner().resume(
+                task_id,
+                request.decision,
+                {"edits": request.edits, "data": request.data},
+            )
+        except WorkflowFatalException as exc:
+            raise HTTPException(status_code=400, detail=exc.safe_payload) from exc
     ok = task_store.confirm(task_id, request.decision, request.edits)
     if not ok:
         raise HTTPException(status_code=409, detail="Task could not accept confirmation")
@@ -737,6 +779,55 @@ def _resolve_evaluation_provider(service_name: str | None, router=None):
         return (router or get_router()).evaluation(normalized_service or None)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _resolve_artifact_request_path(path_value: str) -> Path:
+    normalized = path_value.strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail="artifact path must not be empty")
+
+    root = workflow_artifact_base_dir().resolve()
+    raw_path = Path(normalized)
+    candidates = [raw_path] if raw_path.is_absolute() else [Path.cwd() / raw_path, root / raw_path]
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved == root or root in resolved.parents:
+            return resolved
+    raise HTTPException(status_code=400, detail="Invalid artifact path")
+
+
+def _registered_task_artifacts(snapshot: dict[str, Any]) -> dict[Path, dict[str, Any]]:
+    artifacts: dict[Path, dict[str, Any]] = {}
+    for metadata in _iter_registered_artifact_metadata(snapshot):
+        try:
+            resolved_path = _resolve_artifact_request_path(str(metadata["path"]))
+        except HTTPException:
+            continue
+        artifacts[resolved_path] = metadata
+    return artifacts
+
+
+def _iter_registered_artifact_metadata(snapshot: dict[str, Any]):
+    frontend_state = snapshot.get("frontend_state") if isinstance(snapshot, dict) else None
+    runtime = frontend_state.get("json_workflow_runtime") if isinstance(frontend_state, dict) else None
+    if isinstance(runtime, dict):
+        yield from _iter_artifact_metadata_values(runtime.get("artifacts"))
+
+    result = snapshot.get("result") if isinstance(snapshot, dict) else None
+    if isinstance(result, dict):
+        yield from _iter_artifact_metadata_values(result.get("artifacts"))
+
+
+def _iter_artifact_metadata_values(value: Any):
+    if not isinstance(value, dict):
+        return
+    for metadata in value.values():
+        if (
+            isinstance(metadata, dict)
+            and metadata.get("type") == "workflow_artifact"
+            and isinstance(metadata.get("path"), str)
+        ):
+            yield metadata
 
 
 def _format_sse(event: dict[str, Any]) -> str:

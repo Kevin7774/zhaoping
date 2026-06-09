@@ -69,7 +69,7 @@ def get_project_jobs(
     ]
 
 
-@router.get("/{project_id}/candidates", response_model=list[CandidateResponse])
+@router.get("/{project_id}/candidates", response_model=list[CandidateResponse], response_model_exclude_none=True)
 def get_project_candidates(
     project_id: str,
     response: Response,
@@ -96,17 +96,29 @@ def get_project_candidates(
             job_id=job.id,
             job_title=job.title,
             name=candidate.name,
+            title=candidate.title,
             current_company=candidate.current_company,
+            location=candidate.location,
             city=candidate.city,
             email=candidate.email,
+            github_url=candidate.github_url,
+            linkedin_url=candidate.linkedin_url,
+            homepage_url=candidate.homepage_url,
+            source_platform=candidate.source_platform,
+            source_url=candidate.source_url,
+            evidence=candidate.evidence,
+            skills=candidate.skills,
+            created_from_task_id=candidate.created_from_task_id,
             match_score=job_candidate.match_score,
             pipeline_status=job_candidate.pipeline_status,
+            job_evidence=job_candidate.evidence,
+            source_task_id=job_candidate.source_task_id,
         )
         for job_candidate, candidate, job in rows
     ]
 
 
-@router.get("/{project_id}/candidates/unique", response_model=list[UniqueCandidateResponse])
+@router.get("/{project_id}/candidates/unique", response_model=list[UniqueCandidateResponse], response_model_exclude_none=True)
 def get_project_unique_candidates(
     project_id: str,
     response: Response,
@@ -135,9 +147,19 @@ def get_project_unique_candidates(
         UniqueCandidateResponse(
             id=candidate.id,
             name=candidate.name,
+            title=candidate.title,
             current_company=candidate.current_company,
+            location=candidate.location,
             city=candidate.city,
             email=candidate.email,
+            github_url=candidate.github_url,
+            linkedin_url=candidate.linkedin_url,
+            homepage_url=candidate.homepage_url,
+            source_platform=candidate.source_platform,
+            source_url=candidate.source_url,
+            evidence=candidate.evidence,
+            skills=candidate.skills,
+            created_from_task_id=candidate.created_from_task_id,
         )
         for candidate in candidates
     ]

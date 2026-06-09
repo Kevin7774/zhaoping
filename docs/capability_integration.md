@@ -80,14 +80,15 @@ resume text, or generated long drafts, opt into file-backed artifact storage:
   "id": "raw_search",
   "type": "search",
   "input": "{{ query }}",
+  "output_type": "artifact",
   "output_key": "search_results",
   "metadata": {
-    "output_storage": "artifact"
+    "business_meaning": "raw web search results"
   }
 }
 ```
 
-When `metadata.output_storage = "artifact"`:
+When `output_type = "artifact"`:
 
 - The normalized raw output is written to
   `WORKFLOW_ARTIFACT_DIR/{task_id}/{artifact_key}.json`.
@@ -98,11 +99,28 @@ When `metadata.output_storage = "artifact"`:
   path, producing step, output key, size, and preview.
 - Step audit output uses the same lightweight `artifact_ref`, so task snapshots,
   events, and final results do not persist the raw long payload in the task DB.
+- Frontend clients must read full artifact content through
+  `GET /tasks/{task_id}/artifacts?path=...`. The API only serves paths that are
+  inside `WORKFLOW_ARTIFACT_DIR` and registered on that task snapshot; clients
+  must not read backend local filesystem paths directly.
 
 Downstream LLM prompts should normally reference a summary variable such as
 `{{ search_summary }}`. If a later step needs raw artifact content, add an
 explicit artifact-reading step instead of relying on `{{ search_results }}` to
 inline the original long text.
+
+DSL validation enforces this contract before execution. Search steps must declare
+`output_type = "artifact"`, while normal short outputs such as LLM summaries,
+structured extraction results, and human decisions default to
+`output_type = "context"`. The older `metadata.output_storage` flag is still
+accepted as a compatibility alias, but new workflow JSON should use
+`output_type`.
+
+`structured_extract.schema` is also validated at DSL load time. Supported schema
+types are `object`, `array`, `string`, `number`, `integer`, and `boolean`.
+Object `required` fields must be declared in `properties`, and nested
+`properties`/`items` schemas are checked recursively before the workflow is
+accepted.
 
 ## Adding A Service
 

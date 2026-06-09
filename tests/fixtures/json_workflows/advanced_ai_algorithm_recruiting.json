@@ -14,6 +14,7 @@
       "type": "search",
       "input": "{{ search_query }}",
       "limit": 3,
+      "output_type": "artifact",
       "output_key": "candidate_signals",
       "metadata": {
         "business_meaning": "搜索 GitHub / 技术项目 / 候选人线索"

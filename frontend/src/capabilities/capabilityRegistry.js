@@ -48,6 +48,7 @@ export const PATH_PRODUCTIZATION = {
   '/segments/query': 'productized',
   '/segments/{segment_id}': 'productized',
   '/tasks/{task_id}': 'system',
+  '/tasks/{task_id}/artifacts': 'system',
   '/tasks/{task_id}/cancel': 'system',
   '/tasks/{task_id}/confirm': 'system',
   '/tasks/{task_id}/probe-feedback': 'system',

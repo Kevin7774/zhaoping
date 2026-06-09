@@ -243,6 +243,7 @@ def test_scenario_b_result_contains_lead_ingestion_and_increases_candidate_count
 ) -> None:
     monkeypatch.setattr(orchestrator.AgentRunner, "STEP_DELAY_SECONDS", 0)
     monkeypatch.setattr(orchestrator, "_source_intelligence_with_audit", fake_source_intelligence)
+    monkeypatch.setattr(orchestrator, "project_session_factory", lambda: session_factory)
 
     before = client.get("/projects/project_2026_ai_team/candidates")
     assert before.headers["x-total-count"] == "1"
