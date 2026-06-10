@@ -34,7 +34,9 @@ SOAK_SECONDS = int(os.environ.get("E2E_SOAK_SECONDS", "0"))
 MIN_LOOP_SECONDS = int(os.environ.get("E2E_SOAK_MIN_LOOP_SECONDS", "0"))
 TASK_TIMEOUT_SECONDS = int(os.environ.get("E2E_TASK_TIMEOUT_SECONDS", "120"))
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("E2E_REQUEST_TIMEOUT_SECONDS", "45"))
-MIN_SOAK_SECONDS = 1800
+# Formal soak requires 1800s; E2E_MIN_SOAK_SECONDS allows a short preflight run
+# (preflight results must never be reported as a formal PASS).
+MIN_SOAK_SECONDS = int(os.environ.get("E2E_MIN_SOAK_SECONDS", "1800"))
 TERMINAL_STATUSES = {"done", "error", "cancelled"}
 BLOCKING_ERROR_MARKERS = (
     "connection already closed",

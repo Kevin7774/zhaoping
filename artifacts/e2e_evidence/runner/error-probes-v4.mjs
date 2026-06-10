@@ -85,7 +85,9 @@ async function main() {
         await routeJson500(page, `/projects/${projectId}`, "E2E forced projects 500");
         await openProject(page);
         result.errorVisible = await visible(page, "E2E forced projects 500", 10000);
-        result.fakeProjectVisible = await visible(page, "2026 AI 团队招聘", 1000);
+        // 顶栏项目切换器会从仍然成功的 GET /projects 列表合法展示项目名，
+        // 因此用仅在详情加载成功后才出现的内容做假数据断言。
+        result.fakeProjectVisible = await visible(page, "来自真实岗位接口", 1000);
       },
       expect: (result) => result.errorVisible && !result.fakeProjectVisible,
     },

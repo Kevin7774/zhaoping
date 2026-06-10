@@ -671,6 +671,13 @@ def confirm_task(task_id: str, request: ConfirmRequest) -> dict:
             )
         except WorkflowFatalException as exc:
             raise HTTPException(status_code=400, detail=exc.safe_payload) from exc
+    awaiting = task.awaiting or {}
+    if request.decision != "reject" and awaiting.get("requires_lead_preview"):
+        if not isinstance(awaiting.get("lead_preview"), dict):
+            raise HTTPException(
+                status_code=409,
+                detail="Task awaiting payload requires lead_preview; approval rejected because lead preview is missing",
+            )
     ok = task_store.confirm(task_id, request.decision, request.edits)
     if not ok:
         raise HTTPException(status_code=409, detail="Task could not accept confirmation")

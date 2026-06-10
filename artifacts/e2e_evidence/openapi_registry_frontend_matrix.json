@@ -1,18 +1,17 @@
 {
   "summary": {
-    "openapi_path_count": 51,
-    "openapi_method_endpoint_count": 52,
-    "capabilityRegistry_path_count": 51,
-    "active_ts_endpoint_count": 25,
-    "active_ts_wrapper_endpoint_count": 26,
+    "openapi_path_count": 53,
+    "openapi_method_endpoint_count": 55,
+    "capabilityRegistry_path_count": 53,
+    "active_ts_endpoint_count": 29,
+    "active_ts_wrapper_endpoint_count": 29,
     "legacy_endpoint_count": 7,
     "backend_only_endpoint_count": 22,
     "registered_but_no_client_wrapper_count": 22,
     "missing_registry_count": 0,
     "stale_registry_count": 0,
     "category_counts": {
-      "active_ts_productized": 25,
-      "active_ts_wrapper_only": 1,
+      "active_ts_productized": 29,
       "legacy_only": 4,
       "registered_only": 22
     },
@@ -196,6 +195,46 @@
     },
     {
       "method": "GET",
+      "path": "/projects",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "listProjects"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "listProjects"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/projects",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "createProject"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "createProject"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
       "path": "/projects/{project_id}",
       "openapi_exists": true,
       "capabilityRegistry_exists": true,
@@ -299,13 +338,15 @@
       "active_ts_wrappers": [
         "initializeProjectFromBp"
       ],
-      "active_ts_page_uses": false,
-      "active_ts_page_functions": [],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "initializeProjectFromBp"
+      ],
       "legacy_api_wrapper_exists": false,
       "legacy_api_wrappers": [],
       "legacy_page_uses": false,
       "legacy_page_functions": [],
-      "category": "active_ts_wrapper_only",
+      "category": "active_ts_productized",
       "risk": "P2"
     },
     {
@@ -360,6 +401,26 @@
       "active_ts_page_uses": true,
       "active_ts_page_functions": [
         "uploadProjectResume"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/projects/{project_id}/preview-from-bp",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "previewProjectFromBp"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "previewProjectFromBp"
       ],
       "legacy_api_wrapper_exists": false,
       "legacy_api_wrappers": [],

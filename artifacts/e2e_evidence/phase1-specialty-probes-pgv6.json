@@ -1,0 +1,348 @@
+{
+  "runId": "pgv6-20260610-124546",
+  "apiBase": "http://127.0.0.1:8012",
+  "projectId": "project_2026_ai_team",
+  "startedAt": "2026-06-10T05:03:20.984763+00:00",
+  "complianceMatrix": {
+    "complianceApprove": {
+      "status": 200,
+      "durationMs": 2,
+      "body": {
+        "pipelineStatus": "pending_outreach"
+      }
+    },
+    "approvedDraft": {
+      "status": 200,
+      "durationMs": 15407,
+      "body": {
+        "draftId": "draft_f6540d52d260",
+        "status": "draft"
+      }
+    },
+    "pendingDraft": {
+      "status": 409,
+      "durationMs": 3,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "Candidate contact compliance status blocks outreach drafting: pending_compliance_review"
+    },
+    "pendingSendReal": {
+      "status": 403,
+      "durationMs": 2,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "Candidate contact compliance status blocks real send: pending_compliance_review"
+    },
+    "pendingSendSimulate": {
+      "status": 200,
+      "durationMs": 7,
+      "body": {
+        "status": "blocked_simulation",
+        "deliveryMode": "simulated",
+        "providerStatus": "blocked_by_compliance:pending_compliance_review"
+      }
+    },
+    "rejectedDraft": {
+      "status": 409,
+      "durationMs": 3,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "Candidate contact compliance status blocks outreach drafting: rejected"
+    },
+    "rejectedSendReal": {
+      "status": 403,
+      "durationMs": 2,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "Candidate contact compliance status blocks real send: rejected"
+    },
+    "rejectedSendSimulate": {
+      "status": 200,
+      "durationMs": 7,
+      "body": {
+        "status": "blocked_simulation",
+        "deliveryMode": "simulated",
+        "providerStatus": "blocked_by_compliance:rejected"
+      }
+    },
+    "approvedSendSimulate": {
+      "status": 200,
+      "durationMs": 24,
+      "body": {
+        "status": "simulated",
+        "deliveryMode": "simulated",
+        "providerStatus": "simulated"
+      }
+    },
+    "approvedSendRealProviderMissing": {
+      "status": 503,
+      "durationMs": 10,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "email_delivery is not active; real send is disabled"
+    },
+    "history": {
+      "status": 200,
+      "durationMs": 2,
+      "body": {}
+    },
+    "historyStatuses": [
+      "simulated",
+      "blocked_simulation",
+      "blocked_simulation",
+      "simulated",
+      "simulated",
+      "blocked_simulation",
+      "blocked_simulation",
+      "simulated",
+      "blocked_simulation",
+      "blocked_simulation"
+    ],
+    "checks": {
+      "pendingDraftBlocked": true,
+      "pendingSendReal403": true,
+      "pendingSendSimulateBlockedSimulation": true,
+      "rejectedDraftBlocked": true,
+      "rejectedSendReal403": true,
+      "rejectedSendSimulateBlockedSimulation": true,
+      "approvedSendSimulateOk": true,
+      "approvedRealProviderMissingNoFakeSuccess": true
+    },
+    "allPass": true
+  },
+  "candidateWithoutEmail": {
+    "candidateHasEmail": false,
+    "draft": {
+      "status": 200,
+      "durationMs": 21584,
+      "bodyKeys": [
+        "backendGenerated",
+        "body",
+        "candidateId",
+        "createdAt",
+        "draftId",
+        "jobId",
+        "projectId",
+        "segmentId",
+        "status",
+        "strategyTag",
+        "subject",
+        "updatedAt"
+      ]
+    },
+    "rejectDecisionSend": {
+      "status": 409,
+      "durationMs": 3,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "Outreach send requires approve decision"
+    }
+  },
+  "jobsMatch": {
+    "status": 200,
+    "durationMs": 2,
+    "body": {
+      "source": "project_database"
+    },
+    "resultCount": 5
+  },
+  "rsiEvaluate": {
+    "status": 422,
+    "durationMs": 1,
+    "body": {},
+    "detail": "[{'type': 'literal_error', 'loc': ['body', 'mode'], 'msg': \"Input should be 'local' or 'full'\", 'input': 'offline', 'ctx': {'expected': \"'local' or 'full'\"}}]"
+  },
+  "search": {
+    "plan": {
+      "status": 200,
+      "durationMs": 9,
+      "bodyKeys": [
+        "coverage_matrix",
+        "evidence_rules",
+        "guardrails",
+        "mode",
+        "query",
+        "query_templates",
+        "recommended_sources",
+        "registered_live_sources",
+        "search_phases"
+      ]
+    },
+    "run": {
+      "status": 200,
+      "durationMs": 8,
+      "bodyKeys": [
+        "limit",
+        "query",
+        "results",
+        "service"
+      ]
+    },
+    "evidence": {
+      "status": 200,
+      "durationMs": 9,
+      "bodyKeys": [
+        "claim",
+        "guardrails",
+        "query",
+        "records",
+        "review"
+      ]
+    },
+    "brief": {
+      "status": 200,
+      "durationMs": 9,
+      "bodyKeys": [
+        "brief_type",
+        "claim",
+        "coverage_matrix",
+        "evidence_review",
+        "executive_summary",
+        "generated_at",
+        "intelligence_gaps",
+        "next_search_actions",
+        "priority_evidence",
+        "query",
+        "report_guardrails",
+        "risk_register"
+      ]
+    },
+    "archive": {
+      "status": 200,
+      "durationMs": 9,
+      "bodyKeys": [
+        "archive_id",
+        "archive_path",
+        "archived_at",
+        "artifact_type",
+        "claim",
+        "query"
+      ]
+    },
+    "archiveRecent": {
+      "status": 200,
+      "durationMs": 1,
+      "bodyKeys": [
+        "limit",
+        "records"
+      ]
+    },
+    "archiveDiff": {
+      "status": 200,
+      "durationMs": 1,
+      "bodyKeys": [
+        "artifact_type",
+        "message",
+        "records_considered",
+        "status",
+        "watchlist_name"
+      ]
+    },
+    "watchlistRun": {
+      "status": 422,
+      "durationMs": 1,
+      "bodyKeys": [
+        "detail"
+      ],
+      "detail": "[{'type': 'missing', 'loc': ['body', 'items', 0, 'name'], 'msg': 'Field required', 'input': {'query': 'embodied intelligence robotics engineer hiring signals', 'limit': 2}}]"
+    }
+  },
+  "workflowRun": {
+    "status": 200,
+    "durationMs": 25,
+    "body": {
+      "task_id": "8002e4089d79",
+      "status": "processing"
+    }
+  },
+  "taskArtifacts": {
+    "status": 422,
+    "durationMs": 1,
+    "body": {},
+    "detail": "[{'type': 'missing', 'loc': ['query', 'path'], 'msg': 'Field required', 'input': None}]",
+    "itemCount": 0
+  },
+  "probeFeedbackUnknownProbe": {
+    "status": 200,
+    "durationMs": 13,
+    "bodyKeys": [
+      "feedback",
+      "latest_update",
+      "status"
+    ]
+  },
+  "segmentsUnsupportedFilters": {
+    "totalWithAll": 14,
+    "totalWithUnsupportedFilters": 14,
+    "silentlyIgnored": true,
+    "note": "outreachStatus/sourcePlatform are accepted by schema but not applied as filters (known gap)"
+  },
+  "reportsLatest": {
+    "status": 200,
+    "durationMs": 2,
+    "body": {
+      "reportId": "report_b3428f313955"
+    }
+  },
+  "reportById": {
+    "status": 200,
+    "durationMs": 2,
+    "body": {
+      "reportId": "report_b3428f313955",
+      "projectId": "project_2026_ai_team"
+    }
+  },
+  "finishedAt": "2026-06-10T05:03:58.899888+00:00",
+  "retries": {
+    "rsiEvaluate": {
+      "status": 200,
+      "keys": [
+        "capability_trace",
+        "case_results",
+        "feedback",
+        "full_mode_artifacts",
+        "guardrails",
+        "iteration",
+        "mode",
+        "provider",
+        "rsi_cycle",
+        "status",
+        "suite_id",
+        "summary"
+      ],
+      "summary": {
+        "suite": null,
+        "mode": "local",
+        "threshold": null,
+        "pass_rate": null,
+        "passRate": null,
+        "passed": null,
+        "total": null
+      }
+    },
+    "watchlistRun": {
+      "status": 200,
+      "keys": [
+        "archived",
+        "item_count",
+        "results"
+      ]
+    },
+    "workflowFinalStatus": "done",
+    "artifactEntries": {
+      "phase1_artifact": "Phase1 retry artifact probe"
+    },
+    "taskArtifactsRead": {
+      "status": 403,
+      "keys": [
+        "detail"
+      ]
+    }
+  }
+}

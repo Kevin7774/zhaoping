@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-06-10T02:46:29.898Z",
-  "baseUrl": "http://127.0.0.1:5174",
-  "apiBase": "http://127.0.0.1:5174/api",
+  "generatedAt": "2026-06-10T05:01:10.170Z",
+  "baseUrl": "http://127.0.0.1:5176",
+  "apiBase": "http://127.0.0.1:5176/api",
   "results": [
     {
       "name": "projects 500 shows page error without fake project data",
@@ -9,35 +9,23 @@
       "status": "PASS",
       "consoleErrors": [
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team",
           "status": 500
         },
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team",
           "status": 500
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
         }
       ],
       "errorVisible": true,
       "fakeProjectVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced projects 500\n重新加载"
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced projects 500\n重新加载"
     },
     {
       "name": "jobs 500 shows page error without fake jobs",
@@ -45,35 +33,23 @@
       "status": "PASS",
       "consoleErrors": [
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/jobs",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/jobs",
           "status": 500
         },
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/jobs",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/jobs",
           "status": 500
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
         }
       ],
       "errorVisible": true,
       "fakeJobVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced jobs 500\n重新加载"
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced jobs 500\n重新加载"
     },
     {
       "name": "candidates 500 shows page error without fake candidates",
@@ -81,35 +57,23 @@
       "status": "PASS",
       "consoleErrors": [
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
           "status": 500
         },
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
           "status": 500
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
         }
       ],
       "errorVisible": true,
       "fakeCandidateVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced candidates 500\n重新加载"
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\nE2E forced candidates 500\n重新加载"
     },
     {
       "name": "integrations status 500 gates capabilities",
@@ -117,95 +81,59 @@
       "status": "PASS",
       "consoleErrors": [
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/integrations/status",
+          "url": "http://127.0.0.1:5176/api/integrations/status",
           "status": 500
         },
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/integrations/status",
+          "url": "http://127.0.0.1:5176/api/integrations/status",
           "status": 500
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
         }
       ],
       "errorVisible": true,
       "buttonDisabled": true,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n5\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：状态未知\nLLM：状态未知\nEmbedding：状态未知\nVector：状态未知\nDatabase：状态未知\nEmail Delivery：状态未知\nE2E forced integrations 500\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 2 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAutonomy Stack\t具身智能 Agent 工程师\t76\t初筛中\t\n候选人评估\n查看\n生成草稿\n已显示 5 · 已加载 5 / 共 5 条关联\n自动搜候选人\n不可用\nVLA / 具身智能"
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n14\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：状态未知\nLLM：状态未知\nEmbedding：状态未知\nVector：状态未知\nDatabase：状态未知\nEmail Delivery：状态未知\nE2E forced integrations 500\nBP 智能生成岗位\n\n预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。\n\n从 BP 智能生成岗位\n确认覆盖岗位\nBP 文件路径\n最少岗位数\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 11 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t待触达\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n"
     },
     {
       "name": "scenarios run 500 does not fake task success",
       "endpoint": "POST /scenarios/run",
       "status": "PASS",
       "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
           "method": "POST",
-          "url": "http://127.0.0.1:5174/api/scenarios/run",
+          "url": "http://127.0.0.1:5176/api/scenarios/run",
           "status": 500
         }
       ],
       "errorVisible": true,
       "taskPanelVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n5\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 2 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAutonomy Stack\t具身智能 Agent 工程师\t76\t初筛中\t\n候选人评估\n查看\n生成草稿\n已显示 5 · 已加载 5 / 共 5 条关联\n自动搜候选人\n可用\nVLA / 具身智能算法工程师\n未开启 · 下次：—\n开启\n频率\n每 1 小时\n每 "
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n14\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\nBP 智能生成岗位\n\n预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。\n\n从 BP 智能生成岗位\n确认覆盖岗位\nBP 文件路径\n最少岗位数\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 11 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t待触达\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAut"
     },
     {
       "name": "segments query 500 does not fake save",
       "endpoint": "POST /segments/query",
       "status": "PASS",
       "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
           "method": "POST",
-          "url": "http://127.0.0.1:5174/api/segments/query",
+          "url": "http://127.0.0.1:5176/api/segments/query",
           "status": 500
         }
       ],
       "errorVisible": true,
       "fakeSavedVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n5\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 2 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAutonomy Stack\t具身智能 Agent 工程师\t76\t初筛中\t\n候选人评估\n查看\n生成草稿\n已显示 5 · 已加载 5 / 共 5 条关联\n自动搜候选人\n可用\nVLA / 具身智能算法工程师\n未开启 · 下次：—\n开启\n频率\n每 1 小时\n每 "
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n14\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\nBP 智能生成岗位\n\n预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。\n\n从 BP 智能生成岗位\n确认覆盖岗位\nBP 文件路径\n最少岗位数\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 11 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t待触达\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAut"
     },
     {
       "name": "reports latest 500 is surfaced without fake latest report",
@@ -218,47 +146,35 @@
       "networkErrors": [
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/reports/latest",
           "status": 500
         },
         {
           "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
+          "url": "http://127.0.0.1:5176/api/projects/project_2026_ai_team/reports/latest",
           "status": 500
         }
       ],
       "errorVisible": true,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n5\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 2 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAutonomy Stack\t具身智能 Agent 工程师\t76\t初筛中\t\n候选人评估\n查看\n生成草稿\n已显示 5 · 已加载 5 / 共 5 条关联\n自动搜候选人\n可用\nVLA / 具身智能算法工程师\n未开启 · 下次：—\n开启\n频率\n每 1 小时\n每 "
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n14\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\nBP 智能生成岗位\n\n预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。\n\n从 BP 智能生成岗位\n确认覆盖岗位\nBP 文件路径\n最少岗位数\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 11 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t待触达\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAut"
     },
     {
       "name": "jobs match 500 does not show fake match result",
       "endpoint": "POST /jobs/match",
       "status": "PASS",
       "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "Failed to load resource: the server responded with a status of 404 (Not Found)",
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
       ],
       "networkErrors": [
         {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
-          "method": "GET",
-          "url": "http://127.0.0.1:5174/api/projects/project_2026_ai_team/reports/latest",
-          "status": 404
-        },
-        {
           "method": "POST",
-          "url": "http://127.0.0.1:5174/api/jobs/match",
+          "url": "http://127.0.0.1:5176/api/jobs/match",
           "status": 500
         }
       ],
       "errorVisible": true,
       "fakeResultVisible": false,
-      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 实时项目\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n5\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 2 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAutonomy Stack\t具身智能 Agent 工程师\t76\t初筛中\t\n候选人评估\n查看\n生成草稿\n已显示 5 · 已加载 5 / 共 5 条关联\n自动搜候选人\n可用\nVLA / 具身智能算法工程师\n未开启 · 下次：—\n开启\n频率\n每 1 小时\n每 "
+      "bodyText": "AI\nAI 招聘助手\nRecruiting Assistant\n工\n工作台\n招\n招聘项目\n岗\n岗位分析\n找\n找候选人\n候\n候选人评估\n人\n人群筛选\n邮\n邮件触达\n招\n招聘周报\n任\n任务记录\n系\n系统设置\n招聘项目 / 2026 AI 团队招聘\n切换项目\nHanno AI 硬件招聘\n2026 AI 团队招聘\n搜索候选人、岗位、项目\nAPI 在线\n刷新数据\n新建项目\nHR\n2026 AI 团队招聘\n进行中\n\n真实后端数据驱动 · 负责人：— · 更新时间：2026/6/9 08:00:00\n\n运行首个岗位找候选人\n生成周报\n...\n无任务\n岗\n招聘岗位\n3\n来自真实岗位接口\n人\n候选人\n14\n来自岗位候选人关联\n邮\n待发送邮件\n—\n后端暂未提供\n面\n本周面试\n—\n后端暂未提供\n后端能力状态\nSearch：已接入\nLLM：已接入\nEmbedding：已接入\nVector：已接入\nDatabase：未接入\nEmail Delivery：缺少 Key\nBP 智能生成岗位\n\n预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。\n\n从 BP 智能生成岗位\n确认覆盖岗位\nBP 文件路径\n最少岗位数\n✓\n招聘需求\n2\n岗位分析\n3\n找候选人\n4\n候选人评估\n5\n筛选人群\n6\n发送邮件\n岗位进展\n刷新\n岗位\t人数\t分析\t找候选人\t评估\t邮件\t状态\t操作\n\nVLA / 具身智能算法工程师\n真实后端岗位 · 已关联 11 人\n\t2\t待确认\t待确认\t待确认\t待确认\t待确认\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n机器人数据平台工程师\n真实后端岗位 · 已关联 2 人\n\t1\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n\n\n具身智能 Agent 工程师\n真实后端岗位 · 已关联 1 人\n\t2\t进行中\t进行中\t进行中\t进行中\t进行中\t\n岗位分析\n找候选人\n候选人评估\n岗位匹配\n候选人名单\n查看全部\n姓名\t当前公司\t目标岗位\t匹配分\t状态\t操作\n\nA\nAlex Chen\nVLA / 具身智能算法工程师\n\tEmbodied AI Lab\tVLA / 具身智能算法工程师\t92\t待触达\t\n候选人评估\n查看\n生成草稿\n\n\nZ\nZhou Han\nVLA / 具身智能算法工程师\n\tRobot Foundation Team\tVLA / 具身智能算法工程师\t88\t待确认\t\n候选人评估\n查看\n生成草稿\n\n\nW\nWang Ke\n机器人数据平台工程师\n\tAutonomous Driving Data\t机器人数据平台工程师\t84\t已评估\t\n候选人评估\n查看\n生成草稿\n\n\nS\nSara Qi\n机器人数据平台工程师\n\t—\t机器人数据平台工程师\t79\t评估中\t\n候选人评估\n查看\n生成草稿\n\n\nM\nMaya Li\n具身智能 Agent 工程师\n\tAut"
     },
     {
       "name": "workflows run invalid request returns error and creates no fake task",
@@ -267,7 +183,7 @@
       "networkErrors": [
         {
           "method": "POST",
-          "url": "http://127.0.0.1:5174/api/workflows/run",
+          "url": "http://127.0.0.1:5176/api/workflows/run",
           "status": 422
         }
       ],
@@ -279,7 +195,7 @@
   "summary": {
     "pass": 9,
     "fail": 0,
-    "consoleErrorCount": 27,
-    "networkErrorCount": 28
+    "consoleErrorCount": 13,
+    "networkErrorCount": 14
   }
 }
