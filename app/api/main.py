@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -49,7 +50,19 @@ from app.schemas.workflows import (
     WorkflowValidateResponse,
 )
 
-app = FastAPI(title="Robot Talent Agent MVP")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if candidate_search_scheduler_enabled():
+        scheduler = CandidateSearchScheduler()
+        app.state.candidate_search_scheduler = scheduler
+        scheduler.start_once()
+    yield
+    scheduler = getattr(app.state, "candidate_search_scheduler", None)
+    if scheduler is not None:
+        scheduler.stop()
+
+
+app = FastAPI(title="Robot Talent Agent MVP", lifespan=lifespan)
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIST_DIR / "index.html"
 FRONTEND_INDEX_HEADERS = {"Cache-Control": "no-store, no-cache, must-revalidate"}
@@ -73,21 +86,6 @@ app.include_router(outreach_router)
 app.include_router(segments_router)
 app.include_router(reports_router)
 app.include_router(resumes_router)
-
-
-@app.on_event("startup")
-def start_candidate_search_scheduler() -> None:
-    if candidate_search_scheduler_enabled():
-        scheduler = CandidateSearchScheduler()
-        app.state.candidate_search_scheduler = scheduler
-        scheduler.start_once()
-
-
-@app.on_event("shutdown")
-def stop_candidate_search_scheduler() -> None:
-    scheduler = getattr(app.state, "candidate_search_scheduler", None)
-    if scheduler is not None:
-        scheduler.stop()
 
 
 @app.middleware("http")
