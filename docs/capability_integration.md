@@ -166,14 +166,39 @@ provider payloads. Runtime calls are bounded by a live-provider budget; skipped
 sources must be reported as `missing_credentials`, `missing_tool`,
 `manual_setup`, or `deferred_by_live_budget` instead of failing silently.
 
-Project scenario tasks may pass `frontend_state.search_mode` with one of
-`planning_only`, `live_recruiting`, `due_diligence`, or `social_expansion`.
-Search-driven steps must return a lightweight `搜索运行追踪` / `search_run_trace`
-object with the query, selected mode, provider health/preflight, selected and
-skipped provider counts, evidence tier/status counts, layer coverage, and next
-actions. `planning_only` must not call live providers. The frontend should send
-the selected mode plus a safe `provider_preflight` summary and display the trace
-from task audit events or final results.
+Project scenario tasks should prefer structured search control in
+`frontend_state`: `search_profile`, `execution_policy`, `source_layers`, and
+`search_budget`. `search_profile` describes the intent, such as candidate
+sourcing or due diligence. `execution_policy` controls depth and external
+request risk: `planning_only` must not call live providers, `bounded_live`
+uses a capped provider budget, and `deep_live` allows a larger bounded budget.
+`source_layers` is additive, not mutually exclusive; layers such as academic,
+code/model, people database, social, news/funding, school/competition, crawler
+snapshot, and due diligence can be enabled together. `search_budget` caps
+provider count, per-provider limit, timeout, and crawl pages.
+
+Legacy `frontend_state.search_mode` values (`planning_only`,
+`live_recruiting`, `due_diligence`, `social_expansion`) remain accepted for
+task retries and older clients. They are normalized into the structured model;
+notably `social_expansion` is treated as adding social sources on top of the
+candidate-sourcing defaults rather than excluding other source layers.
+
+Search-driven steps must return a lightweight `搜索运行追踪` /
+`search_run_trace` object with the query, selected profile/policy/layers,
+provider health/preflight, selected and skipped provider counts, evidence
+tier/status counts, layer coverage, evidence gaps, next queries, and next
+actions. The frontend should send the structured config plus a safe
+`provider_preflight` summary and display the trace from task audit events or
+final results.
+
+When `frontend_state.archive_search_evidence` is true, or
+`INTELLIGENCE_ARCHIVE_PATH` is explicitly configured, search-driven steps should
+also append a minimal Evidence Ledger artifact through `IntelligenceArchive`.
+Use artifact type `search_evidence_ledger`. The artifact should capture task,
+project, and job IDs; selected profile/policy/layers and budget; recommended
+sources; normalized evidence records; live result summaries; provider errors;
+evidence gaps; next queries; and guardrails. This reuses the JSONL archive and
+does not require a database migration.
 
 Keep planned/source-catalog entries in `app/skills/search_sources.py` aligned with concrete services in `config/services.toml`.
 

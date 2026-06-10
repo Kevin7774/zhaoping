@@ -3,7 +3,13 @@ import type { FunnelStageKey, JobProfile, JobRationale, StepStatus } from "../jo
 import type { FilterCriteria } from "./state";
 import { ApiError, apiClient } from "../../shared/api/client";
 import type { TaskSnapshot } from "../../shared/hooks/useTaskStream";
-import type { ActionExplanation, ProviderPreflightItem, SearchMode } from "./explainableAction";
+import {
+  searchConfigToBackendState,
+  type ActionExplanation,
+  type ProviderPreflightItem,
+  type SearchConfig,
+  type SearchMode,
+} from "./explainableAction";
 
 export type WeeklyReport = {
   conclusion?: string;
@@ -30,6 +36,7 @@ export type RunProjectScenarioAction = "job_analysis" | "find_candidates" | "can
 
 export type ProjectScenarioRunOptions = {
   searchMode?: SearchMode;
+  searchConfig?: SearchConfig;
   providerPreflight?: ProviderPreflightItem[];
   actionExplanation?: ActionExplanation;
 };
@@ -44,6 +51,16 @@ export type ResumeImportResponse = {
   taskId: string;
   scenario: string;
   status: string;
+};
+
+export type ProjectMaterialUploadResponse = {
+  fileName: string;
+  bpFilePath: string;
+  sourceFilePath: string;
+  sizeBytes: number;
+  parser?: string | null;
+  confidence?: number | null;
+  degradedReason?: string | null;
 };
 
 export type IntegrationCapabilityStatus = {
@@ -346,6 +363,15 @@ export function uploadProjectResume(projectId: string, jobId: string, file: File
   );
 }
 
+export function uploadProjectMaterial(projectId: string, file: File): Promise<ProjectMaterialUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiClient.post<ProjectMaterialUploadResponse>(
+    `/projects/${encodeURIComponent(projectId)}/materials/upload`,
+    formData,
+  );
+}
+
 export async function getProjectCandidatesPage(
   projectId: string,
   options: ListQueryOptions = {},
@@ -551,7 +577,11 @@ export function runProjectScenario(
       job_title: job.roleName,
       jobTitle: job.roleName,
       action,
-      ...(options.searchMode ? { search_mode: options.searchMode, searchMode: options.searchMode } : {}),
+      ...(options.searchConfig
+        ? { ...searchConfigToBackendState(options.searchConfig), archive_search_evidence: true }
+        : options.searchMode
+          ? { search_mode: options.searchMode, searchMode: options.searchMode }
+          : {}),
       ...(options.providerPreflight ? { provider_preflight: options.providerPreflight } : {}),
       ...(options.actionExplanation ? { action_explainability: options.actionExplanation } : {}),
     },

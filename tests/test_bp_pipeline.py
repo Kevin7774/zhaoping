@@ -37,6 +37,8 @@ def test_critic_rejects_role_without_bp_evidence() -> None:
     assert accepted == []
     assert len(rejected) == 1
     assert any("bp_evidence" in reason for reason in rejected[0]["reasons"])
+    assert rejected[0]["critic_category"] == "no_evidence"
+    assert rejected[0]["missing_evidence"]
 
 
 def test_critic_rejects_role_whose_quote_is_not_in_source() -> None:
@@ -52,6 +54,15 @@ def test_critic_rejects_role_without_why_needed_chain() -> None:
     accepted, rejected = critic_gate([_role(why_needed="需要")], source_text=SOURCE)
     assert accepted == []
     assert any("why_needed" in reason for reason in rejected[0]["reasons"])
+    assert rejected[0]["critic_category"] == "incomplete_rationale"
+
+
+def test_critic_overlap_rejection_carries_boundary_category() -> None:
+    strong = _role(confidence=0.9)
+    duplicate = _role(role_id="copy", title="边缘 AI 平台架构师", confidence=0.4)
+    _, rejected = critic_gate([strong, duplicate], source_text=SOURCE)
+    assert rejected and rejected[0]["critic_category"] == "boundary_overlap"
+    assert rejected[0]["missing_evidence"] == []
 
 
 def test_critic_rejects_role_without_commitment_or_gap_links() -> None:

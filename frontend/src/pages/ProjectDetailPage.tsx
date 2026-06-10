@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CandidateTable } from "../features/candidates/components/CandidateTable";
 import type { Candidate } from "../features/candidates/types";
@@ -28,6 +28,7 @@ import {
   saveWeeklyReport,
   sendOutreachDraft,
   updateCandidateSearchSchedule,
+  uploadProjectMaterial,
   type CandidateSearchSchedule,
   type IntegrationsStatusResponse,
   type JobMatchResponse,
@@ -49,11 +50,16 @@ import { MultiJobProgressTable } from "../features/projects/components/MultiJobP
 import { ProjectSummaryCards } from "../features/projects/components/ProjectSummaryCards";
 import { WeeklyReportCard } from "../features/projects/components/WeeklyReportCard";
 import {
-  SEARCH_MODE_OPTIONS,
+  SEARCH_EXECUTION_POLICY_OPTIONS,
+  SEARCH_SOURCE_LAYER_OPTIONS,
+  budgetForExecutionPolicy,
   buildActionExplanation,
+  createDefaultSearchConfig,
   providerPreflightFromIntegrations,
   providerPreflightSummary,
-  type SearchMode,
+  type SearchConfig,
+  type SearchExecutionPolicy,
+  type SearchSourceLayer,
 } from "../features/projects/explainableAction";
 import { humanGateRequestFromEvent, type HumanGateRequest } from "../features/projects/humanGate";
 import { defaultFilterCriteria, type FilterCriteria } from "../features/projects/state";
@@ -128,30 +134,6 @@ function upsertSchedule(items: CandidateSearchSchedule[], updated: CandidateSear
   return items.map((item) => (item.jobId === updated.jobId ? updated : item));
 }
 
-function workflowStatus(
-  index: number,
-  jobs: JobProfile[],
-  candidates: Candidate[],
-  taskStatus: string | null,
-  activeAction: RunProjectScenarioAction | "weekly_report" | null,
-) {
-  const activeStep: Record<RunProjectScenarioAction | "weekly_report", number> = {
-    job_analysis: 1,
-    find_candidates: 2,
-    candidate_evaluation: 3,
-    weekly_report: 4,
-  };
-  const currentTaskStep = activeAction ? activeStep[activeAction] : null;
-  if (currentTaskStep === index && taskStatus === "done") return "done";
-  if (currentTaskStep === index && (taskStatus === "processing" || taskStatus === "awaiting_human")) return "current";
-  if (index === 0) return "done";
-  if (index === 1) return jobs.length ? "current" : "pending";
-  if (index === 2) return candidates.length ? "current" : jobs.length ? "pending" : "pending";
-  if (index === 3) return candidates.length ? "pending" : "pending";
-  if (index === 4) return candidates.length ? "current" : "pending";
-  return "pending";
-}
-
 function statusBadge(status: StepStatus | string) {
   if (status === "done") return "bg-[#ECFDF3] text-[#16A34A]";
   if (status === "awaiting_human") return "bg-[#FFFBEB] text-[#F59E0B]";
@@ -169,6 +151,14 @@ type CapabilityGate = {
   reason?: string;
   status?: string;
 };
+
+function recommendedCandidateTarget(job: JobProfile) {
+  return Math.max((job.headcount ?? 1) * 3, 3);
+}
+
+function linkedCandidateCount(job: JobProfile, counts: Record<string, number>) {
+  return Math.max(counts[job.jobProfileId] ?? 0, job.candidateCount ?? 0);
+}
 
 const CONNECTED_STATUSES = new Set(["active", "available"]);
 
@@ -200,14 +190,14 @@ function capabilityGate(
 }
 
 function candidateSearchScenarioOptions(
-  searchMode: SearchMode,
+  searchConfig: SearchConfig,
   searchGate: CapabilityGate,
   job: JobProfile,
   integrations: IntegrationsStatusResponse | null,
 ): ProjectScenarioRunOptions {
-  const providerPreflight = providerPreflightFromIntegrations(integrations, searchMode);
+  const providerPreflight = providerPreflightFromIntegrations(integrations, searchConfig);
   return {
-    searchMode,
+    searchConfig,
     providerPreflight,
     actionExplanation: buildActionExplanation({
       actionId: "project.find_candidates",
@@ -216,7 +206,7 @@ function candidateSearchScenarioOptions(
       inputSummary: job.roleName,
       expectedOutput: "候选人线索、人机确认、任务审计事件",
       capabilityGate: searchGate.reason || "Search API 状态未知",
-      searchMode,
+      searchConfig,
       providerPreflight,
     }),
   };
@@ -356,14 +346,17 @@ export function ProjectDetailPage() {
   const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
   const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
   const [bpGenerationMode, setBpGenerationMode] = useState<ProjectGenerationMode>("bp_plus_prompt");
-  const [candidateSearchMode, setCandidateSearchMode] = useState<SearchMode>("live_recruiting");
+  const [candidateSearchConfig, setCandidateSearchConfig] = useState<SearchConfig>(() => createDefaultSearchConfig());
   const [actionExplanationText, setActionExplanationText] = useState<string | null>(null);
   const [bpFilePath, setBpFilePath] = useState(DEFAULT_BP_FILE_PATH);
+  const [bpUploadedMaterialName, setBpUploadedMaterialName] = useState<string | null>(null);
+  const [bpMaterialParseSummary, setBpMaterialParseSummary] = useState<string | null>(null);
   const [bpProjectPrompt, setBpProjectPrompt] = useState("");
   const [bpIndustryResearchPrompt, setBpIndustryResearchPrompt] = useState("");
   const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(14);
   const [bpPreview, setBpPreview] = useState<ProjectBpInitializeResponse | null>(null);
   const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
+  const [bpMaterialUploading, setBpMaterialUploading] = useState(false);
   const [bpError, setBpError] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -511,9 +504,11 @@ export function ProjectDetailPage() {
     setCandidateSearchSchedules([]);
     setScheduleBusyJobId(null);
     setBpGenerationMode("bp_plus_prompt");
-    setCandidateSearchMode("live_recruiting");
+    setCandidateSearchConfig(createDefaultSearchConfig());
     setActionExplanationText(null);
     setBpFilePath(DEFAULT_BP_FILE_PATH);
+    setBpUploadedMaterialName(null);
+    setBpMaterialParseSummary(null);
     setBpProjectPrompt("");
     setBpIndustryResearchPrompt("");
     setBpMinimumRoleCount(14);
@@ -632,8 +627,8 @@ export function ProjectDetailPage() {
     [integrations, integrationsError],
   );
   const searchProviderPreflight = useMemo(
-    () => providerPreflightFromIntegrations(integrations, candidateSearchMode),
-    [candidateSearchMode, integrations],
+    () => providerPreflightFromIntegrations(integrations, candidateSearchConfig),
+    [candidateSearchConfig, integrations],
   );
   const searchProviderSummary = useMemo(
     () => providerPreflightSummary(searchProviderPreflight),
@@ -667,12 +662,12 @@ export function ProjectDetailPage() {
     const hasBpFile = bpFilePath.trim().length > 0;
     const hasProjectPrompt = bpProjectPrompt.trim().length > 0;
     const hasIndustryPrompt = bpIndustryResearchPrompt.trim().length > 0;
-    if (bpGenerationMode === "bp_file" && !hasBpFile) return "请填写 BP 文件路径。";
+    if (bpGenerationMode === "bp_file" && !hasBpFile) return "请填写项目材料位置。";
     if (bpGenerationMode === "prompt" && !hasProjectPrompt && !hasIndustryPrompt) {
       return "提示词模式需要填写项目提示词或行业研究偏好。";
     }
     if (bpGenerationMode === "bp_plus_prompt" && !hasBpFile && !hasProjectPrompt && !hasIndustryPrompt) {
-      return "BP + 提示词模式需要至少提供 BP 文件路径、项目提示词或行业研究偏好。";
+      return "BP + 提示词模式需要至少提供项目材料、项目提示词或行业研究偏好。";
     }
     return null;
   }, [bpFilePath, bpGenerationMode, bpIndustryResearchPrompt, bpProjectPrompt]);
@@ -708,6 +703,32 @@ export function ProjectDetailPage() {
       setBpError(error instanceof Error ? error.message : "岗位矩阵预览失败");
     } finally {
       setBpBusy(null);
+    }
+  };
+
+  const handleProjectMaterialUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    setBpMaterialUploading(true);
+    setBpError(null);
+    try {
+      const uploaded = await uploadProjectMaterial(projectId, file);
+      const parsedName = uploaded.bpFilePath.split(/[\\/]/).filter(Boolean).pop() ?? uploaded.bpFilePath;
+      const parserText = uploaded.parser ? ` · ${uploaded.parser}` : "";
+      const confidenceText = typeof uploaded.confidence === "number" ? ` · 置信度 ${Math.round(uploaded.confidence * 100)}%` : "";
+      setBpFilePath(uploaded.bpFilePath);
+      setBpUploadedMaterialName(uploaded.fileName);
+      setBpMaterialParseSummary(`已解析为 ${parsedName}${parserText}${confidenceText}`);
+      setBpGenerationMode((current) => (current === "prompt" ? "bp_plus_prompt" : current));
+      setBpPreview(null);
+      setToast(`已上传项目材料：${uploaded.fileName}`);
+    } catch (error) {
+      setBpError(error instanceof Error ? error.message : "项目材料上传失败");
+    } finally {
+      setBpMaterialUploading(false);
+      input.value = "";
     }
   };
 
@@ -806,10 +827,11 @@ export function ProjectDetailPage() {
     const actionLabel =
       action === "job_analysis" ? "岗位分析" : action === "find_candidates" ? "找候选人" : "候选人评估";
     const scenarioOptions: ProjectScenarioRunOptions =
-      action === "find_candidates" ? candidateSearchScenarioOptions(candidateSearchMode, searchGate, job, integrations) : {};
+      action === "find_candidates" ? candidateSearchScenarioOptions(candidateSearchConfig, searchGate, job, integrations) : {};
     if (action === "find_candidates") {
+      const activeLayerCount = Object.values(candidateSearchConfig.sourceLayers).filter(Boolean).length;
       setActionExplanationText(
-        `动作解释：${scenarioOptions.actionExplanation?.label ?? actionLabel} · ${scenarioOptions.actionExplanation?.apiRoute ?? "POST /scenarios/run"} · ${scenarioOptions.searchMode}`,
+        `动作解释：${scenarioOptions.actionExplanation?.label ?? actionLabel} · ${scenarioOptions.actionExplanation?.apiRoute ?? "POST /scenarios/run"} · ${candidateSearchConfig.executionPolicy} · ${activeLayerCount} 个来源层`,
       );
     }
     setToast(`正在启动${actionLabel}任务`);
@@ -866,12 +888,6 @@ export function ProjectDetailPage() {
     }
   };
 
-  const handleRunFirstJob = async () => {
-    const firstJob = jobs[0];
-    if (!firstJob) return;
-    await handleRunAction(firstJob, "find_candidates");
-  };
-
   const handleRunMatch = async (job: JobProfile) => {
     if (!matchGate.enabled) {
       setToast(matchGate.reason || "岗位匹配不可用");
@@ -902,7 +918,7 @@ export function ProjectDetailPage() {
         intervalMinutes: current?.intervalMinutes ?? 360,
       });
       setCandidateSearchSchedules((items) => upsertSchedule(items, updated));
-      setToast(enabled ? "自动搜候选人已开启" : "自动搜候选人已关闭");
+      setToast(enabled ? "自动搜索计划已开启" : "自动搜索计划已关闭");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "自动搜索配置保存失败");
     } finally {
@@ -1100,8 +1116,43 @@ export function ProjectDetailPage() {
     );
   }
 
-  const steps = ["招聘需求", "岗位分析", "找候选人", "候选人评估", "筛选人群", "发送邮件"];
   const statusText = projectStatusLabel[project.status] ?? project.status;
+  const currentTaskStatusText = taskStatusLabel[taskStatus] ?? taskStatus;
+  const bpMaterialName = bpFilePath.trim().split(/[\\/]/).filter(Boolean).pop() || "未选择材料";
+  const bpMaterialDisplay = bpGenerationMode === "prompt" ? "未使用项目材料" : bpUploadedMaterialName ?? bpMaterialName;
+  const currentSearchPolicyLabel =
+    SEARCH_EXECUTION_POLICY_OPTIONS.find((option) => option.value === candidateSearchConfig.executionPolicy)?.label ??
+    candidateSearchConfig.executionPolicy;
+  const enabledSourceLayerCount = Object.values(candidateSearchConfig.sourceLayers).filter(Boolean).length;
+  const recommendedJob =
+    jobs.find((job) => linkedCandidateCount(job, jobCandidateCounts) < recommendedCandidateTarget(job)) ?? jobs[0] ?? null;
+  const recommendedLinkedCount = recommendedJob ? linkedCandidateCount(recommendedJob, jobCandidateCounts) : 0;
+  const recommendedTarget = recommendedJob ? recommendedCandidateTarget(recommendedJob) : 0;
+  const recommendedAction = !recommendedJob
+    ? {
+        label: "预览岗位矩阵",
+        description: "当前还没有岗位，先从项目材料或提示词生成岗位矩阵。",
+        disabled: bpBusy !== null,
+        title: undefined,
+        run: () => {
+          void handlePreviewBpJobs();
+        },
+      }
+    : recommendedLinkedCount < recommendedTarget
+      ? {
+          label: "开始找候选人",
+          description: `${recommendedJob.roleName} 候选人不足：${recommendedLinkedCount}/${recommendedTarget}，下一步先补充可评估线索。`,
+          disabled: runningJobAction?.jobProfileId === recommendedJob.jobProfileId || !actionAvailability.find_candidates.enabled,
+          title: !actionAvailability.find_candidates.enabled ? actionAvailability.find_candidates.reason : undefined,
+          run: () => handleRunAction(recommendedJob, "find_candidates" as const),
+        }
+      : {
+          label: "开始评估候选人",
+          description: `${recommendedJob.roleName} 已有候选人池，下一步评估匹配度、风险和推进优先级。`,
+          disabled: runningJobAction?.jobProfileId === recommendedJob.jobProfileId || !actionAvailability.candidate_evaluation.enabled,
+          title: !actionAvailability.candidate_evaluation.enabled ? actionAvailability.candidate_evaluation.reason : undefined,
+          run: () => handleRunAction(recommendedJob, "candidate_evaluation" as const),
+        };
 
   return (
     <div className="min-w-0 pb-8">
@@ -1113,35 +1164,12 @@ export function ProjectDetailPage() {
               {statusText}
             </span>
           </div>
-          <p className="mt-2 text-[13px] leading-5 text-[#6B7280]">
-            真实后端数据驱动 · 负责人：{project.owner ?? "—"} · 更新时间：
-            {formatDateTime(project.updatedAt)}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] leading-5 text-[#6B7280]">
+            {project.owner ? <span>负责人：{project.owner}</span> : null}
+            <span>更新于 {formatDateTime(project.updatedAt)}</span>
+          </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-end gap-2">
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            搜索模式
-            <select
-              value={candidateSearchMode}
-              onChange={(event) => setCandidateSearchMode(event.currentTarget.value as SearchMode)}
-              className="mt-1 h-[38px] w-[132px] rounded-[10px] border border-[#E5E7EB] bg-white px-2.5 text-[13px] text-[#111827]"
-            >
-              {SEARCH_MODE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleRunFirstJob}
-            disabled={!jobs.length || !actionAvailability.find_candidates.enabled}
-            title={!actionAvailability.find_candidates.enabled ? actionAvailability.find_candidates.reason : undefined}
-            className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            运行首个岗位找候选人
-          </button>
           <button
             type="button"
             onClick={handleRunWeeklyReport}
@@ -1154,20 +1182,19 @@ export function ProjectDetailPage() {
           <button
             type="button"
             onClick={() => {
-              setActionExplanationText("动作解释：更多 · 打开任务记录 · 不调用后端 API");
+              setActionExplanationText("动作解释：任务记录 · 打开任务记录 · 不调用后端 API");
               setTaskPanelOpen(true);
             }}
-            className="grid h-[38px] w-[38px] place-items-center rounded-[10px] border border-[#E5E7EB] bg-white text-[18px] leading-none text-[#6B7280]"
-            aria-label="更多"
+            className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
           >
-            ...
+            任务记录
           </button>
           <button
             type="button"
             onClick={() => setTaskPanelOpen(true)}
             className={`h-[38px] rounded-full px-3.5 text-[13px] font-medium ${taskStatusTone[taskStatus] ?? taskStatusTone.idle}`}
           >
-            {taskStatusLabel[taskStatus] ?? taskStatus}
+            任务状态：{currentTaskStatusText}
           </button>
         </div>
       </section>
@@ -1177,36 +1204,6 @@ export function ProjectDetailPage() {
       {actionExplanationText ? (
         <section className="mt-5 rounded-[12px] border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-3 text-[13px] leading-5 text-[#1E40AF]">
           {actionExplanationText}
-        </section>
-      ) : null}
-
-      {integrationsError || integrations ? (
-      <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-          <div className="font-semibold text-[#111827]">后端能力状态</div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            <span>Search：{capabilityStatusLabel(searchGate.status)}</span>
-            <span>LLM：{capabilityStatusLabel(llmGate.status)}</span>
-            <span>Embedding：{capabilityStatusLabel(embeddingGate.status)}</span>
-            <span>Vector：{capabilityStatusLabel(vectorGate.status)}</span>
-            <span>Database：{capabilityStatusLabel(databaseGate.status)}</span>
-            <span>Email Delivery：{capabilityStatusLabel(emailDeliveryGate.status)}</span>
-            <span>
-              搜索预检：{searchProviderSummary.ready}/{searchProviderSummary.total} 可用
-              {searchProviderSummary.blocked ? ` · ${searchProviderSummary.blocked} 阻断` : ""}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {searchProviderPreflight.slice(0, 6).map((item) => (
-              <span
-                key={`${item.service}-${item.status}`}
-                className="rounded-[7px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] text-[#4B5563]"
-                title={item.reason}
-              >
-                {item.service}: {capabilityStatusLabel(item.status)}
-              </span>
-            ))}
-          </div>
-          {integrationsError ? <div className="mt-1 text-[#EF4444]">{integrationsError}</div> : null}
         </section>
       ) : null}
 
@@ -1253,18 +1250,57 @@ export function ProjectDetailPage() {
               <option value="prompt">仅提示词</option>
             </select>
           </label>
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            BP 文件路径
-            <input
-              value={bpFilePath}
-              disabled={bpGenerationMode === "prompt"}
-              onChange={(event) => {
-                setBpFilePath(event.currentTarget.value);
-                setBpPreview(null);
-              }}
-              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF]"
-            />
-          </label>
+          <div className="text-[12px] font-medium text-[#6B7280]">
+            <div>项目材料</div>
+            <div className="mt-1 flex h-10 w-full items-center rounded-[10px] border border-[#D1D5DB] bg-[#F9FAFB] px-3 text-[13px] font-normal text-[#111827]">
+              <span className="truncate">{bpMaterialDisplay}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label
+                htmlFor="project-material-upload"
+                className={`inline-flex h-8 cursor-pointer items-center rounded-[9px] border px-3 text-[12px] font-medium ${
+                  bpMaterialUploading
+                    ? "border-[#E5E7EB] bg-[#F3F4F6] text-[#9CA3AF]"
+                    : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]"
+                }`}
+              >
+                {bpMaterialUploading ? "上传中" : "上传项目材料"}
+              </label>
+              <input
+                id="project-material-upload"
+                aria-label="上传项目材料"
+                type="file"
+                accept=".pdf,.doc,.docx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain,image/*"
+                disabled={bpMaterialUploading}
+                onChange={handleProjectMaterialUpload}
+                className="sr-only"
+              />
+              <span className="text-[11px] font-normal text-[#9CA3AF]">支持 PDF / Word / Markdown / TXT / 图片</span>
+            </div>
+            {bpMaterialParseSummary ? (
+              <div className="mt-1 truncate text-[11px] font-normal text-[#6B7280]" title={bpMaterialParseSummary}>
+                {bpMaterialParseSummary}
+              </div>
+            ) : null}
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[12px] font-medium text-[#2563EB]">修改材料位置</summary>
+              <label htmlFor="bp-file-path" className="sr-only">
+                项目材料位置
+              </label>
+              <input
+                id="bp-file-path"
+                value={bpFilePath}
+                disabled={bpGenerationMode === "prompt"}
+                onChange={(event) => {
+                  setBpFilePath(event.currentTarget.value);
+                  setBpUploadedMaterialName(null);
+                  setBpMaterialParseSummary(null);
+                  setBpPreview(null);
+                }}
+                className="mt-2 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] font-normal text-[#111827] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF]"
+              />
+            </details>
+          </div>
           <label className="text-[12px] font-medium text-[#6B7280]">
             最少岗位数
             <input
@@ -1382,56 +1418,162 @@ export function ProjectDetailPage() {
         ) : null}
       </section>
 
-      <section className="my-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-        <div className="grid grid-cols-3 items-start gap-y-4 sm:grid-cols-6">
-          {steps.map((step, index) => {
-            const state = workflowStatus(index, jobs, candidates, taskSnapshot?.status ?? null, activeTaskAction);
-            const isDone = state === "done";
-            const isCurrent = state === "current";
-            return (
-              <div key={step} className="relative flex flex-col items-center gap-2">
-                {index > 0 ? (
-                  <div
-                    className={[
-                      "absolute right-1/2 top-[14px] hidden h-0.5 w-full sm:block",
-                      workflowStatus(index - 1, jobs, candidates, taskSnapshot?.status ?? null, activeTaskAction) === "done"
-                        ? "bg-[#2563EB]"
-                        : "bg-[#E5E7EB]",
-                    ].join(" ")}
-                  />
-                ) : null}
-                <div
-                  className={[
-                    "relative z-10 grid h-7 w-7 place-items-center rounded-full text-[12px] font-semibold",
-                    isDone
-                      ? "bg-[#2563EB] text-white"
-                      : isCurrent
-                        ? "border-2 border-[#2563EB] bg-white text-[#2563EB]"
-                        : "bg-[#F3F4F6] text-[#9CA3AF]",
-                  ].join(" ")}
-                >
-                  {isDone ? "✓" : index + 1}
-                </div>
-                <div className={isDone || isCurrent ? "text-[13px] text-[#111827]" : "text-[13px] text-[#9CA3AF]"}>
-                  {step}
-                </div>
+      {integrationsError || integrations ? (
+        <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-[14px] font-semibold text-[#111827]">系统预检</h2>
+              <div className="mt-1 text-[12px] text-[#6B7280]">
+                搜索服务 {searchProviderSummary.ready}/{searchProviderSummary.total} 可用
+                {searchProviderSummary.blocked ? `，${searchProviderSummary.blocked} 项需处理` : "，当前无阻断"}
               </div>
-            );
-          })}
+            </div>
+            <details className="lg:max-w-[760px]">
+              <summary className="cursor-pointer rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151]">
+                查看详情
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+                <span>Search：{capabilityStatusLabel(searchGate.status)}</span>
+                <span>LLM：{capabilityStatusLabel(llmGate.status)}</span>
+                <span>Embedding：{capabilityStatusLabel(embeddingGate.status)}</span>
+                <span>Vector：{capabilityStatusLabel(vectorGate.status)}</span>
+                <span>Database：{capabilityStatusLabel(databaseGate.status)}</span>
+                <span>Email Delivery：{capabilityStatusLabel(emailDeliveryGate.status)}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {searchProviderPreflight.slice(0, 6).map((item) => (
+                  <span
+                    key={`${item.service}-${item.status}`}
+                    className="rounded-[7px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] text-[#4B5563]"
+                    title={item.reason}
+                  >
+                    {item.service}: {capabilityStatusLabel(item.status)}
+                  </span>
+                ))}
+              </div>
+              {integrationsError ? <div className="mt-1 text-[#EF4444]">{integrationsError}</div> : null}
+            </details>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="my-4 min-w-0 rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-5 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">当前建议动作</h2>
+            <p className="mt-1 text-[13px] leading-5 text-[#1E40AF]">{recommendedAction.description}</p>
+          </div>
+          <button
+            type="button"
+            onClick={recommendedAction.run}
+            disabled={recommendedAction.disabled}
+            title={recommendedAction.title}
+            className="h-9 self-start rounded-[10px] bg-[#2563EB] px-4 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50 lg:self-center"
+          >
+            {recommendedAction.label}
+          </button>
         </div>
       </section>
 
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
+          <details className="group rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+            <summary className="flex cursor-pointer list-none flex-col gap-3 px-5 py-4 marker:content-none lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位搜索设置</h2>
+                <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
+                  {currentSearchPolicyLabel} · {enabledSourceLayerCount} 个来源层 · 单源{" "}
+                  {candidateSearchConfig.budget.perProviderLimit} 条
+                </p>
+              </div>
+              <span className="self-start rounded-[9px] border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] group-open:hidden lg:self-center">
+                展开设置
+              </span>
+              <span className="hidden self-start rounded-[9px] border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] group-open:inline-flex lg:self-center">
+                收起设置
+              </span>
+            </summary>
+            <div className="border-t border-[#EEF2F7] px-5 py-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-[12px] leading-[18px] text-[#6B7280]">
+                  应用于岗位表中每个“找候选人”任务。
+                </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-[12px] font-medium text-[#6B7280]">
+                  搜索深度
+                  <select
+                    value={candidateSearchConfig.executionPolicy}
+                    onChange={(event) => {
+                      const executionPolicy = event.currentTarget.value as SearchExecutionPolicy;
+                      setCandidateSearchConfig((current) => ({
+                        ...current,
+                        executionPolicy,
+                        budget: budgetForExecutionPolicy(executionPolicy),
+                      }));
+                    }}
+                    className="ml-2 h-[34px] w-[112px] rounded-[8px] border border-[#E5E7EB] bg-white px-2 text-[13px] text-[#111827]"
+                  >
+                    {SEARCH_EXECUTION_POLICY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="rounded-[7px] bg-[#F3F4F6] px-2 py-1 text-[11px] leading-4 text-[#6B7280]">
+                  {candidateSearchConfig.budget.maxProviders} 个来源 · 单源 {candidateSearchConfig.budget.perProviderLimit} 条
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {SEARCH_SOURCE_LAYER_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2 text-[11px] font-medium ${
+                    candidateSearchConfig.sourceLayers[option.value]
+                      ? option.highRisk
+                        ? "border-[#F59E0B] bg-[#FFFBEB] text-[#92400E]"
+                        : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]"
+                      : "border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={candidateSearchConfig.sourceLayers[option.value]}
+                    onChange={(event) => {
+                      const layer = option.value as SearchSourceLayer;
+                      const checked = event.currentTarget.checked;
+                      setCandidateSearchConfig((current) => ({
+                        ...current,
+                        sourceLayers: {
+                          ...current.sourceLayers,
+                          [layer]: checked,
+                        },
+                      }));
+                    }}
+                    className="h-3.5 w-3.5 accent-[#2563EB]"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+            </div>
+          </details>
           <MultiJobProgressTable
             jobs={jobs}
             candidateCounts={jobCandidateCounts}
             actionAvailability={actionAvailability}
             matchAvailability={matchGate}
+            schedules={candidateSearchSchedules}
+            scheduleBusyJobId={scheduleBusyJobId}
+            canUpdateSchedule={searchGate.enabled}
+            scheduleDisabledReason={searchGate.reason}
             runningJobAction={runningJobAction}
             matchingJobId={matchingJobId}
             onRunAction={handleRunAction}
             onRunMatch={handleRunMatch}
+            onToggleSchedule={handleUpdateCandidateSearchSchedule}
+            onScheduleIntervalChange={handleCandidateSearchIntervalChange}
             onRefresh={() => loadProjectData(filterCriteria)}
           />
           {matchResult ? (
@@ -1472,15 +1614,6 @@ export function ProjectDetailPage() {
         </div>
 
         <aside className="space-y-5 xl:sticky xl:top-[84px] xl:self-start">
-          <CandidateAutoSearchCard
-            jobs={jobs}
-            schedules={candidateSearchSchedules}
-            busyJobId={scheduleBusyJobId}
-            canUpdate={searchGate.enabled}
-            disabledReason={searchGate.reason}
-            onToggle={handleUpdateCandidateSearchSchedule}
-            onIntervalChange={handleCandidateSearchIntervalChange}
-          />
           <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">筛选条件</h2>
@@ -1785,89 +1918,5 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function CandidateAutoSearchCard({
-  jobs,
-  schedules,
-  busyJobId,
-  canUpdate,
-  disabledReason,
-  onToggle,
-  onIntervalChange,
-}: {
-  jobs: JobProfile[];
-  schedules: CandidateSearchSchedule[];
-  busyJobId: string | null;
-  canUpdate: boolean;
-  disabledReason?: string;
-  onToggle: (job: JobProfile, enabled: boolean) => void;
-  onIntervalChange: (job: JobProfile, intervalMinutes: number) => void;
-}) {
-  const safeSchedules = Array.isArray(schedules) ? schedules : [];
-  const safeJobs = Array.isArray(jobs) ? jobs : [];
-  const scheduleByJobId = new Map(safeSchedules.map((schedule) => [schedule.jobId, schedule]));
-  return (
-    <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">自动搜候选人</h2>
-        <span className={canUpdate ? "text-[12px] text-[#16A34A]" : "text-[12px] text-[#EF4444]"}>
-          {canUpdate ? "可用" : "不可用"}
-        </span>
-      </div>
-      <div className="mt-4 space-y-3">
-        {safeJobs.map((job) => {
-          const schedule = scheduleByJobId.get(job.jobProfileId);
-          const enabled = Boolean(schedule?.enabled);
-          const busy = busyJobId === job.jobProfileId;
-          return (
-            <div key={job.jobProfileId} className="rounded-[10px] border border-[#EEF2F7] px-3 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
-                  <div className="mt-1 text-[12px] text-[#6B7280]">
-                    {enabled ? "已开启" : "未开启"} · 下次：{schedule?.nextRunAt ? formatDateTime(schedule.nextRunAt) : "—"}
-                  </div>
-                  {schedule?.lastTaskId ? (
-                    <div className="mt-1 text-[11px] text-[#9CA3AF]">
-                      最近任务：{schedule.lastTaskId} · {schedule.lastStatus || "unknown"}
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onToggle(job, !enabled)}
-                  disabled={busy || !canUpdate}
-                  title={!canUpdate ? disabledReason : undefined}
-                  aria-label={`${enabled ? "关闭" : "开启"}自动搜索 ${job.roleName}`}
-                  className={
-                    enabled
-                      ? "h-8 shrink-0 rounded-[9px] border border-[#D1D5DB] bg-white px-3 text-[12px] font-medium text-[#374151] disabled:cursor-not-allowed disabled:opacity-50"
-                      : "h-8 shrink-0 rounded-[9px] bg-[#2563EB] px-3 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  }
-                >
-                  {busy ? "保存中" : enabled ? "关闭" : "开启"}
-                </button>
-              </div>
-              <label className="mt-3 block">
-                <span className="mb-1.5 block text-[12px] text-[#6B7280]">频率</span>
-                <select
-                  value={schedule?.intervalMinutes ?? 360}
-                  onChange={(event) => onIntervalChange(job, Number(event.target.value))}
-                  disabled={busy || !canUpdate}
-                  className="h-9 w-full rounded-[9px] border border-[#E5E7EB] bg-white px-2.5 text-[13px] text-[#111827] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value={60}>每 1 小时</option>
-                  <option value={180}>每 3 小时</option>
-                  <option value={360}>每 6 小时</option>
-                  <option value={1440}>每天</option>
-                </select>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }

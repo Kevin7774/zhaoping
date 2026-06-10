@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.schemas.project import (
     ProjectBpInitializeResponse,
     ProjectCreate,
     ProjectGenerationMode,
+    ProjectMaterialUploadResponse,
     ProjectResponse,
     ProjectRoleRejection,
 )
@@ -42,6 +43,11 @@ BP_PIPELINE_MAX_ATTEMPTS = 3
 # Per-stage budget; the five-stage pipeline makes up to 5 sequential LLM calls.
 # Live measurement 2026-06-10: the claims call alone took ~123s on the default provider.
 BP_PIPELINE_CALL_TIMEOUT_SECONDS = 180.0
+PROJECT_MATERIAL_DIR = Path("data") / "input" / "projects"
+PROJECT_MATERIAL_TEXT_EXTENSIONS = {".md", ".markdown", ".txt"}
+PROJECT_MATERIAL_PARSE_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
+PROJECT_MATERIAL_EXTENSIONS = PROJECT_MATERIAL_TEXT_EXTENSIONS | PROJECT_MATERIAL_PARSE_EXTENSIONS
+PROJECT_MATERIAL_MAX_BYTES = 20 * 1024 * 1024
 
 
 class JobStats(TypedDict):
@@ -108,6 +114,19 @@ def initialize_project_from_bp(
         session.commit()
 
     return _bp_initialize_response(project_id, request, matrix, jobs)
+
+
+@router.post(
+    "/{project_id}/materials/upload",
+    response_model=ProjectMaterialUploadResponse,
+)
+async def upload_project_material(
+    project_id: str,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_project_session),
+) -> ProjectMaterialUploadResponse:
+    _require_project(session, project_id)
+    return await _save_project_material(file)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -305,6 +324,102 @@ def _require_project(session: Session, project_id: str) -> Project:
     return project
 
 
+async def _save_project_material(file: UploadFile) -> ProjectMaterialUploadResponse:
+    filename = _safe_project_material_filename(file.filename or "project-material.md")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in PROJECT_MATERIAL_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="Project material must be PDF, Word, image, Markdown, or TXT")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=422, detail="Project material file is empty")
+    if len(content) > PROJECT_MATERIAL_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Project material file is too large")
+
+    PROJECT_MATERIAL_DIR.mkdir(parents=True, exist_ok=True)
+    source_path = PROJECT_MATERIAL_DIR / filename
+    source_path.write_bytes(content)
+    bp_path = _project_material_bp_path(source_path)
+    parsed_text, metadata = _parse_project_material_for_bp(source_path, suffix)
+    if bp_path == source_path:
+        source_path.write_text(parsed_text, encoding="utf-8")
+    else:
+        bp_path.write_text(parsed_text, encoding="utf-8")
+
+    return ProjectMaterialUploadResponse(
+        file_name=filename,
+        bp_file_path=bp_path.as_posix(),
+        source_file_path=source_path.as_posix(),
+        size_bytes=len(content),
+        parser=_clean_text(metadata.get("parser")) or _clean_text(metadata.get("provider")),
+        confidence=_metadata_confidence(metadata),
+        degraded_reason=_clean_text(metadata.get("degraded_reason")),
+    )
+
+
+def _safe_project_material_filename(filename: str) -> str:
+    name = Path(filename).name.strip() or "project-material.md"
+    cleaned = re.sub(r"[^\w._-]+", "-", name, flags=re.UNICODE).strip(".-")
+    return cleaned[:160] or "project-material.md"
+
+
+def _project_material_bp_path(source_path: Path) -> Path:
+    if source_path.suffix.lower() in PROJECT_MATERIAL_TEXT_EXTENSIONS:
+        return source_path
+    return source_path.with_suffix(".md")
+
+
+def _parse_project_material_for_bp(source_path: Path, suffix: str) -> tuple[str, dict[str, Any]]:
+    if suffix in PROJECT_MATERIAL_TEXT_EXTENSIONS:
+        try:
+            text = source_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=422, detail="Project material must be UTF-8 text") from exc
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="Project material file is empty")
+        return text, {"parser": "plain_text", "provider": "local_file", "confidence": 0.99, "degraded_reason": None}
+
+    router = get_router()
+    document_error: Exception | None = None
+    try:
+        parser = router.document_parser()
+        text = parser.parse(str(source_path))
+        if text.strip():
+            return text, dict(getattr(parser, "last_metadata", {}) or {})
+        document_error = RuntimeError("document parser returned empty text")
+    except Exception as exc:
+        document_error = exc
+
+    try:
+        ocr_provider = router.ocr()
+        if hasattr(ocr_provider, "extract_text"):
+            ocr_text = ocr_provider.extract_text(file_path=str(source_path))
+        elif hasattr(ocr_provider, "parse"):
+            ocr_text = ocr_provider.parse(str(source_path))
+        else:
+            raise RuntimeError("OCR provider does not expose extract_text or parse")
+        if not ocr_text.strip():
+            raise RuntimeError("OCR provider returned empty text")
+        return ocr_text, {
+            "parser": "ocr",
+            "provider": type(ocr_provider).__name__,
+            "confidence": 0.65,
+            "degraded_reason": f"Document parser fallback reason: {document_error}",
+        }
+    except Exception as ocr_exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Project material parsing failed: {document_error}; OCR fallback failed: {ocr_exc}",
+        ) from ocr_exc
+
+
+def _metadata_confidence(metadata: dict[str, Any]) -> float | None:
+    value = metadata.get("confidence")
+    if isinstance(value, (int, float)):
+        return max(0.0, min(1.0, float(value)))
+    return None
+
+
 def _project_response(project: Project, stats: dict[str, int]) -> ProjectResponse:
     return ProjectResponse(
         id=project.id,
@@ -393,7 +508,12 @@ def _bp_initialize_response(
         capability_graph=_non_empty_dict(matrix.get("capability_graph")),
         gap_analysis=_non_empty_dict(matrix.get("gap_analysis")),
         rejected_roles=[
-            ProjectRoleRejection(title=str(item.get("title") or "未命名岗位"), reasons=_string_list(item.get("reasons")))
+            ProjectRoleRejection(
+                title=str(item.get("title") or "未命名岗位"),
+                reasons=_string_list(item.get("reasons")),
+                critic_category=_clean_text(item.get("critic_category")),
+                missing_evidence=_string_list(item.get("missing_evidence")),
+            )
             for item in matrix.get("rejected_roles") or []
             if isinstance(item, dict)
         ],
@@ -887,6 +1007,13 @@ def _role_rationale(role: dict[str, Any]) -> dict[str, Any] | None:
         "first_90_day_outcomes": _string_list(role.get("first_90_day_outcomes")),
         "hiring_priority": _clean_text(role.get("hiring_priority")),
         "confidence": confidence,
+        "business_context": _clean_text(role.get("business_context")),
+        "job_scope": _clean_text(role.get("job_scope")),
+        "must_have_signals": _string_list(role.get("must_have_signals")),
+        "bonus_signals": _string_list(role.get("bonus_signals")),
+        "risk_signals": _string_list(role.get("risk_signals")),
+        "sourcing_keywords": _string_list(role.get("sourcing_keywords")),
+        "outreach_angle": _clean_text(role.get("outreach_angle")),
     }
     return rationale if any(value not in (None, [], "") for value in rationale.values()) else None
 

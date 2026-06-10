@@ -25,9 +25,12 @@ type LeadIngestionStats = {
 
 type SearchRunTrace = {
   searchModeLabel: string;
+  executionPolicy: string;
+  sourceLayers: string[];
   resultCount: number;
   selectedProviders: string[];
   errorSummaries: string[];
+  evidenceGaps: string[];
   providerBudget: {
     selected: number;
     skipped: number;
@@ -36,6 +39,11 @@ type SearchRunTrace = {
     recommendedSources: number;
     records: number;
   };
+  evidenceLedger: {
+    archiveId: string;
+    artifactType: string;
+    status: string;
+  } | null;
 };
 
 export function LiveTaskSummary({
@@ -116,6 +124,10 @@ function SearchRunTraceSummary({ trace }: { trace: SearchRunTrace }) {
           {trace.searchModeLabel}
         </span>
       </div>
+      <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] leading-[16px] text-[#6B7280]">
+        {trace.executionPolicy ? <span>{trace.executionPolicy}</span> : null}
+        {trace.sourceLayers.length ? <span>{trace.sourceLayers.join(" / ")}</span> : null}
+      </div>
       <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2">
         <div>
           <div className="text-[11px] text-[#9CA3AF]">实时命中</div>
@@ -142,9 +154,18 @@ function SearchRunTraceSummary({ trace }: { trace: SearchRunTrace }) {
       {trace.errorSummaries.length ? (
         <div className="mt-2 text-[11px] leading-[16px] text-[#B45309]">{trace.errorSummaries.slice(0, 3).join("；")}</div>
       ) : null}
+      {trace.evidenceGaps.length ? (
+        <div className="mt-2 text-[11px] leading-[16px] text-[#B45309]">{trace.evidenceGaps.slice(0, 2).join("；")}</div>
+      ) : null}
       <div className="mt-2 text-[11px] leading-[16px] text-[#6B7280]">
         推荐信源 {trace.evidenceCounts.recommendedSources} · 证据记录 {trace.evidenceCounts.records}
       </div>
+      {trace.evidenceLedger?.archiveId ? (
+        <div className="mt-1 text-[11px] leading-[16px] text-[#2563EB]">
+          证据账本 {trace.evidenceLedger.archiveId}
+          {trace.evidenceLedger.status ? ` · ${trace.evidenceLedger.status}` : ""}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -214,14 +235,23 @@ function normalizeSearchRunTrace(value: unknown): SearchRunTrace | null {
   const providers = isRecord(value.providers) ? value.providers : {};
   const providerBudget = isRecord(value.provider_budget) ? value.provider_budget : {};
   const evidenceCounts = isRecord(value.evidence_counts) ? value.evidence_counts : {};
+  const evidenceLedger = isRecord(value.evidence_ledger) ? value.evidence_ledger : null;
+  const sourceLayers = isRecord(value.source_layers)
+    ? Object.entries(value.source_layers)
+        .filter(([, enabled]) => enabled === true)
+        .map(([layer]) => layer)
+    : [];
   const rawErrors = Array.isArray(providers.errors) ? providers.errors : [];
   return {
     searchModeLabel: readString(value.search_mode_label) || readString(value.search_mode) || "搜索模式未知",
+    executionPolicy: readString(value.execution_policy) || "",
+    sourceLayers,
     resultCount: readNumber(value.result_count),
     selectedProviders: readStringArray(providers.selected),
     errorSummaries: rawErrors
       .filter(isRecord)
       .map((error) => `${readString(error.service) || "unknown"}: ${readString(error.reason) || "unknown"}`),
+    evidenceGaps: readStringArray(value.evidence_gaps),
     providerBudget: {
       selected: readNumber(providerBudget.selected),
       skipped: readNumber(providerBudget.skipped),
@@ -230,6 +260,13 @@ function normalizeSearchRunTrace(value: unknown): SearchRunTrace | null {
       recommendedSources: readNumber(evidenceCounts.recommended_sources),
       records: readNumber(evidenceCounts.records),
     },
+    evidenceLedger: evidenceLedger
+      ? {
+          archiveId: readString(evidenceLedger.archive_id) || "",
+          artifactType: readString(evidenceLedger.artifact_type) || "",
+          status: readString(evidenceLedger.status) || "",
+        }
+      : null,
   };
 }
 

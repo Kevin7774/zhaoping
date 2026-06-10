@@ -62,6 +62,15 @@ function avatarText(name: string) {
   return normalized.slice(0, 1).toUpperCase();
 }
 
+function candidateDisplayKind(candidate: Candidate) {
+  const source = candidate.sourcePlatform.toLowerCase();
+  const name = candidate.name.toLowerCase();
+  const hasPersonSignal = Boolean(candidate.email || candidate.currentCompany);
+  const sourceLooksLikeArtifact = /github|repository|repo|paper|arxiv|huggingface|model|project|url/.test(source);
+  const nameLooksLikeArtifact = /[-_/]|\$|\d{4,}|transformer|diffusion|repository|equation|dataset|benchmark|model/.test(name);
+  return !hasPersonSignal && (sourceLooksLikeArtifact || nameLooksLikeArtifact) ? "线索" : "候选人";
+}
+
 export function CandidateTable({
   candidates,
   onSendEmail,
@@ -89,7 +98,7 @@ export function CandidateTable({
   return (
     <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
-        <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">候选人名单</h2>
+        <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">候选人与线索</h2>
         <button
           type="button"
           onClick={onViewAll}
@@ -103,19 +112,15 @@ export function CandidateTable({
       {candidates.length === 0 ? (
         <div className="px-5 py-10 text-center text-[14px] text-[#6B7280]">暂无候选人，运行找候选人后会显示在这里</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-[768px] w-full text-[13px] leading-5">
-            <thead className="h-11 bg-[#F9FAFB] text-left text-[12px] font-semibold text-[#6B7280]">
-              <tr>
-                <th className="w-[178px] px-5">姓名</th>
-                <th className="w-[128px] px-2">当前公司</th>
-                <th className="w-[142px] px-2">目标岗位</th>
-                <th className="w-[70px] px-2">匹配分</th>
-                <th className="w-[84px] px-2">状态</th>
-                <th className="w-[166px] px-4 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EEF2F7]">
+        <>
+          <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_70px_82px_minmax(0,192px)] gap-3 bg-[#F9FAFB] px-5 py-3 text-[12px] font-semibold text-[#6B7280] md:grid">
+            <div>对象</div>
+            <div>目标岗位</div>
+            <div>匹配分</div>
+            <div>状态</div>
+            <div className="text-right">操作</div>
+          </div>
+          <div className="divide-y divide-[#EEF2F7]">
               {candidates.map((candidate) => {
                 const hasEmail = Boolean(candidate.email);
                 const compliancePending = candidate.pipelineStatus === "pending_compliance_review";
@@ -128,33 +133,48 @@ export function CandidateTable({
                   : hasEmail
                     ? undefined
                     : "候选人无邮箱";
+                const displayKind = candidateDisplayKind(candidate);
+                const displayKindClass =
+                  displayKind === "候选人" ? "bg-[#ECFDF3] text-[#047857]" : "bg-[#EFF6FF] text-[#2563EB]";
 
                 return (
                   <Fragment key={`${candidate.targetJobProfileId}-${candidate.candidateId}`}>
-                  <tr className="h-[58px] transition-colors hover:bg-[#FAFBFD]">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-1 gap-3 px-5 py-4 text-[13px] leading-5 transition-colors hover:bg-[#FAFBFD] md:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_70px_82px_minmax(0,192px)] md:items-center">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
                           {avatarText(candidate.name)}
                         </div>
                         <div className="min-w-0">
                           <div className="truncate font-semibold text-[#111827]">{candidate.name || "—"}</div>
-                          <div className="truncate text-[12px] text-[#9CA3AF]">{candidate.title || "—"}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 ${displayKindClass}`}>
+                              {displayKind}
+                            </span>
+                            <span className="truncate text-[12px] text-[#9CA3AF]">{candidate.sourcePlatform || "—"}</span>
+                          </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-2 py-3 text-[#374151]">{candidate.currentCompany ?? "—"}</td>
-                    <td className="px-2 py-3 text-[#374151]">{candidate.title || "—"}</td>
-                    <td className={`px-2 py-3 text-[15px] font-bold ${scoreTone(candidate.matchScore)}`}>
+                      <div className="mt-2 truncate text-[12px] text-[#6B7280]" title={candidate.currentCompany ?? candidate.title}>
+                        {candidate.currentCompany ? `${candidate.currentCompany} · ${candidate.title || "—"}` : candidate.title || "—"}
+                      </div>
+                    </div>
+                    <div className="min-w-0 text-[#374151]">
+                      <div className="mb-1 text-[11px] font-medium text-[#9CA3AF] md:hidden">目标岗位</div>
+                      <div className="truncate" title={candidate.title}>{candidate.title || "—"}</div>
+                    </div>
+                    <div className={`text-[15px] font-bold ${scoreTone(candidate.matchScore)}`}>
+                      <div className="mb-1 text-[11px] font-medium text-[#9CA3AF] md:hidden">匹配分</div>
                       {candidate.matchScore ?? "—"}
-                    </td>
-                    <td className="px-2 py-3">
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[11px] font-medium text-[#9CA3AF] md:hidden">状态</div>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium leading-[18px] ${statusTone[candidate.stepStatus]}`}>
                         {statusLabel(candidate)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1.5">
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap justify-start gap-1.5 md:justify-end">
                         {onRunEvaluation ? (
                           <button
                             type="button"
@@ -199,11 +219,10 @@ export function CandidateTable({
                           生成草稿
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                   {expandedCandidateId === candidate.candidateId ? (
-                    <tr>
-                      <td colSpan={6} className="bg-[#FAFBFD] px-5 py-3">
+                    <div className="bg-[#FAFBFD] px-5 py-3">
                         <div className="space-y-2 rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] leading-[18px] text-[#374151]">
                           {candidate.evidence.length ? (
                             candidate.evidence.map((item) => (
@@ -219,14 +238,12 @@ export function CandidateTable({
                             <div className="break-all text-[#2563EB]">{candidate.sourceUrl}</div>
                           ) : null}
                         </div>
-                      </td>
-                    </tr>
+                    </div>
                   ) : null}
                   </Fragment>
                 );
               })}
-            </tbody>
-          </table>
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EEF2F7] bg-[#FCFCFD] px-5 py-3">
             <div className="text-[12px] font-medium text-[#6B7280]">{countSummary}</div>
             {hasMore ? (
@@ -240,7 +257,7 @@ export function CandidateTable({
               </button>
             ) : null}
           </div>
-        </div>
+        </>
       )}
     </section>
   );

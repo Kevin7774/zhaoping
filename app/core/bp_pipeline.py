@@ -102,6 +102,9 @@ def run_bp_pipeline(
         ("第一阶段输出", json.dumps(claims, ensure_ascii=False)),
         ("第二阶段输出", json.dumps(capability_graph, ensure_ascii=False)),
         ("第三阶段输出", json.dumps(gap_analysis, ensure_ascii=False)),
+        # Role design needs the raw material to recognize hiring-brief mode
+        # ("we are looking for one kind of person") and to keep verbatim quotes.
+        ("原始输入材料（节选）", materials[:6000]),
         ("最少岗位数", str(minimum_role_count)),
     ]
     design = _run_stage(
@@ -183,11 +186,27 @@ def critic_gate(
                     f"岗位边界与「{other_title}」重复（相似度 {score:.2f}），未划分独立技术边界"
                 )
         if reasons:
-            rejected.append({"title": str(role.get("title") or f"role_{index + 1}"), "reasons": reasons})
+            rejected.append(
+                {
+                    "title": str(role.get("title") or f"role_{index + 1}"),
+                    "reasons": reasons,
+                    "critic_category": _critic_category(reasons),
+                    "missing_evidence": [reason for reason in reasons if "bp_evidence" in reason or "找到原文" in reason],
+                }
+            )
         else:
             accepted.append((index, role))
     accepted.sort(key=lambda pair: pair[0])
     return [role for _, role in accepted], rejected
+
+
+def _critic_category(reasons: list[str]) -> str:
+    joined = "；".join(reasons)
+    if "bp_evidence" in joined or "找到原文" in joined:
+        return "no_evidence"
+    if "边界" in joined:
+        return "boundary_overlap"
+    return "incomplete_rationale"
 
 
 def _rationale_reject_reasons(role: dict[str, Any], normalized_source: str) -> list[str]:

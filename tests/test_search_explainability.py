@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.core import orchestrator
@@ -30,10 +32,169 @@ def test_planning_only_search_mode_skips_live_provider_calls(monkeypatch: pytest
     assert trace["next_actions"]
 
 
+def test_search_config_layers_are_additive_and_budgeted() -> None:
+    config = orchestrator._search_config_from_ctx(
+        {
+            "frontend_state": {
+                "search_profile": "candidate_sourcing",
+                "execution_policy": "deep_live",
+                "source_layers": {
+                    "academic": True,
+                    "code_model": True,
+                    "social": True,
+                    "crawler_snapshot": True,
+                    "people_database": False,
+                    "news_funding": False,
+                    "education_competition": False,
+                },
+                "search_budget": {
+                    "max_providers": 5,
+                    "per_provider_limit": 3,
+                    "timeout_seconds": 9,
+                    "max_crawl_pages": 2,
+                },
+            }
+        }
+    )
+
+    services = orchestrator._live_services_for_search_config(config)
+
+    assert config["search_profile"] == "candidate_sourcing"
+    assert config["execution_policy"] == "deep_live"
+    assert config["source_layers"]["academic"] is True
+    assert config["source_layers"]["social"] is True
+    assert config["source_layers"]["crawler_snapshot"] is True
+    assert config["budget"] == {
+        "max_providers": 5,
+        "per_provider_limit": 3,
+        "timeout_seconds": 9,
+        "max_crawl_pages": 2,
+    }
+    assert "openalex_works_search" in services
+    assert "github_repositories" in services
+    assert "x_recent_posts_search" in services
+    assert "scrapling_adaptive_scrape" in services
+    assert "pdl_people_search" not in services
+
+
+def test_legacy_social_expansion_search_mode_is_additive() -> None:
+    config = orchestrator._search_config_from_ctx({"frontend_state": {"search_mode": "social_expansion"}})
+    services = orchestrator._live_services_for_search_config(config)
+
+    assert config["search_profile"] == "candidate_sourcing"
+    assert config["source_layers"]["social"] is True
+    assert "x_recent_posts_search" in services
+    assert "github_repositories" in services
+    assert "openalex_works_search" in services
+
+
+def test_source_intelligence_archives_search_evidence_ledger(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_path = tmp_path / "evidence-ledger.jsonl"
+    monkeypatch.setenv("INTELLIGENCE_ARCHIVE_PATH", str(archive_path))
+
+    class FakeSearch:
+        @staticmethod
+        def plan(query: str, limit: int = 12) -> dict:
+            return {
+                "recommended_sources": [
+                    {"source_key": "github", "name_zh": "GitHub", "source_names": ["GitHub"], "talent_signals": ["repo"], "suggested_queries": [query]},
+                ]
+            }
+
+        @staticmethod
+        def evidence(query: str, limit: int = 12) -> dict:
+            return {
+                "records": [
+                    {
+                        "source_key": "github_repositories",
+                        "source_name": "GitHub",
+                        "source_tier": "primary",
+                        "validation_status": "verified",
+                        "confidence": 0.86,
+                        "signals": ["robotics"],
+                        "snippet": "Maintains a robot policy repository.",
+                    }
+                ]
+            }
+
+    class FakeRouter:
+        @staticmethod
+        def search(*_args, **_kwargs):
+            return FakeSearch()
+
+    monkeypatch.setattr(orchestrator, "get_router", lambda: FakeRouter())
+    monkeypatch.setattr(
+        orchestrator,
+        "_live_search_context",
+        lambda *_args, **_kwargs: {
+            "search_mode": "live_recruiting",
+            "mode_label": "实时招聘搜索",
+            "search_profile": "candidate_sourcing",
+            "execution_policy": "bounded_live",
+            "source_layers": {"academic": True, "code_model": True},
+            "external_request_policy": "bounded_live",
+            "services": ["github_repositories"],
+            "query": "robotics diffusion policy",
+            "results": [
+                {
+                    "source_key": "github_repositories",
+                    "source_name": "GitHub",
+                    "source_type": "code_repository",
+                    "title": "robot-policy",
+                    "url": "https://github.com/example/robot-policy",
+                    "snippet": "Robot policy repository.",
+                    "rank": 1,
+                }
+            ],
+            "errors": [],
+            "result_count": 1,
+            "research_layers": [],
+            "provider_health": [{"service": "github_repositories", "status": "ready"}],
+            "provider_budget": {"max_live_providers": 8, "selected": 1, "skipped": 0},
+        },
+    )
+
+    intelligence = orchestrator._source_intelligence(
+        "请围绕 VLA 机器人岗位生成人才地图",
+        "vla_embodied_expert",
+        limit=3,
+        ctx={
+            "task_id": "task_ledger",
+            "frontend_state": {"project_id": "project_2026_ai_team", "job_profile_id": "job_vla_algorithm"},
+            "data": {},
+        },
+        agent_id="test",
+    )
+
+    ledger = intelligence["搜索运行追踪"]["evidence_ledger"]
+    assert ledger["archive_id"].startswith("intel_")
+    assert ledger["artifact_type"] == "search_evidence_ledger"
+    assert archive_path.exists()
+
+    archived = json.loads(archive_path.read_text(encoding="utf-8").splitlines()[0])
+    artifact = archived["artifact"]
+    assert artifact["ledger_type"] == "search_evidence_ledger"
+    assert artifact["task_id"] == "task_ledger"
+    assert artifact["project_id"] == "project_2026_ai_team"
+    assert artifact["job_id"] == "job_vla_algorithm"
+    assert artifact["evidence_counts"]["records"] == 1
+    assert artifact["live_results"][0]["source_key"] == "github_repositories"
+    assert artifact["evidence_records"][0]["validation_status"] == "verified"
+
+
 def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> None:
     trace = orchestrator._build_search_run_trace(
         query="robotics diffusion policy hiring",
         search_mode="social_expansion",
+        search_config={
+            "search_profile": "candidate_sourcing",
+            "execution_policy": "bounded_live",
+            "source_layers": {"academic": True, "social": True},
+            "budget": {"max_providers": 8, "per_provider_limit": 2, "timeout_seconds": 6, "max_crawl_pages": 0},
+        },
         recommended_sources=[{"source_key": "github"}, {"source_key": "x_recent_posts_search"}],
         records=[
             {"source_tier": "primary", "validation_status": "verified"},
@@ -60,6 +221,9 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
         "query": "robotics diffusion policy hiring",
         "search_mode": "social_expansion",
         "search_mode_label": "社媒扩展",
+        "search_profile": "candidate_sourcing",
+        "execution_policy": "bounded_live",
+        "source_layers": {"academic": True, "social": True},
         "external_request_policy": "bounded_live",
         "provider_budget": {"max_live_providers": 8, "selected": 1, "skipped": 1},
         "providers": {
@@ -78,6 +242,8 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
             "source_tiers": {"primary": 2, "secondary": 1},
             "validation_statuses": {"verified": 2, "needs_cross_check": 1},
         },
+        "evidence_gaps": ["社媒扩展层缺少可用 provider 或存在异常，需要补齐工具/Key 后复跑。"],
+        "next_queries": ["robotics diffusion policy hiring site:github.com", "robotics diffusion policy hiring demo hiring team"],
         "next_actions": [
             "补齐缺失 provider 的凭证或本地工具后重跑同一 search_mode。",
             "优先复核 primary/verified 证据；needs_cross_check 只能作为线索。",

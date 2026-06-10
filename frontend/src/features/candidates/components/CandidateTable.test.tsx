@@ -96,6 +96,28 @@ describe("CandidateTable", () => {
     expect(screen.queryByText("已发送")).toBeNull();
   });
 
+  it("separates non-person search leads from confirmed candidates", () => {
+    render(
+      <CandidateTable
+        candidates={[
+          {
+            ...candidate,
+            candidateId: "lead_repo",
+            name: "robotics-diffusion-transformer",
+            currentCompany: undefined,
+            email: undefined,
+            sourcePlatform: "GitHub",
+          },
+        ]}
+        onSendEmail={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "候选人与线索" })).toBeTruthy();
+    expect(screen.getByText("线索")).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "当前公司" })).toBeNull();
+  });
+
   it("shows a dash when the backend candidate has no match score", () => {
     render(<CandidateTable candidates={[{ ...candidate, matchScore: null }]} onSendEmail={() => undefined} />);
 

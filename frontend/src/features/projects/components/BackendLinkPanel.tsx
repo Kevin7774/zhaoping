@@ -19,6 +19,12 @@ function compactJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function shouldShowBackendDebugPanel() {
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("debugBackend") === "1" || window.localStorage.getItem("zhaoping.debugBackendLinks") === "1";
+}
+
 export function BackendLinkPanel({
   projectId,
   lastRequest,
@@ -30,7 +36,7 @@ export function BackendLinkPanel({
   usedFallbackPolling,
   events,
 }: BackendLinkPanelProps) {
-  if (!import.meta.env.DEV) return null;
+  if (!shouldShowBackendDebugPanel()) return null;
 
   const lastEvent = events.at(-1);
 

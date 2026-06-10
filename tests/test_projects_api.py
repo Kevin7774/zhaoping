@@ -192,6 +192,13 @@ def fake_role_design_payload(role_count: int, quote: str = FAKE_EVIDENCE_QUOTE) 
                 "first_90_day_outcomes": ["完成首个客户场景的可验收交付"],
                 "hiring_priority": ["P0", "P1", "P2"][index % 3],
                 "confidence": 0.9,
+                "business_context": "AI 电商定制平台需要可上线可迭代的交付能力。",
+                "job_scope": f"负责{title}的端到端业务闭环。",
+                "must_have_signals": ["全栈开发", "AI coding 实战"],
+                "bonus_signals": ["开源项目", "电商 SaaS 经验"],
+                "risk_signals": ["只会写 prompt", "只会调 API"],
+                "sourcing_keywords": [skills[0], "Agentic Builder"],
+                "outreach_angle": "用真实业务问题和完整 SDLC 主导权吸引 builder。",
             }
         )
     return {
@@ -341,6 +348,94 @@ def test_create_project_rejects_duplicate_project_id(client: TestClient) -> None
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Project already exists: project_2026_ai_team"
+
+
+def test_upload_project_material_saves_file_for_bp_generation(
+    client: TestClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    parsed_content = "汉诺云智边缘计算与 AI 综合解决方案。"
+
+    class FakeMaterialParser:
+        last_metadata = {
+            "parser": "fake_docling",
+            "provider": "test",
+            "confidence": 0.91,
+            "degraded_reason": None,
+        }
+
+        def parse(self, file_path: str) -> str:
+            assert file_path.endswith("uploaded-bp.pdf")
+            return parsed_content
+
+    class FakeMaterialRouter:
+        def document_parser(self, service_name: str | None = None) -> FakeMaterialParser:
+            return FakeMaterialParser()
+
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeMaterialRouter(), raising=False)
+
+    response = client.post(
+        "/projects/project_2026_ai_team/materials/upload",
+        files={"file": ("uploaded-bp.pdf", b"%PDF fake content", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "fileName": "uploaded-bp.pdf",
+        "bpFilePath": "data/input/projects/uploaded-bp.md",
+        "sourceFilePath": "data/input/projects/uploaded-bp.pdf",
+        "sizeBytes": len(b"%PDF fake content"),
+        "parser": "fake_docling",
+        "confidence": 0.91,
+        "degradedReason": None,
+    }
+    source_path = tmp_path / "data" / "input" / "projects" / "uploaded-bp.pdf"
+    parsed_path = tmp_path / "data" / "input" / "projects" / "uploaded-bp.md"
+    assert source_path.read_bytes() == b"%PDF fake content"
+    assert parsed_path.read_text(encoding="utf-8") == parsed_content
+
+
+def test_upload_project_material_falls_back_to_ocr_when_document_parser_is_empty(
+    client: TestClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    class EmptyMaterialParser:
+        last_metadata = {"parser": "fake_docling", "confidence": 0.2}
+
+        def parse(self, file_path: str) -> str:
+            return ""
+
+    class FakeOCRProvider:
+        def extract_text(self, file_path: str | None = None, url: str | None = None) -> str:
+            assert file_path and file_path.endswith("scanned-bp.pdf")
+            return "OCR 识别出的项目材料正文"
+
+    class FakeMaterialRouter:
+        def document_parser(self, service_name: str | None = None) -> EmptyMaterialParser:
+            return EmptyMaterialParser()
+
+        def ocr(self, service_name: str | None = None) -> FakeOCRProvider:
+            return FakeOCRProvider()
+
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeMaterialRouter(), raising=False)
+
+    response = client.post(
+        "/projects/project_2026_ai_team/materials/upload",
+        files={"file": ("scanned-bp.pdf", b"%PDF scanned content", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["bpFilePath"] == "data/input/projects/scanned-bp.md"
+    assert payload["parser"] == "ocr"
+    assert payload["confidence"] == 0.65
+    assert "document parser returned empty text" in payload["degradedReason"]
+    assert (tmp_path / "data" / "input" / "projects" / "scanned-bp.md").read_text(encoding="utf-8") == "OCR 识别出的项目材料正文"
 
 
 def test_preview_project_from_bp_uses_json_mode_and_does_not_persist_jobs(
@@ -612,6 +707,11 @@ def test_initialize_project_from_bp_runs_pipeline_and_persists_full_job_matrix(
     assert rationale["confidence"] == 0.9
     assert rationale["whyHireNotVendor"]
     assert rationale["ifNotHiredRisk"]
+    assert rationale["mustHaveSignals"] == ["全栈开发", "AI coding 实战"]
+    assert rationale["riskSignals"] == ["只会写 prompt", "只会调 API"]
+    assert rationale["sourcingKeywords"] == ["VLA", "Agentic Builder"]
+    assert rationale["outreachAngle"]
+    assert rationale["businessContext"]
 
     with session_factory() as session:
         project = session.get(Project, "project_hanno_ai_hardware")

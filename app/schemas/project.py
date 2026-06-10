@@ -41,6 +41,16 @@ class ProjectBpInitializeRequest(CamelModel):
     minimum_role_count: int = Field(default=14, ge=1, le=64)
 
 
+class ProjectMaterialUploadResponse(CamelModel):
+    file_name: str = Field(min_length=1, max_length=160)
+    bp_file_path: str = Field(min_length=1, max_length=512)
+    source_file_path: str = Field(min_length=1, max_length=512)
+    size_bytes: int = Field(ge=1)
+    parser: str | None = Field(default=None, max_length=64)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    degraded_reason: str | None = Field(default=None, max_length=1000)
+
+
 class ProjectResearchTraceItem(CamelModel):
     stage: str = Field(min_length=1, max_length=64)
     summary: str = Field(min_length=1, max_length=2000)
@@ -52,6 +62,8 @@ class ProjectResearchTraceItem(CamelModel):
 class ProjectRoleRejection(CamelModel):
     title: str = Field(min_length=1, max_length=128)
     reasons: list[str] = Field(default_factory=list)
+    critic_category: str | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
 
 
 class ProjectBpInitializeResponse(CamelModel):

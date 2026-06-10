@@ -27,6 +27,14 @@ class JobRationale(CamelModel):
     first_90_day_outcomes: list[str] = Field(default_factory=list)
     hiring_priority: str | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
+    # Hiring-brief mode: screening and sourcing fields derived from the brief.
+    business_context: str | None = None
+    job_scope: str | None = None
+    must_have_signals: list[str] = Field(default_factory=list)
+    bonus_signals: list[str] = Field(default_factory=list)
+    risk_signals: list[str] = Field(default_factory=list)
+    sourcing_keywords: list[str] = Field(default_factory=list)
+    outreach_angle: str | None = None
 
 
 class JobResponse(CamelModel):

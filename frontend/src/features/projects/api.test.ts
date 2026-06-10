@@ -16,6 +16,7 @@ import {
   getProjectJobs,
   getOutreachHistory,
   previewProjectFromBp,
+  uploadProjectMaterial,
   uploadProjectResume,
   retryTask,
   runJobMatch,
@@ -317,6 +318,41 @@ describe("projects api", () => {
     expect(new Headers(request.headers).has("Content-Type")).toBe(false);
   });
 
+  it("uploads a project material file using multipart form data", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        fileName: "uploaded-bp.pdf",
+        bpFilePath: "data/input/projects/uploaded-bp.md",
+        sourceFilePath: "data/input/projects/uploaded-bp.pdf",
+        sizeBytes: 42,
+        parser: "ocr",
+        confidence: 0.65,
+        degradedReason: "Document parser fallback reason: scanned PDF",
+      }),
+    );
+    const file = new File(["%PDF"], "uploaded-bp.pdf", { type: "application/pdf" });
+
+    await expect(uploadProjectMaterial("project_2026_ai_team", file)).resolves.toEqual({
+      fileName: "uploaded-bp.pdf",
+      bpFilePath: "data/input/projects/uploaded-bp.md",
+      sourceFilePath: "data/input/projects/uploaded-bp.pdf",
+      sizeBytes: 42,
+      parser: "ocr",
+      confidence: 0.65,
+      degradedReason: "Document parser fallback reason: scanned PDF",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_2026_ai_team/materials/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData),
+      }),
+    );
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(request.headers).has("Content-Type")).toBe(false);
+  });
+
   it("confirms a human gate task using the backend decision/edits/data payload contract", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -412,7 +448,7 @@ describe("projects api", () => {
     });
   });
 
-  it("includes search mode, provider preflight, and action explanation when starting candidate search", async () => {
+  it("includes search config, provider preflight, and action explanation when starting candidate search", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_B", scenario: "B", status: "processing" }));
     const job = {
       jobProfileId: "job_vla_algorithm",
@@ -431,7 +467,27 @@ describe("projects api", () => {
     } satisfies JobProfile;
 
     await runProjectScenario("project_2026_ai_team", job, "find_candidates", {
-      searchMode: "social_expansion",
+      searchConfig: {
+        searchProfile: "candidate_sourcing",
+        executionPolicy: "deep_live",
+        sourceLayers: {
+          liveWeb: true,
+          academic: true,
+          codeModel: true,
+          peopleDatabase: false,
+          social: true,
+          newsFunding: false,
+          educationCompetition: false,
+          crawlerSnapshot: true,
+          dueDiligence: false,
+        },
+        budget: {
+          maxProviders: 5,
+          perProviderLimit: 3,
+          timeoutSeconds: 9,
+          maxCrawlPages: 2,
+        },
+      },
       providerPreflight: [
         { service: "x_recent_posts_search", status: "missing_key", reason: "缺少 Key" },
         { service: "agent_reach_social_search", status: "missing_tool", reason: "缺少运行工具" },
@@ -450,8 +506,26 @@ describe("projects api", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       scenario: "B",
       frontend_state: {
-        search_mode: "social_expansion",
-        searchMode: "social_expansion",
+        search_profile: "candidate_sourcing",
+        execution_policy: "deep_live",
+        archive_search_evidence: true,
+        source_layers: {
+          live_web: true,
+          academic: true,
+          code_model: true,
+          people_database: false,
+          social: true,
+          news_funding: false,
+          education_competition: false,
+          crawler_snapshot: true,
+          due_diligence: false,
+        },
+        search_budget: {
+          max_providers: 5,
+          per_provider_limit: 3,
+          timeout_seconds: 9,
+          max_crawl_pages: 2,
+        },
         provider_preflight: [
           { service: "x_recent_posts_search", status: "missing_key" },
           { service: "agent_reach_social_search", status: "missing_tool" },

@@ -35,11 +35,33 @@ system_prompt: |
         "dependencies": ["role_id"],
         "first_90_day_outcomes": ["string"],
         "hiring_priority": "P0|P1|P2",
-        "confidence": 0.0
+        "confidence": 0.0,
+        "business_context": "string",
+        "job_scope": "string",
+        "must_have_signals": ["string"],
+        "bonus_signals": ["string"],
+        "risk_signals": ["string"],
+        "sourcing_keywords": ["string"],
+        "outreach_angle": "string"
       }
     ],
     "coverage_gaps": ["string"]
   }
+
+  招聘简章（hiring brief）模式：
+  - 先判断原始输入材料的类型：如果它是寻找「一类人」的招聘简章/JD（如「想找一类人」「我们希望你」「不太适合」这类措辞），
+    必须输出该简章定义的单一核心岗位（通常 1 个），岗位名保留简章的差异化定位词（如 AI Native FDE / Agentic Full-Stack Engineer / Agentic Builder）。
+  - 简章模式下，把能力缺口折叠进这个岗位的 job_scope、responsibilities、must_have_signals 和 sourcing_keywords，
+    不要把同一类人拆成多个专岗；只有当简章明确描述了多个不同角色时才输出多个岗位。
+  - 如果输入材料是完整 BP，岗位数量由 hire 缺口决定，按原有规则一缺口一岗位。
+  - 此时必须填写 business_context（业务背景一句话）、job_scope（职责边界）、
+    must_have_signals（硬性信号，来自「我们希望你」类内容）、
+    bonus_signals（加分信号）、risk_signals（风险信号，来自「不太适合」类内容）、
+    sourcing_keywords（候选人搜索关键词，含技术栈与社区/开源线索）、
+    outreach_angle（触达切入点：为什么这类人会对这个机会感兴趣）。
+  - 禁止生成简章不支持的通用岗位：普通全栈工程师、Prompt 工程师、纯 API 接入工程师、
+    前端页面拼装工程师、传统 CRUD 后端、与简章无证据关联的管理/销售/运营岗。
+    岗位名必须保留简章的差异化定位（如 AI Native / FDE / Agentic Builder）。
 
   每个岗位的硬性要求（缺一不可，否则会被 Critic Gate 拒绝）：
   - why_needed：用一段话讲清「哪条业务承诺 → 哪个能力缺口 → 为什么必须这个岗位」。

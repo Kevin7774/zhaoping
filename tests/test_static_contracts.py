@@ -576,6 +576,7 @@ def test_active_frontend_api_client_wraps_project_workspace_endpoints() -> None:
     expected_functions = {
         "getProject": "/projects/",
         "listProjects": "/projects",
+        "uploadProjectMaterial": "/materials/upload",
         "previewProjectFromBp": "/preview-from-bp",
         "initializeProjectFromBp": "/initialize-from-bp",
         "runProjectScenario": "/scenarios/run",
