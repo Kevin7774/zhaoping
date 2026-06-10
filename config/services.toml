@@ -9,10 +9,7 @@ mcp = "disabled_mcp"
 structured_output = "outlines_structured_output"
 database = "disabled_database"
 llm = "openrouter_auto_reasoning"
-email_discovery = "hunter_email_finder"
-email_verification = "zerobounce_email_validation"
-email_delivery = "postmark_compliant_email"
-scraping = "firecrawl_scrape"
+scraping = "opencli_crawl_scrape"
 
 [services.auto_document_parser]
 type = "document_parser"
@@ -138,89 +135,64 @@ name_zh = "SegmentFault"
 command = "mcporter"
 args = ["call", 'exa.web_search_exa(query: "site:segmentfault.com {query_mcporter}", numResults: {limit})']
 
-[services.scrapling_adaptive_scrape]
+[services.opencli_platform_search]
 type = "search"
-provider = "external_search_tool"
-tool_name = "Scrapling"
-source_key = "scrapling_adaptive_scrape"
-display_name_zh = "Scrapling 自适应抓取"
+provider = "opencli_command"
+display_name_zh = "OpenCLI 平台搜索"
+source_type = "browser_platform_search"
+project_url = "https://github.com/jackwener/OpenCLI"
+required_command = "opencli"
+requires_browser_bridge = true
+supported_platforms = ["B站", "知乎", "小红书", "LinkedIn", "YouTube"]
+timeout_seconds = 60
+purpose = "Use OpenCLI built-in browser-backed commands to search authorized public/platform pages for social, video, and professional evidence."
+access_pattern = "Only use public pages, official site behavior, or user-authorized browser login state; do not bypass login, paywalls, robots.txt, access controls, or platform terms."
+risk_level = "high"
+freshness = "daily"
+guardrails = ["复用用户授权浏览器登录态前必须确认用途和范围。", "平台内容只能作为线索，关键结论必须回看原文并交叉验证。", "候选人相关信息仅限公开职业信息和岗位相关能力证据。"]
+description = "OpenCLI browser-backed platform search provider for Bilibili, Zhihu, Xiaohongshu, LinkedIn, and YouTube."
+
+[services.opencli_platform_search.platform_commands.bilibili]
+name_zh = "B站"
+args = ["bilibili", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.zhihu]
+name_zh = "知乎"
+args = ["zhihu", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.xiaohongshu]
+name_zh = "小红书"
+args = ["xiaohongshu", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.linkedin]
+name_zh = "LinkedIn"
+args = ["linkedin", "people-search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.youtube]
+name_zh = "YouTube"
+args = ["youtube", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_web_read_search]
+type = "search"
+provider = "opencli_command"
+display_name_zh = "OpenCLI 网页正文读取"
 source_type = "adaptive_web_scraping"
-project_url = "https://github.com/D4Vinci/Scrapling"
-supported_platforms = ["Public web pages", "Rendered pages", "Structured extraction"]
-install_hint = 'pip install "scrapling[fetchers]" && scrapling install'
-required_python_module = "scrapling"
-manual_setup_required = false
-execute_enabled = false
-purpose = "Adaptive web scraping and structured extraction for public or authorized pages after compliance review."
-access_pattern = "Use Scrapling only for public or explicitly authorized pages; obey robots.txt, crawl delays, platform terms, and data minimization."
-risk_level = "high"
-freshness = "daily"
-setup_steps = ["Install Scrapling with fetcher extras.", "Install browser dependencies with scrapling install.", "Define per-site selectors, rate limits, robots handling, and data retention before enabling execution."]
-guardrails = ["不把反爬能力用于绕过访问控制、付费墙、登录限制或平台条款。", "批量抓取必须设置速率限制、域名边界、数据最小化和失败恢复。", "网页改版后的自适应定位结果必须抽样复核。"]
-description = "External Scrapling adapter for adaptive public/authorized web extraction planning."
-
-[services.browser_use_agent_search]
-type = "search"
-provider = "external_search_tool"
-tool_name = "Browser-use"
-source_key = "browser_use_agent_search"
-display_name_zh = "Browser-use 浏览器操作"
-source_type = "browser_automation"
-project_url = "https://github.com/browser-use/browser-use"
-supported_platforms = ["Logged-in websites", "Forms", "Back-office pages", "Public web apps"]
-install_hint = "uv add browser-use && uvx browser-use install"
-required_python_module = "browser_use"
-manual_setup_required = true
-execute_enabled = false
-purpose = "LLM-driven browser automation for multi-step web tasks and authorized logged-in pages."
-access_pattern = "Use Browser-use only with explicit user authorization, domain allowlists, least-privilege browser profiles, and human review for sensitive actions."
+project_url = "https://github.com/jackwener/OpenCLI"
+required_command = "opencli"
+requires_browser_bridge = true
+requires_absolute_url = true
+supported_platforms = ["公开网页", "授权网页"]
+timeout_seconds = 60
+purpose = "Use OpenCLI web read to convert a public or explicitly authorized URL into normalized evidence text."
+access_pattern = "Only run against absolute http(s) URLs that are public or explicitly authorized; obey robots.txt, platform terms, rate limits, and data minimization."
 risk_level = "high"
 freshness = "on_demand"
-setup_steps = ["Install Browser-use and browser dependencies.", "Configure an approved LLM provider or Browser Use Cloud key outside source control.", "Set domain allowlists and decide whether existing Chrome login state may be reused."]
-guardrails = ["涉及登录态、财务、个人、工作关键系统或后台操作时必须人工确认。", "不要让模型读取或提交不必要的敏感字段。", "执行前限制域名、动作范围、超时和截图/日志保留策略。"]
-description = "External Browser-use adapter for authorized browser automation and logged-in page operation planning."
+guardrails = ["只读取公开或明确授权 URL。", "不绕过访问控制、付费墙、robots.txt、平台条款或明确反爬限制。", "抓取结果写入证据链前必须保留 source_url 和验证状态。"]
+description = "OpenCLI web read search facade for crawler snapshot workflows that need URL-backed page text."
 
-[services.claude_chrome_supervised_search]
-type = "search"
-provider = "external_search_tool"
-tool_name = "Claude in Chrome"
-source_key = "claude_chrome_supervised_search"
-display_name_zh = "Claude in Chrome 监督操作"
-source_type = "supervised_browser_operation"
-project_url = "https://claude.ai/chrome"
-supported_platforms = ["User-supervised Chrome tabs", "Complex authentication pages", "Manual review workflows"]
-install_hint = "Install the official Claude in Chrome extension from claude.ai/chrome."
-manual_setup_required = true
-execute_enabled = false
-purpose = "Human-supervised browser operation path for complex authentication or workflows the user must watch."
-access_pattern = "Use the official Claude in Chrome extension only in the user's real browser with explicit site permission and user supervision."
-risk_level = "high"
-freshness = "on_demand"
-setup_steps = ["Install the official extension.", "Grant permissions only to trusted sites.", "Keep the user watching for sensitive clicks, form submissions, downloads, and account actions."]
-guardrails = ["这不是后端可自动调用的 API；必须由用户在真实 Chrome 中监督。", "高风险网站、财务、个人、工作关键动作必须人工确认。", "不要采集或回传不必要的账号、Cookie、密码或私密内容。"]
-description = "Manual supervised browser-operation entry for Claude in Chrome workflows."
-
-[services.web_access_cdp_search]
-type = "search"
-provider = "external_search_tool"
-tool_name = "Web-access"
-source_key = "web_access_cdp_search"
-display_name_zh = "Web-access Chrome 联网"
-source_type = "chrome_cdp_web_access"
-project_url = "https://github.com/eze-is/web-access"
-supported_platforms = ["WebSearch", "WebFetch", "curl", "Chrome CDP", "Local bookmarks/history"]
-install_hint = "pnpm dlx skills add eze-is/web-access -g --all --copy 或 npx skills add eze-is/web-access"
-required_command = "node"
-required_skill_path = "~/.agents/skills/web-access/SKILL.md"
-manual_setup_required = true
-execute_enabled = false
-purpose = "SKILL-based web access path that can route between search, fetch, curl, and Chrome CDP with user-authorized browser state."
-access_pattern = "Install the skill, enable Chrome remote debugging only when approved, and restrict CDP access to user-authorized browsing contexts."
-risk_level = "high"
-freshness = "daily"
-setup_steps = ["Install the web-access skill.", "Enable Chrome remote debugging only on trusted local machines.", "Review which bookmarks, history, tabs, and logged-in pages can be used."]
-guardrails = ["CDP 接管真实浏览器前必须获得用户授权。", "不要读取无关书签、历史、标签页、Cookie 或私密页面。", "公开搜索优先，只有公开搜索不足且用户授权时才使用登录态浏览器。"]
-description = "External Web-access skill adapter for search/fetch/curl/CDP planning."
+[services.opencli_web_read_search.platform_commands.web_read]
+name_zh = "网页正文"
+args = ["web", "read", "--url", "{query}", "-f", "json"]
 
 [services.brave_web_search]
 type = "search"
@@ -300,52 +272,6 @@ endpoint = "https://huggingface.co/api/models"
 token_env = "HF_TOKEN"
 timeout_seconds = 20
 description = "Live Hugging Face model search provider for model releases, downloads, likes, tags, authors, and ML ecosystem signals."
-
-[services.pdl_people_search]
-type = "search"
-provider = "people_data_labs_people"
-endpoint = "https://api.peopledatalabs.com/v5/person/search"
-enrich_endpoint = "https://api.peopledatalabs.com/v5/person/enrich"
-api_key_env = "PDL_API_KEY"
-dataset = "all"
-timeout_seconds = 30
-description = "People Data Labs person search/enrichment provider for candidate identity, company, work-history, social-link, and public contact fields."
-
-[services.x_recent_posts_search]
-type = "search"
-provider = "x_recent_posts"
-endpoint = "https://api.x.com/2/tweets/search/recent"
-bearer_token_env = "X_BEARER_TOKEN"
-sort_order = "recency"
-timeout_seconds = 20
-description = "X API v2 recent Posts search provider for KOL, keyword, community, and market-dynamic discovery."
-
-[services.crustdata_signal_search]
-type = "search"
-provider = "crustdata_signals"
-endpoint = "https://api.crustdata.com/web/search/live"
-api_key_env = "CRUSTDATA_API_KEY"
-api_version = "2025-11-01"
-sources = ["web", "news", "social"]
-location = "US"
-timeout_seconds = 30
-description = "Crustdata live web/news/social signal provider for fresh people, company, hiring, funding, and market-change intelligence."
-
-[services.companies_house_search]
-type = "search"
-provider = "companies_house"
-endpoint = "https://api.company-information.service.gov.uk/search/companies"
-api_key_env = "COMPANIES_HOUSE_API_KEY"
-timeout_seconds = 20
-description = "Live UK Companies House company search provider for legal entity, status, company number, creation date, type, and registered address signals."
-
-[services.courtlistener_search]
-type = "search"
-provider = "courtlistener"
-endpoint = "https://www.courtlistener.com/api/rest/v4/search/"
-token_env = "COURTLISTENER_TOKEN"
-timeout_seconds = 20
-description = "Live CourtListener legal search provider for U.S. opinions, dockets, case names, courts, citations, and litigation risk signals."
 
 [services.openalex_works_search]
 type = "search"
@@ -490,7 +416,7 @@ type = "search"
 provider = "fda_device_events"
 endpoint = "https://api.fda.gov/device/event.json"
 timeout_seconds = 20
-description = "Live openFDA Device Adverse Events provider for MAUDE medical device reports, event type, device details, product codes, report dates, and postmarket safety signals."
+description = "Live openFDA Device Adverse Events provider for MAUDE medical device reports, event type, device details, product codes, report dates, and after-market safety signals."
 
 [services.fda_device_classification]
 type = "search"
@@ -543,24 +469,6 @@ dataset_limit = 100
 timeout_seconds = 20
 description = "Live CMS Open Payments provider for drug and medical device company payments, transfers of value, research payments, ownership interests, covered recipients, and teaching hospital relationship signals."
 
-[services.census_international_trade]
-type = "search"
-provider = "census_international_trade"
-imports_endpoint = "https://api.census.gov/data/timeseries/intltrade/imports/hs"
-exports_endpoint = "https://api.census.gov/data/timeseries/intltrade/exports/hs"
-api_key_env = "CENSUS_API_KEY"
-timeout_seconds = 30
-description = "Live U.S. Census International Trade provider for import/export country, commodity, monthly value, and year-to-date trade flow signals."
-
-[services.fred_series_search]
-type = "search"
-provider = "fred_series_search"
-search_endpoint = "https://api.stlouisfed.org/fred/series/search"
-observations_endpoint = "https://api.stlouisfed.org/fred/series/observations"
-api_key_env = "FRED_API_KEY"
-timeout_seconds = 20
-description = "Live FRED provider for macroeconomic time series discovery and latest observations, including rates, inflation, labor, credit spreads, market stress, and yield curve signals."
-
 [services.gdelt_doc_news]
 type = "search"
 provider = "gdelt_doc_news"
@@ -586,15 +494,6 @@ user_agent = "zhaoping-agent/0.1 research contact@example.invalid"
 timeout_seconds = 20
 description = "Live SEC website search provider focused on enforcement, litigation releases, penalties, settled charges, fraud, and regulatory action signals."
 
-[services.usajobs_search]
-type = "search"
-provider = "usajobs"
-endpoint = "https://data.usajobs.gov/api/Search"
-api_key_env = "USAJOBS_API_KEY"
-user_agent_env = "USAJOBS_USER_AGENT"
-timeout_seconds = 20
-description = "Live USAJOBS search provider for U.S. federal job postings, salary ranges, agencies, locations, and labor demand signals."
-
 [services.usaspending_awards]
 type = "search"
 provider = "usaspending_awards"
@@ -602,16 +501,6 @@ endpoint = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
 fiscal_years = [2024, 2025, 2026]
 timeout_seconds = 30
 description = "Live USAspending provider for U.S. federal contracts, grants, recipients, agencies, and award amounts."
-
-[services.sam_gov_opportunities]
-type = "search"
-provider = "sam_gov_opportunities"
-endpoint = "https://api.sam.gov/opportunities/v2/search"
-api_key_env = "SAM_GOV_API_KEY"
-posted_from = "01/01/2025"
-posted_to = "12/31/2026"
-timeout_seconds = 30
-description = "Live SAM.gov Contract Opportunities provider for solicitations, pre-solicitations, sources sought, sole-source/special notices, set-asides, NAICS/PSC, deadlines, contacts, and forward demand signals."
 
 [services.grants_gov_opportunities]
 type = "search"
@@ -641,93 +530,17 @@ type = "search"
 provider = "due_diligence_federated"
 source_catalog_service = "talent_source_catalog"
 web_search_service = "brave_web_search"
-live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "census_international_trade", "fred_series_search", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usajobs_search", "usaspending_awards", "sam_gov_opportunities", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_candidates", "github_repositories", "github_code", "github_topics", "github_users", "huggingface_models", "pdl_people_search", "x_recent_posts_search", "crustdata_signal_search", "companies_house_search", "courtlistener_search", "agent_reach_social_search", "education_competition_monitor", "scrapling_adaptive_scrape", "browser_use_agent_search", "claude_chrome_supervised_search", "web_access_cdp_search"]
+live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usaspending_awards", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_candidates", "github_repositories", "github_code", "github_topics", "github_users", "huggingface_models", "agent_reach_social_search", "opencli_platform_search", "opencli_web_read_search", "education_competition_monitor"]
 web_enabled_by_default = false
 live_enabled_by_default = false
 description = "Compliance-first federated intelligence search for financial due diligence, primary/secondary market research, recruiting, technical evidence, and source coverage planning."
-
-[services.hunter_email_finder]
-type = "email_discovery"
-provider = "hunter_email_finder"
-endpoint = "https://api.hunter.io/v2/email-finder"
-api_key_env = "HUNTER_API_KEY"
-timeout_seconds = 20
-description = "Hunter email finder provider for work-email discovery from name plus company domain or company name."
-
-[services.zerobounce_email_validation]
-type = "email_verification"
-provider = "zerobounce_email_validation"
-endpoint = "https://api.zerobounce.net/v2/validate"
-api_key_env = "ZEROBOUNCE_API_KEY"
-timeout_seconds = 30
-description = "ZeroBounce real-time email validation provider for deliverability and sender-reputation protection."
-
-[services.neverbounce_email_validation]
-type = "email_verification"
-provider = "neverbounce_email_validation"
-endpoint = "https://api.neverbounce.com/v4.2/single/check"
-api_key_env = "NEVERBOUNCE_API_KEY"
-timeout_seconds = 30
-description = "NeverBounce single-email verification provider for secondary deliverability checks."
-
-[services.postmark_compliant_email]
-type = "email_delivery"
-provider = "postmark_compliant_email"
-endpoint = "https://api.postmarkapp.com/email"
-server_token_env = "POSTMARK_SERVER_TOKEN"
-from_email_env = "RECRUITING_CONTACT_EMAIL"
-unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
-suppression_list_path = "data/outreach/suppression_list.jsonl"
-audit_log_path = "data/outreach/email_audit.jsonl"
-daily_send_limit = 50
-manual_approval_required = true
-timeout_seconds = 20
-description = "Postmark email sender wrapped with manual approval, unsubscribe, suppression-list, daily-limit, and audit-log guardrails."
-
-[services.sendgrid_compliant_email]
-type = "email_delivery"
-provider = "sendgrid_compliant_email"
-endpoint = "https://api.sendgrid.com/v3/mail/send"
-api_key_env = "SENDGRID_API_KEY"
-from_email_env = "RECRUITING_CONTACT_EMAIL"
-unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
-suppression_list_path = "data/outreach/suppression_list.jsonl"
-audit_log_path = "data/outreach/email_audit.jsonl"
-daily_send_limit = 50
-manual_approval_required = true
-timeout_seconds = 20
-description = "SendGrid email sender wrapped with manual approval, unsubscribe, suppression-list, daily-limit, and audit-log guardrails."
-
-[services.mailtrap_smtp_email]
-type = "email_delivery"
-provider = "mailtrap_smtp_email"
-host_env = "MAILTRAP_SMTP_HOST"
-port_env = "MAILTRAP_SMTP_PORT"
-username_env = "MAILTRAP_SMTP_USERNAME"
-password_env = "MAILTRAP_SMTP_PASSWORD"
-from_email_env = "RECRUITING_CONTACT_EMAIL"
-unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
-suppression_list_path = "data/outreach/suppression_list.jsonl"
-audit_log_path = "data/outreach/email_audit.jsonl"
-daily_send_limit = 50
-manual_approval_required = true
-use_starttls = true
-timeout_seconds = 20
-description = "Mailtrap SMTP sandbox sender for test-mode real email delivery without contacting production recipients."
-
-[services.firecrawl_scrape]
-type = "scraping"
-provider = "firecrawl_scrape"
-endpoint = "https://api.firecrawl.dev/v2/scrape"
-api_key_env = "FIRECRAWL_API_KEY"
-timeout_seconds = 60
-description = "Firecrawl scrape provider for converting public or authorized web pages into Markdown and structured metadata."
 
 [services.opencli_crawl_scrape]
 type = "scraping"
 provider = "opencli_crawl"
 required_command = "opencli"
 command_args = ["web", "read", "--url", "{url}", "-f", "json"]
+requires_browser_bridge = true
 timeout_seconds = 60
 manual_setup_required = false
 purpose = "Local OpenCLI crawl/scrape adapter for public or authorized pages when the CLI is installed."
@@ -735,46 +548,6 @@ access_pattern = "Run opencli only against public or explicitly authorized URLs;
 risk_level = "high"
 freshness = "on_demand"
 description = "OpenCLI local web read provider for converting public or authorized URLs into Markdown/HTML/metadata through a local command."
-
-[services.public_web_snapshot_monitor]
-type = "scraping"
-provider = "public_web_snapshot_monitor"
-primary_scraping_service = "firecrawl_scrape"
-browser_session_service = "browserbase_session"
-snapshot_dir = "data/snapshots/public_web"
-target_groups = { schools = ["https://air.tsinghua.edu.cn/", "https://www.ai.pku.edu.cn/", "https://www.sjtu.edu.cn/", "https://www.zju.edu.cn/"], competitions = ["https://tianchi.aliyun.com/", "https://www.datafountain.cn/competitions", "https://www.datafountain.cn/special/BDCI", "https://icpc.global/", "https://ccpc.io/", "https://dasai.lanqiao.cn/", "https://www.kaggle.com/competitions"] }
-manual_setup_required = false
-purpose = "Run scheduled public-web snapshots for school, lab, competition, careers, and forum pages through Firecrawl with optional Browserbase session metadata."
-access_pattern = "Only snapshot public or explicitly authorized URLs; respect robots.txt, site terms, rate limits, domain allowlists, and data minimization."
-risk_level = "high"
-freshness = "daily"
-description = "Public web snapshot monitor for recurring Firecrawl/Browserbase-backed captures and manifest files."
-
-[services.apify_actor_run]
-type = "scraping"
-provider = "apify_actor_run"
-endpoint_template = "https://api.apify.com/v2/acts/{actor_id}/runs"
-api_token_env = "APIFY_API_TOKEN"
-timeout_seconds = 60
-description = "Apify Actor run provider for compliant actor-based scraping jobs."
-
-[services.brightdata_web_unlocker]
-type = "scraping"
-provider = "brightdata_web_unlocker"
-endpoint = "https://api.brightdata.com/request"
-api_key_env = "BRIGHTDATA_API_KEY"
-zone_env = "BRIGHTDATA_ZONE"
-timeout_seconds = 60
-description = "Bright Data Web Unlocker provider for approved public-web access where normal retrieval is blocked."
-
-[services.browserbase_session]
-type = "scraping"
-provider = "browserbase_session"
-endpoint = "https://api.browserbase.com/v1/sessions"
-api_key_env = "BROWSERBASE_API_KEY"
-project_id_env = "BROWSERBASE_PROJECT_ID"
-timeout_seconds = 30
-description = "Browserbase session provider for managed cloud browser sessions used by approved browser automation."
 
 [services.disabled_mcp]
 type = "mcp"
@@ -787,25 +560,15 @@ provider = "outlines"
 model_service = "openrouter_auto_reasoning"
 description = "Structured generation facade using Outlines. Requires a configured model service before live generation."
 
-[services.token_plan_anthropic]
-type = "llm"
-provider = "anthropic_compatible"
-base_url = "https://token-plan-cn.xiaomimimo.com/anthropic"
-api_key_env = "ANTHROPIC_COMPATIBLE_API_KEY"
-model = "mimo-v2.5-pro"
-anthropic_version = "2023-06-01"
-timeout_seconds = 60
-description = "Anthropic-compatible token-plan endpoint."
-
 [services.openrouter_auto_reasoning]
 type = "llm"
 provider = "openrouter_chat"
 base_url = "https://openrouter.ai/api/v1"
 api_key_env = "OPENROUTER_API_KEY"
-model = "openrouter/auto"
+model = "anthropic/claude-sonnet-4.6"
 timeout_seconds = 90
 app_title = "Zhaoping Robot Talent Agent"
-description = "OpenRouter auto-routed reasoning model for capability calibration, evidence synthesis, and planning."
+description = "OpenRouter Claude Sonnet 4.6 for capability calibration, evidence synthesis, and planning."
 
 [services.openrouter_online_research]
 type = "llm"

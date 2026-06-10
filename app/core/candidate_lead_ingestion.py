@@ -414,11 +414,9 @@ def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
     owner_login = _clean_string(result.get("owner_login") or result.get("author"), "name")
     source_key = result.get("source_key") or result.get("source_platform") or result.get("source_name")
     is_people_source = str(source_key or "").casefold() in {
-        "pdl_people_search",
         "openalex_authors_search",
         "semantic_scholar_authors_search",
         "agent_reach_social_search",
-        "x_recent_posts_search",
     }
     evidence = _string_list([result.get("title"), result.get("snippet") or result.get("description")])
     skills = _string_list(result.get("topics") or result.get("tags") or result.get("matched_keywords"))

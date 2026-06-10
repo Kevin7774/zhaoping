@@ -136,15 +136,15 @@ describe("HumanConfirmModal", () => {
           omittedCount: 0,
           searchTrace: {
             query: "robotics VLA",
-            services: ["github_repositories", "pdl_people_search"],
+            services: ["github_repositories", "github_code"],
             resultCount: 3,
-            errors: [{ service: "pdl_people_search", reason: "missing_credentials:PDL_API_KEY" }],
+            errors: [{ service: "github_code", reason: "deferred_by_live_budget" }],
             researchLayers: [
               {
                 id: "people_network",
                 nameZh: "人才网络",
                 purpose: "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
-                services: ["github_repositories", "pdl_people_search"],
+                services: ["github_repositories", "github_code"],
                 resultCount: 3,
                 errorCount: 1,
               },
@@ -168,8 +168,8 @@ describe("HumanConfirmModal", () => {
     expect(screen.getByText("人才网络")).toBeTruthy();
     expect(screen.getByText("3 命中 / 1 异常")).toBeTruthy();
     expect(screen.getAllByText("github_repositories").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("pdl_people_search").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("pdl_people_search: missing_credentials:PDL_API_KEY")).toBeTruthy();
+    expect(screen.getAllByText("github_code").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("github_code: deferred_by_live_budget")).toBeTruthy();
   });
 
   it("disables approve actions when Scenario B lead preview is missing", () => {

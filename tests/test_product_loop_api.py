@@ -527,7 +527,7 @@ def test_outreach_real_send_uses_email_delivery_provider(
                     "approved": approved,
                 }
             )
-            return {"status": "sent", "provider": "mailtrap_smtp_email", "message_id": "mailtrap-msg-1"}
+            return {"status": "sent", "provider": "test_email_delivery", "message_id": "test-msg-1"}
 
     class FakeRouter:
         def email_delivery(self) -> FakeEmailDelivery:
@@ -553,7 +553,7 @@ def test_outreach_real_send_uses_email_delivery_provider(
     payload = send_response.json()
     assert payload["status"] == "sent"
     assert payload["deliveryMode"] == "real"
-    assert payload["providerStatus"] == "mailtrap_smtp_email:sent"
+    assert payload["providerStatus"] == "test_email_delivery:sent"
     assert sent["to"] == "alex.chen@example.com"
     assert sent["approved"] is True
     assert sent["subject"] == draft_response.json()["subject"]
@@ -579,7 +579,7 @@ def test_outreach_real_send_uses_logged_in_email_as_sender(
             approved: bool = False,
         ) -> dict[str, object]:
             sent.update({"sender_email": sender_email, "approved": approved, "to": to})
-            return {"status": "sent", "provider": "mailtrap_smtp_email", "message_id": "mailtrap-msg-2"}
+            return {"status": "sent", "provider": "test_email_delivery", "message_id": "test-msg-2"}
 
     class FakeRouter:
         def email_delivery(self) -> FakeEmailDelivery:

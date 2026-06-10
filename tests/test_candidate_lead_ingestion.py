@@ -288,7 +288,7 @@ def test_extract_candidate_leads_from_search_and_structured_outputs() -> None:
                         "topics": ["robotics", "VLA"],
                     },
                     {
-                        "source_key": "pdl_people_search",
+                        "source_key": "agent_reach_social_search",
                         "title": "Ada Lovelace",
                         "url": "https://www.linkedin.com/in/ada-robotics",
                         "snippet": "Robotics lead at Physical Intelligence.",
@@ -453,9 +453,8 @@ def test_scenario_b_awaiting_payload_contains_lead_preview(
 
 
 def test_recruiting_live_search_services_cover_top_down_people_and_social_sources() -> None:
-    assert "pdl_people_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
-    assert "crustdata_signal_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
-    assert "x_recent_posts_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "github_candidates" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "github_users" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
     assert "agent_reach_social_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
     assert "semantic_scholar_authors_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
 

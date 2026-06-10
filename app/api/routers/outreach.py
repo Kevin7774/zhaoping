@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -451,11 +450,6 @@ def _excerpt(value: str, limit: int) -> str:
 
 def _email_delivery_active() -> bool:
     status = get_integration_status()
-    if _should_use_mailtrap():
-        return any(
-            service.get("name") == "mailtrap_smtp_email" and service.get("status") in {"active", "available"}
-            for service in status.get("services", [])
-        )
     capabilities = status.get("capabilities", [])
     return any(
         capability.get("service_type") == "email_delivery" and capability.get("status") in {"active", "available"}
@@ -464,8 +458,7 @@ def _email_delivery_active() -> bool:
 
 
 def _send_real_email(*, to: str, subject: str, body: str, sender_email: str | None = None) -> dict[str, Any]:
-    service_name = "mailtrap_smtp_email" if _should_use_mailtrap() else None
-    provider = get_router().email_delivery(service_name) if service_name else get_router().email_delivery()
+    provider = get_router().email_delivery()
     return provider.send(to=to, subject=subject, text_body=body, sender_email=sender_email, approved=True)
 
 
@@ -473,10 +466,6 @@ def _provider_status(result: dict[str, Any]) -> str:
     provider = str(result.get("provider") or "email_delivery")
     status = str(result.get("status") or "sent")
     return f"{provider}:{status}"
-
-
-def _should_use_mailtrap() -> bool:
-    return str(os.getenv("APP_ENV") or os.getenv("ENV") or os.getenv("ZHAOPING_ENV") or "").lower() == "test"
 
 
 def _require_project(session: Session, project_id: str) -> Project:

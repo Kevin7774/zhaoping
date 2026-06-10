@@ -59,28 +59,32 @@ def test_all_role_capabilities_exist() -> None:
     validate_role_capabilities()
     assert len(ROBOT_ROLES_METADATA) == 12
     assert len(ROBOT_TEAM_PROFILES) == 6
-    assert len(SEARCH_DATA_SOURCES) == 43
+    assert len(SEARCH_DATA_SOURCES) == 35
     assert "github" in SEARCH_DATA_SOURCES
-    assert "people_data_labs_people" in SEARCH_DATA_SOURCES
-    assert "x_recent_posts_search" in SEARCH_DATA_SOURCES
-    assert "crustdata_signals" in SEARCH_DATA_SOURCES
-    assert "email_discovery_verification" in SEARCH_DATA_SOURCES
-    assert "compliant_outreach_and_scraping" in SEARCH_DATA_SOURCES
     assert "ai_communities" in SEARCH_DATA_SOURCES
     assert "video_platforms" in SEARCH_DATA_SOURCES
     assert "agent_reach_social_search" in SEARCH_DATA_SOURCES
-    assert "scrapling_adaptive_scrape" in SEARCH_DATA_SOURCES
+    assert "opencli_platform_search" in SEARCH_DATA_SOURCES
+    assert "opencli_web_read_search" in SEARCH_DATA_SOURCES
     assert "opencli_crawl_scrape" in SEARCH_DATA_SOURCES
     assert "openalex_author_institution_search" in SEARCH_DATA_SOURCES
     assert "semantic_scholar_research" in SEARCH_DATA_SOURCES
     assert "education_competition_monitor" in SEARCH_DATA_SOURCES
-    assert "public_web_snapshot_monitor" in SEARCH_DATA_SOURCES
-    assert "browser_use_agent_search" in SEARCH_DATA_SOURCES
-    assert "claude_chrome_supervised_search" in SEARCH_DATA_SOURCES
-    assert "web_access_cdp_search" in SEARCH_DATA_SOURCES
     assert "regulatory_filings_global" in SEARCH_DATA_SOURCES
     assert "funding_private_market" in SEARCH_DATA_SOURCES
     assert "market_data_secondary" in SEARCH_DATA_SOURCES
+    assert {
+        "people_data_labs_people",
+        "x_recent_posts_search",
+        "crustdata_signals",
+        "email_discovery_verification",
+        "compliant_outreach_and_scraping",
+        "scrapling_adaptive_scrape",
+        "public_web_snapshot_monitor",
+        "browser_use_agent_search",
+        "claude_chrome_supervised_search",
+        "web_access_cdp_search",
+    }.isdisjoint(SEARCH_DATA_SOURCES)
     assert "cap_vla_imitation" in CAPABILITY_STANDARDS
     assert "cap_laser_visual_slam" in CAPABILITY_TRACEABILITY_OVERRIDES
     assert any(item["item"] == "能力与岗位映射" for item in STATIC_DYNAMIC_DECISION_TABLE)
@@ -164,10 +168,23 @@ def test_service_config_defaults_exist() -> None:
         "csdn",
         "segmentfault",
     }
-    assert config.service("scrapling_adaptive_scrape").provider == "external_search_tool"
-    assert config.service("scrapling_adaptive_scrape").model_extra["required_python_module"] == "scrapling"
+    assert config.service("opencli_platform_search").provider == "opencli_command"
+    assert config.service("opencli_platform_search").model_extra["required_command"] == "opencli"
+    assert config.service("opencli_platform_search").model_extra["requires_browser_bridge"] is True
+    assert set(config.service("opencli_platform_search").model_extra["platform_commands"]) >= {
+        "bilibili",
+        "zhihu",
+        "xiaohongshu",
+        "linkedin",
+        "youtube",
+    }
+    assert config.service("opencli_web_read_search").provider == "opencli_command"
+    assert config.service("opencli_web_read_search").model_extra["source_type"] == "adaptive_web_scraping"
+    assert config.service("opencli_web_read_search").model_extra["requires_absolute_url"] is True
+    assert config.default_service_name("scraping") == "opencli_crawl_scrape"
     assert config.service("opencli_crawl_scrape").provider == "opencli_crawl"
     assert config.service("opencli_crawl_scrape").model_extra["required_command"] == "opencli"
+    assert config.service("opencli_crawl_scrape").model_extra["requires_browser_bridge"] is True
     assert config.service("opencli_crawl_scrape").model_extra["command_args"] == [
         "web",
         "read",
@@ -176,13 +193,6 @@ def test_service_config_defaults_exist() -> None:
         "-f",
         "json",
     ]
-    assert config.service("browser_use_agent_search").provider == "external_search_tool"
-    assert config.service("browser_use_agent_search").model_extra["required_python_module"] == "browser_use"
-    assert config.service("claude_chrome_supervised_search").provider == "external_search_tool"
-    assert config.service("claude_chrome_supervised_search").model_extra["project_url"] == "https://claude.ai/chrome"
-    assert config.service("web_access_cdp_search").provider == "external_search_tool"
-    assert config.service("web_access_cdp_search").model_extra["required_command"] == "node"
-    assert config.service("web_access_cdp_search").model_extra["required_skill_path"] == "~/.agents/skills/web-access/SKILL.md"
     assert config.service("brave_web_search").provider == "brave_web"
     assert config.service("brave_web_search").model_extra["api_key_env"] == "BRAVE_SEARCH_API_KEY"
     assert config.service("github_repositories").provider == "github_repositories"
@@ -213,15 +223,6 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("semantic_scholar_authors_search").model_extra["endpoint"] == "https://api.semanticscholar.org/graph/v1/author/search"
     assert config.service("education_competition_monitor").provider == "education_competition_monitor"
     assert len(config.service("education_competition_monitor").model_extra["targets"]) >= 8
-    assert config.service("public_web_snapshot_monitor").provider == "public_web_snapshot_monitor"
-    assert config.service("public_web_snapshot_monitor").model_extra["primary_scraping_service"] == "firecrawl_scrape"
-    assert config.service("public_web_snapshot_monitor").model_extra["browser_session_service"] == "browserbase_session"
-    assert config.service("companies_house_search").provider == "companies_house"
-    assert config.service("companies_house_search").model_extra["endpoint"] == "https://api.company-information.service.gov.uk/search/companies"
-    assert config.service("companies_house_search").model_extra["api_key_env"] == "COMPANIES_HOUSE_API_KEY"
-    assert config.service("courtlistener_search").provider == "courtlistener"
-    assert config.service("courtlistener_search").model_extra["endpoint"] == "https://www.courtlistener.com/api/rest/v4/search/"
-    assert config.service("courtlistener_search").model_extra["token_env"] == "COURTLISTENER_TOKEN"
     assert config.service("openalex_works_search").provider == "openalex_works"
     assert config.service("openalex_works_search").model_extra["endpoint"] == "https://api.openalex.org/works"
     assert config.service("sec_edgar_company_filings").provider == "sec_edgar_company_filings"
@@ -261,27 +262,14 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("cms_openpayments").provider == "cms_openpayments"
     assert config.service("cms_openpayments").model_extra["metastore_endpoint"] == "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items"
     assert config.service("cms_openpayments").model_extra["datastore_endpoint_template"] == "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0"
-    assert config.service("census_international_trade").provider == "census_international_trade"
-    assert config.service("census_international_trade").model_extra["imports_endpoint"] == "https://api.census.gov/data/timeseries/intltrade/imports/hs"
-    assert config.service("census_international_trade").model_extra["api_key_env"] == "CENSUS_API_KEY"
-    assert config.service("fred_series_search").provider == "fred_series_search"
-    assert config.service("fred_series_search").model_extra["search_endpoint"] == "https://api.stlouisfed.org/fred/series/search"
-    assert config.service("fred_series_search").model_extra["observations_endpoint"] == "https://api.stlouisfed.org/fred/series/observations"
-    assert config.service("fred_series_search").model_extra["api_key_env"] == "FRED_API_KEY"
     assert config.service("gdelt_doc_news").provider == "gdelt_doc_news"
     assert config.service("gdelt_doc_news").model_extra["endpoint"] == "https://api.gdeltproject.org/api/v2/doc/doc"
     assert config.service("gnews_funding_news").provider == "gnews_funding_news"
     assert config.service("gnews_funding_news").model_extra["api_key_env"] == "GNEWS_API_KEY"
     assert config.service("sec_enforcement_search").provider == "sec_enforcement"
     assert config.service("sec_enforcement_search").model_extra["endpoint"] == "https://www.sec.gov/enforcement-litigation/litigation-releases"
-    assert config.service("usajobs_search").provider == "usajobs"
-    assert config.service("usajobs_search").model_extra["api_key_env"] == "USAJOBS_API_KEY"
-    assert config.service("usajobs_search").model_extra["user_agent_env"] == "USAJOBS_USER_AGENT"
     assert config.service("usaspending_awards").provider == "usaspending_awards"
     assert config.service("usaspending_awards").model_extra["endpoint"] == "https://api.usaspending.gov/api/v2/search/spending_by_award/"
-    assert config.service("sam_gov_opportunities").provider == "sam_gov_opportunities"
-    assert config.service("sam_gov_opportunities").model_extra["endpoint"] == "https://api.sam.gov/opportunities/v2/search"
-    assert config.service("sam_gov_opportunities").model_extra["api_key_env"] == "SAM_GOV_API_KEY"
     assert config.service("grants_gov_opportunities").provider == "grants_gov_opportunities"
     assert config.service("grants_gov_opportunities").model_extra["endpoint"] == "https://api.grants.gov/v1/api/search2"
     assert config.service("patentsview_patents").provider == "patentsview_patents"
@@ -307,8 +295,6 @@ def test_service_config_defaults_exist() -> None:
         "epa_echo_facilities",
         "clinicaltrials_studies",
         "cms_openpayments",
-        "census_international_trade",
-        "fred_series_search",
         "openalex_works_search",
         "openalex_authors_search",
         "openalex_institutions_search",
@@ -317,9 +303,7 @@ def test_service_config_defaults_exist() -> None:
         "gdelt_doc_news",
         "gnews_funding_news",
         "sec_enforcement_search",
-        "usajobs_search",
         "usaspending_awards",
-        "sam_gov_opportunities",
         "grants_gov_opportunities",
         "patentsview_patents",
         "ofac_sanctions_lists",
@@ -327,20 +311,13 @@ def test_service_config_defaults_exist() -> None:
         "github_repositories",
         "github_code",
         "github_topics",
-        "github_users",
-        "huggingface_models",
-        "pdl_people_search",
-        "x_recent_posts_search",
-        "crustdata_signal_search",
-        "companies_house_search",
-        "courtlistener_search",
-        "agent_reach_social_search",
-        "education_competition_monitor",
-        "scrapling_adaptive_scrape",
-        "browser_use_agent_search",
-        "claude_chrome_supervised_search",
-        "web_access_cdp_search",
-    ]
+            "github_users",
+            "huggingface_models",
+            "agent_reach_social_search",
+            "opencli_platform_search",
+            "opencli_web_read_search",
+            "education_competition_monitor",
+        ]
     assert config.service("openrouter_auto_reasoning").provider == "openrouter_chat"
     assert config.service("openrouter_auto_reasoning").model_extra["api_key_env"] == "OPENROUTER_API_KEY"
     assert config.service("openrouter_online_research").model_extra["tools"] == [
@@ -353,6 +330,48 @@ def test_service_config_defaults_exist() -> None:
     assert "evidence_record_schema" in config.skills
     assert "search_data_sources" in config.skills
     assert "home_robot_recruiting_scenarios" in config.skills
+
+
+def test_no_key_or_unavailable_integrations_are_not_registered() -> None:
+    config = load_app_config()
+    retired_services = {
+        "pdl_people_search",
+        "x_recent_posts_search",
+        "crustdata_signal_search",
+        "companies_house_search",
+        "courtlistener_search",
+        "census_international_trade",
+        "fred_series_search",
+        "usajobs_search",
+        "sam_gov_opportunities",
+        "scrapling_adaptive_scrape",
+        "browser_use_agent_search",
+        "claude_chrome_supervised_search",
+        "web_access_cdp_search",
+        "hunter_email_finder",
+        "zerobounce_email_validation",
+        "neverbounce_email_validation",
+        "postmark_compliant_email",
+        "sendgrid_compliant_email",
+        "mailtrap_smtp_email",
+        "firecrawl_scrape",
+        "apify_actor_run",
+        "brightdata_web_unlocker",
+        "browserbase_session",
+        "public_web_snapshot_monitor",
+        "token_plan_anthropic",
+    }
+
+    assert retired_services.isdisjoint(config.services)
+    assert "email_discovery" not in config.defaults
+    assert "email_verification" not in config.defaults
+    assert "email_delivery" not in config.defaults
+    assert config.default_service_name("scraping") == "opencli_crawl_scrape"
+
+    status = get_integration_status(config)
+    services = {service["name"]: service for service in status["services"]}
+    assert retired_services.isdisjoint(services)
+    assert not [service for service in services.values() if service["status"] == "missing_key"]
 
 
 def test_search_source_layers_reference_real_routable_providers() -> None:
@@ -404,7 +423,7 @@ def test_router_registries_and_structured_output_provider() -> None:
     assert "home_robot_recruiting_scenarios" in router.skill_registry.all()
     assert "disabled_mcp" in router.mcp_registry.services()
     assert router.structured_output("outlines_structured_output").model_service == "openrouter_auto_reasoning"
-    assert router.llm().model == "openrouter/auto"
+    assert router.llm().model == load_app_config().service("openrouter_auto_reasoning").model_extra["model"]
 
 
 def test_self_rsi_evaluator_runs_feedback_iteration_cycle() -> None:
@@ -501,6 +520,50 @@ def test_integration_status_exposes_self_rsi_evaluation_api_without_secrets() ->
     assert capability["code_path"] == "app/providers/evaluation.py"
     assert "self_rsi_evaluator" in json.dumps(capability, ensure_ascii=False)
     assert "api_key" not in json.dumps(capability, ensure_ascii=False).lower()
+
+
+def test_opencli_browser_bridge_gap_is_reported_as_manual_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.core.integration_status as integration_status
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else f"/usr/bin/{command}"
+
+    def fake_run(
+        args: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert args == ["opencli", "doctor"]
+        assert capture_output is True
+        assert text is True
+        assert check is False
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="[MISSING] Extension: not connected\n[FAIL] Connectivity: failed (Browser Bridge extension not connected)",
+            stderr="",
+        )
+
+    monkeypatch.setattr(integration_status.shutil, "which", fake_which)
+    monkeypatch.setattr(integration_status.subprocess, "run", fake_run)
+
+    status = get_integration_status(load_app_config())
+    services = {service["name"]: service for service in status["services"]}
+    opencli_scrape = services["opencli_crawl_scrape"]
+    opencli_platform = services["opencli_platform_search"]
+
+    assert opencli_scrape["status"] == "manual_setup"
+    assert opencli_platform["status"] == "manual_setup"
+    assert {
+        "type": "browser_bridge",
+        "name": "OpenCLI Browser Bridge",
+        "present": False,
+        "command": "opencli",
+        "reason": "Browser Bridge extension not connected",
+    } in opencli_scrape["runtime_requirements"]
 
 
 def test_slam_capability_traceability_has_route_breakdown_and_evidence_requirements() -> None:
@@ -1338,156 +1401,96 @@ def test_search_smoke_script_and_readme_document_live_sources() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
     script = Path("scripts/smoke_search_sources.py").read_text(encoding="utf-8")
 
-    assert "scripts/smoke_search_sources.py" in readme
-    assert "github_repositories" in readme
-    assert "huggingface_models" in readme
-    assert "companies_house_search" in readme
-    assert "courtlistener_search" in readme
-    assert "agent_reach_social_search" in readme
-    assert "scrapling_adaptive_scrape" in readme
-    assert "opencli_crawl_scrape" in readme
-    assert "browser_use_agent_search" in readme
-    assert "claude_chrome_supervised_search" in readme
-    assert "web_access_cdp_search" in readme
-    assert "sec_company_facts" in readme
-    assert "sec_insider_transactions" in readme
-    assert "sec_ownership_activism" in readme
-    assert "sec_investment_adviser_reports" in readme
-    assert "fdic_bankfind_institutions" in readme
-    assert "federal_register_documents" in readme
-    assert "cpsc_recalls" in readme
-    assert "fda_enforcement_recalls" in readme
-    assert "fda_device_510k" in readme
-    assert "fda_device_events" in readme
-    assert "fda_device_classification" in readme
-    assert "fda_device_registration_listing" in readme
-    assert "cfpb_consumer_complaints" in readme
-    assert "nhtsa_recalls" in readme
-    assert "epa_echo_facilities" in readme
-    assert "clinicaltrials_studies" in readme
-    assert "cms_openpayments" in readme
-    assert "census_international_trade" in readme
-    assert "fred_series_search" in readme
-    assert "openalex_works_search" in readme
-    assert "openalex_authors_search" in readme
-    assert "openalex_institutions_search" in readme
-    assert "semantic_scholar_papers_search" in readme
-    assert "semantic_scholar_authors_search" in readme
-    assert "education_competition_monitor" in readme
-    assert "public_web_snapshot_monitor" in readme
-    assert "sec_edgar_company_filings" in readme
-    assert "gdelt_doc_news" in readme
-    assert "gnews_funding_news" in readme
-    assert "sec_enforcement_search" in readme
-    assert "usajobs_search" in readme
-    assert "usaspending_awards" in readme
-    assert "sam_gov_opportunities" in readme
-    assert "grants_gov_opportunities" in readme
-    assert "patentsview_patents" in readme
-    assert "ofac_sanctions_lists" in readme
-    assert "https://api.github.com/search/repositories" in readme
-    assert "https://huggingface.co/api/models" in readme
-    assert "https://api.peopledatalabs.com/v5/person/search" in readme
-    assert "https://api.x.com/2/tweets/search/recent" in readme
-    assert "https://api.crustdata.com/web/search/live" in readme
-    assert "https://api.hunter.io/v2/email-finder" in readme
-    assert "https://api.zerobounce.net/v2/validate" in readme
-    assert "https://api.postmarkapp.com/email" in readme
-    assert "https://api.firecrawl.dev/v2/scrape" in readme
-    assert "https://api.company-information.service.gov.uk/search/companies" in readme
-    assert "https://www.courtlistener.com/api/rest/v4/search/" in readme
-    assert "https://github.com/Panniantong/Agent-Reach" in readme
-    assert "https://github.com/D4Vinci/Scrapling" in readme
-    assert "opencli web read" in readme
-    assert "https://github.com/browser-use/browser-use" in readme
-    assert "https://claude.ai/chrome" in readme
-    assert "https://github.com/eze-is/web-access" in readme
-    assert "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json" in readme
-    assert "Form 3/4/5" in readme
-    assert "Schedule 13D/13G" in readme
-    assert "https://www.federalregister.gov/api/v1/documents.json" in readme
-    assert "https://www.saferproducts.gov/RestWebServices/Recall" in readme
-    assert "https://api.fda.gov/device/enforcement.json" in readme
-    assert "https://api.fda.gov/device/510k.json" in readme
-    assert "https://api.fda.gov/device/event.json" in readme
-    assert "https://api.fda.gov/device/classification.json" in readme
-    assert "https://api.fda.gov/device/registrationlisting.json" in readme
-    assert "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/" in readme
-    assert "https://api.nhtsa.gov/recalls/recallsByVehicle" in readme
-    assert "https://echodata.epa.gov/echo/echo_rest_services.get_facilities" in readme
-    assert "https://clinicaltrials.gov/api/v2/studies" in readme
-    assert "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items" in readme
-    assert "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0" in readme
-    assert "https://api.census.gov/data/timeseries/intltrade/imports/hs" in readme
-    assert "https://api.stlouisfed.org/fred/series/search" in readme
-    assert "https://api.stlouisfed.org/fred/series/observations" in readme
-    assert "https://gnews.io/api/v4/search" in readme
-    assert "https://api.openalex.org/works" in readme
-    assert "https://api.openalex.org/authors" in readme
-    assert "https://api.openalex.org/institutions" in readme
-    assert "https://api.semanticscholar.org/graph/v1/paper/search" in readme
-    assert "https://api.semanticscholar.org/graph/v1/author/search" in readme
-    assert "https://data.sec.gov/submissions/CIK{cik}.json" in readme
-    assert "https://api.fdic.gov/banks/institutions" in readme
-    assert "https://www.sec.gov/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers/ia060126.zip" in readme
-    assert "https://api.gdeltproject.org/api/v2/doc/doc" in readme
-    assert "https://www.sec.gov/enforcement-litigation/litigation-releases" in readme
-    assert "https://data.usajobs.gov/api/Search" in readme
-    assert "https://api.usaspending.gov/api/v2/search/spending_by_award/" in readme
-    assert "https://api.sam.gov/opportunities/v2/search" in readme
-    assert "https://api.grants.gov/v1/api/search2" in readme
-    assert "https://search.patentsview.org/api/v1/patent/" in readme
-    assert "https://www.treasury.gov/ofac/downloads/sdn.xml" in readme
-    assert "router.search(\"github_repositories\")" in script
-    assert "router.search(\"huggingface_models\")" in script
-    assert "router.search(\"pdl_people_search\")" in script
-    assert "router.search(\"x_recent_posts_search\")" in script
-    assert "router.search(\"crustdata_signal_search\")" in script
-    assert "router.search(\"companies_house_search\")" in script
-    assert "router.search(\"courtlistener_search\")" in script
-    assert "router.search(\"sec_company_facts\")" in script
-    assert "router.search(\"sec_insider_transactions\")" in script
-    assert "router.search(\"sec_ownership_activism\")" in script
-    assert "router.search(\"sec_investment_adviser_reports\")" in script
-    assert "router.search(\"fdic_bankfind_institutions\")" in script
-    assert "router.search(\"federal_register_documents\")" in script
-    assert "router.search(\"cpsc_recalls\")" in script
-    assert "router.search(\"fda_enforcement_recalls\")" in script
-    assert "router.search(\"fda_device_510k\")" in script
-    assert "router.search(\"fda_device_events\")" in script
-    assert "router.search(\"fda_device_classification\")" in script
-    assert "router.search(\"fda_device_registration_listing\")" in script
-    assert "router.search(\"cfpb_consumer_complaints\")" in script
-    assert "router.search(\"nhtsa_recalls\")" in script
-    assert "router.search(\"epa_echo_facilities\")" in script
-    assert "router.search(\"clinicaltrials_studies\")" in script
-    assert "router.search(\"cms_openpayments\")" in script
-    assert "router.search(\"census_international_trade\")" in script
-    assert "router.search(\"fred_series_search\")" in script
-    assert "router.search(\"openalex_works_search\")" in script
-    assert "router.search(\"openalex_authors_search\")" in script
-    assert "router.search(\"openalex_institutions_search\")" in script
-    assert "router.search(\"semantic_scholar_papers_search\")" in script
-    assert "router.search(\"semantic_scholar_authors_search\")" in script
-    assert "router.search(\"sec_edgar_company_filings\")" in script
-    assert "router.search(\"gdelt_doc_news\")" in script
-    assert "router.search(\"gnews_funding_news\")" in script
-    assert "router.search(\"sec_enforcement_search\")" in script
-    assert "router.search(\"usajobs_search\")" in script
-    assert "router.search(\"usaspending_awards\")" in script
-    assert "router.search(\"sam_gov_opportunities\")" in script
-    assert "router.search(\"grants_gov_opportunities\")" in script
-    assert "router.search(\"patentsview_patents\")" in script
-    assert "router.search(\"ofac_sanctions_lists\")" in script
-    assert "router.search(\"agent_reach_social_search\")" in script
-    assert "router.search(\"education_competition_monitor\")" in script
-    assert "router.search(\"scrapling_adaptive_scrape\")" in script
-    assert "opencli_crawl_scrape" in script
-    assert "public_web_snapshot_monitor" in script
-    assert "router.search(\"browser_use_agent_search\")" in script
-    assert "router.search(\"claude_chrome_supervised_search\")" in script
-    assert "router.search(\"web_access_cdp_search\")" in script
-    assert "BRAVE_SEARCH_API_KEY" in script
+    active_tokens = {
+        "scripts/smoke_search_sources.py",
+        "agent_reach_social_search",
+        "opencli_platform_search",
+        "opencli_web_read_search",
+        "opencli_crawl_scrape",
+        "github_repositories",
+        "huggingface_models",
+        "openalex_works_search",
+        "openalex_authors_search",
+        "openalex_institutions_search",
+        "semantic_scholar_papers_search",
+        "semantic_scholar_authors_search",
+        "education_competition_monitor",
+        "sec_edgar_company_filings",
+        "sec_company_facts",
+        "sec_insider_transactions",
+        "sec_ownership_activism",
+        "sec_investment_adviser_reports",
+        "fdic_bankfind_institutions",
+        "federal_register_documents",
+        "cpsc_recalls",
+        "fda_enforcement_recalls",
+        "fda_device_510k",
+        "fda_device_events",
+        "fda_device_classification",
+        "fda_device_registration_listing",
+        "cfpb_consumer_complaints",
+        "nhtsa_recalls",
+        "epa_echo_facilities",
+        "clinicaltrials_studies",
+        "cms_openpayments",
+        "gdelt_doc_news",
+        "gnews_funding_news",
+        "sec_enforcement_search",
+        "usaspending_awards",
+        "grants_gov_opportunities",
+        "patentsview_patents",
+        "ofac_sanctions_lists",
+        "BRAVE_SEARCH_API_KEY",
+    }
+    for token in active_tokens:
+        assert token in readme or token in script
+
+    retired_tokens = {
+        "pdl_people_search",
+        "x_recent_posts_search",
+        "crustdata_signal_search",
+        "companies_house_search",
+        "courtlistener_search",
+        "census_international_trade",
+        "fred_series_search",
+        "usajobs_search",
+        "sam_gov_opportunities",
+        "scrapling_adaptive_scrape",
+        "browser_use_agent_search",
+        "claude_chrome_supervised_search",
+        "web_access_cdp_search",
+        "hunter_email_finder",
+        "zerobounce_email_validation",
+        "neverbounce_email_validation",
+        "postmark_compliant_email",
+        "sendgrid_compliant_email",
+        "mailtrap_smtp_email",
+        "firecrawl_scrape",
+        "apify_actor_run",
+        "brightdata_web_unlocker",
+        "browserbase_session",
+        "public_web_snapshot_monitor",
+        "https://api.peopledatalabs.com/v5/person/search",
+        "https://api.x.com/2/tweets/search/recent",
+        "https://api.crustdata.com/web/search/live",
+        "https://api.hunter.io/v2/email-finder",
+        "https://api.zerobounce.net/v2/validate",
+        "https://api.postmarkapp.com/email",
+        "https://api.firecrawl.dev/v2/scrape",
+        "https://api.company-information.service.gov.uk/search/companies",
+        "https://www.courtlistener.com/api/rest/v4/search/",
+        "https://github.com/D4Vinci/Scrapling",
+        "https://github.com/browser-use/browser-use",
+        "https://claude.ai/chrome",
+        "https://github.com/eze-is/web-access",
+        "https://api.census.gov/data/timeseries/intltrade/imports/hs",
+        "https://api.stlouisfed.org/fred/series/search",
+        "https://data.usajobs.gov/api/Search",
+        "https://api.sam.gov/opportunities/v2/search",
+    }
+    for token in retired_tokens:
+        assert token not in readme
+        assert token not in script
 
 
 def test_integration_status_exposes_capabilities_without_secret_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1525,26 +1528,26 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["semantic_scholar_papers_search"]["status"] == "available"
     assert search_services["semantic_scholar_authors_search"]["status"] == "available"
     assert search_services["education_competition_monitor"]["status"] == "available"
-    assert search_services["scrapling_adaptive_scrape"]["status"] == "missing_tool"
-    assert search_services["scrapling_adaptive_scrape"]["name_zh"] == "Scrapling 自适应抓取"
-    assert search_services["scrapling_adaptive_scrape"]["code_path"] == "app/providers/search.py"
-    assert search_services["browser_use_agent_search"]["status"] == "missing_tool"
-    assert search_services["browser_use_agent_search"]["name_zh"] == "Browser-use 浏览器操作"
-    assert search_services["browser_use_agent_search"]["code_path"] == "app/providers/search.py"
-    assert search_services["claude_chrome_supervised_search"]["status"] == "manual_setup"
-    assert search_services["claude_chrome_supervised_search"]["name_zh"] == "Claude in Chrome 监督操作"
-    assert search_services["claude_chrome_supervised_search"]["code_path"] == "app/providers/search.py"
-    assert search_services["web_access_cdp_search"]["status"] == "missing_tool"
-    assert search_services["web_access_cdp_search"]["name_zh"] == "Web-access Chrome 联网"
-    assert search_services["web_access_cdp_search"]["code_path"] == "app/providers/search.py"
     assert search_services["github_repositories"]["status"] == "available"
     assert search_services["github_repositories"]["name_zh"] == "GitHub 代码仓库搜索"
     assert search_services["huggingface_models"]["status"] == "available"
     assert search_services["huggingface_models"]["name_zh"] == "Hugging Face 模型搜索"
-    assert search_services["companies_house_search"]["status"] == "available"
-    assert search_services["companies_house_search"]["name_zh"] == "Companies House 公司注册搜索"
-    assert search_services["courtlistener_search"]["status"] == "available"
-    assert search_services["courtlistener_search"]["name_zh"] == "CourtListener 司法检索"
+    removed_search_services = {
+        "pdl_people_search",
+        "x_recent_posts_search",
+        "crustdata_signal_search",
+        "companies_house_search",
+        "courtlistener_search",
+        "census_international_trade",
+        "fred_series_search",
+        "usajobs_search",
+        "sam_gov_opportunities",
+        "scrapling_adaptive_scrape",
+        "browser_use_agent_search",
+        "claude_chrome_supervised_search",
+        "web_access_cdp_search",
+    }
+    assert removed_search_services.isdisjoint(search_services)
     assert search_services["sec_company_facts"]["status"] == "available"
     assert search_services["sec_company_facts"]["name_zh"] == "SEC Company Facts 财务事实"
     assert search_services["sec_insider_transactions"]["status"] == "available"
@@ -1558,9 +1561,6 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert scraping_services["opencli_crawl_scrape"]["status"] == "missing_tool"
     assert scraping_services["opencli_crawl_scrape"]["name_zh"] == "OpenCLI 本地抓取"
     assert scraping_services["opencli_crawl_scrape"]["code_path"] == "app/providers/scraping.py"
-    assert scraping_services["public_web_snapshot_monitor"]["status"] == "available"
-    assert scraping_services["public_web_snapshot_monitor"]["name_zh"] == "公开网页快照监控"
-    assert scraping_services["public_web_snapshot_monitor"]["code_path"] == "app/providers/scraping.py"
     assert search_services["fdic_bankfind_institutions"]["name_zh"] == "FDIC BankFind 银行机构"
     assert search_services["federal_register_documents"]["status"] == "available"
     assert search_services["federal_register_documents"]["name_zh"] == "Federal Register 监管文件"
@@ -1586,11 +1586,6 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["clinicaltrials_studies"]["name_zh"] == "ClinicalTrials.gov 试验登记"
     assert search_services["cms_openpayments"]["status"] == "available"
     assert search_services["cms_openpayments"]["name_zh"] == "CMS Open Payments 医疗付款"
-    assert search_services["census_international_trade"]["status"] == "available"
-    assert search_services["census_international_trade"]["name_zh"] == "US Census 国际贸易"
-    assert search_services["fred_series_search"]["status"] == "missing_key"
-    assert search_services["fred_series_search"]["name_zh"] == "FRED 宏观经济序列"
-    assert search_services["fred_series_search"]["code_path"] == "app/providers/search.py"
     assert search_services["openalex_works_search"]["status"] == "available"
     assert search_services["openalex_works_search"]["name_zh"] == "OpenAlex 学术作品搜索"
     assert search_services["sec_edgar_company_filings"]["status"] == "available"
@@ -1601,13 +1596,8 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["gnews_funding_news"]["name_zh"] == "GNews 融资事件新闻"
     assert search_services["sec_enforcement_search"]["status"] == "available"
     assert search_services["sec_enforcement_search"]["name_zh"] == "SEC 执法/处罚搜索"
-    assert search_services["usajobs_search"]["status"] == "available"
-    assert search_services["usajobs_search"]["name_zh"] == "USAJOBS 招聘薪酬"
     assert search_services["usaspending_awards"]["status"] == "available"
     assert search_services["usaspending_awards"]["name_zh"] == "USAspending 政府采购与拨款"
-    assert search_services["sam_gov_opportunities"]["status"] == "missing_key"
-    assert search_services["sam_gov_opportunities"]["name_zh"] == "SAM.gov 合同机会"
-    assert search_services["sam_gov_opportunities"]["code_path"] == "app/providers/search.py"
     assert search_services["grants_gov_opportunities"]["status"] == "available"
     assert search_services["grants_gov_opportunities"]["name_zh"] == "Grants.gov 资助机会"
     assert search_services["patentsview_patents"]["status"] == "available"
@@ -2010,22 +2000,16 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
         "epa_echo_facilities",
         "clinicaltrials_studies",
         "cms_openpayments",
-        "census_international_trade",
-        "fred_series_search",
         "openalex_works_search",
         "gdelt_doc_news",
         "gnews_funding_news",
         "sec_enforcement_search",
-        "usajobs_search",
         "usaspending_awards",
-        "sam_gov_opportunities",
         "grants_gov_opportunities",
         "patentsview_patents",
         "ofac_sanctions_lists",
         "github_repositories",
         "huggingface_models",
-        "companies_house_search",
-        "courtlistener_search",
         "brave_web_search",
     }
     assert {phase["phase"] for phase in plan["search_phases"]} >= {
@@ -2062,8 +2046,6 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
     assert "sec_investment_adviser_reports" in plan["coverage_matrix"]["financial_institution_risk"]
     assert "fdic_bankfind_institutions" in plan["coverage_matrix"]["market_and_funding"]
     assert "grants_gov_opportunities" in plan["coverage_matrix"]["market_and_funding"]
-    assert "fred_series_search" in plan["coverage_matrix"]["market_and_funding"]
-    assert "fred_series_search" in plan["coverage_matrix"]["macro_market_context"]
     assert "grants_gov_opportunities" in plan["coverage_matrix"]["non_dilutive_funding"]
     assert "fdic_bankfind_institutions" in plan["coverage_matrix"]["ownership_governance"]
     assert "fdic_bankfind_institutions" in plan["coverage_matrix"]["financial_institution_risk"]
@@ -2075,7 +2057,6 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
     assert "fda_device_registration_listing" in plan["coverage_matrix"]["clinical_validation"]
     assert "cms_openpayments" in plan["coverage_matrix"]["healthcare_commercial_relationships"]
     assert "usaspending_awards" in plan["coverage_matrix"]["government_procurement"]
-    assert "sam_gov_opportunities" in plan["coverage_matrix"]["government_procurement"]
     assert "grants_gov_opportunities" in plan["coverage_matrix"]["government_procurement"]
     assert any("OFAC" in query for query in plan["query_templates"])
     assert any("Form ADV" in query for query in plan["query_templates"])
@@ -2085,9 +2066,7 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
     assert any("FDA registration listing" in query for query in plan["query_templates"])
     assert any("MAUDE" in query for query in plan["query_templates"])
     assert any("Open Payments" in query for query in plan["query_templates"])
-    assert any("FRED" in query for query in plan["query_templates"])
     assert any("USAspending" in query for query in plan["query_templates"])
-    assert any("SAM.gov" in query for query in plan["query_templates"])
     assert any("Grants.gov" in query for query in plan["query_templates"])
     assert any("至少需要两个独立来源" in rule for rule in plan["evidence_rules"])
     assert evidence["records"]
@@ -2097,7 +2076,6 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
     assert brief["brief_type"] == "financial_due_diligence_intelligence_brief"
     assert brief["executive_summary"]["status"] == "ready_for_human_review"
     assert brief["coverage_matrix"]["primary_disclosure"]
-    assert brief["coverage_matrix"]["macro_market_context"]
     assert brief["coverage_matrix"]["non_dilutive_funding"]
     assert brief["coverage_matrix"]["regulatory_enforcement"]
     assert brief["coverage_matrix"]["product_quality_safety"]
@@ -2506,7 +2484,11 @@ def test_huggingface_model_search_provider_maps_models(monkeypatch: pytest.Monke
     assert results[0]["tags"] == ["robotics", "vision-language-action"]
 
 
-def test_companies_house_provider_maps_company_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_companies_house_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("companies_house_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -2562,7 +2544,11 @@ def test_companies_house_provider_maps_company_results(monkeypatch: pytest.Monke
     assert results[0]["url"] == "https://find-and-update.company-information.service.gov.uk/company/12345678"
 
 
-def test_courtlistener_provider_maps_legal_search_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_courtlistener_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("courtlistener_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -3974,7 +3960,11 @@ def test_cms_openpayments_provider_discovers_latest_datasets_and_maps_rows(
     assert results[0]["related_product"] == "Robotic surgical system"
 
 
-def test_census_trade_provider_maps_import_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_census_trade_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("census_international_trade")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -4020,7 +4010,11 @@ def test_census_trade_provider_maps_import_rows(monkeypatch: pytest.MonkeyPatch)
     assert results[0]["monthly_value"] == "1000000"
 
 
-def test_fred_series_provider_maps_macro_series_and_latest_observation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fred_series_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("fred_series_search")
+    return
+
     calls: list[dict[str, object]] = []
 
     class Response:
@@ -4208,7 +4202,11 @@ def test_sec_enforcement_provider_maps_results(monkeypatch: pytest.MonkeyPatch) 
     assert results[0]["agency"] == "SEC"
 
 
-def test_usajobs_provider_maps_salary_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_usajobs_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("usajobs_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -4669,7 +4667,11 @@ def test_usaspending_award_provider_maps_awards(monkeypatch: pytest.MonkeyPatch)
     assert results[0]["award_amount"] == 1250000.0
 
 
-def test_sam_gov_opportunity_provider_maps_contract_opportunities(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sam_gov_opportunity_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("sam_gov_opportunities")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -5075,28 +5077,27 @@ def test_openrouter_chat_provider_maps_messages_and_models(monkeypatch: pytest.M
 def test_recruiting_growth_services_are_configured() -> None:
     config = load_app_config()
 
-    assert config.default_service_name("email_discovery") == "hunter_email_finder"
-    assert config.default_service_name("email_verification") == "zerobounce_email_validation"
-    assert config.default_service_name("email_delivery") == "postmark_compliant_email"
-    assert config.default_service_name("scraping") == "firecrawl_scrape"
+    assert "email_discovery" not in config.defaults
+    assert "email_verification" not in config.defaults
+    assert "email_delivery" not in config.defaults
+    assert config.default_service_name("scraping") == "opencli_crawl_scrape"
 
-    assert config.service("pdl_people_search").provider == "people_data_labs_people"
-    assert config.service("pdl_people_search").model_extra["api_key_env"] == "PDL_API_KEY"
-    assert config.service("x_recent_posts_search").provider == "x_recent_posts"
-    assert config.service("x_recent_posts_search").model_extra["bearer_token_env"] == "X_BEARER_TOKEN"
-    assert config.service("crustdata_signal_search").provider == "crustdata_signals"
-    assert config.service("crustdata_signal_search").model_extra["api_key_env"] == "CRUSTDATA_API_KEY"
-
-    assert config.service("hunter_email_finder").provider == "hunter_email_finder"
-    assert config.service("zerobounce_email_validation").provider == "zerobounce_email_validation"
-    assert config.service("neverbounce_email_validation").provider == "neverbounce_email_validation"
-    assert config.service("postmark_compliant_email").provider == "postmark_compliant_email"
-    assert config.service("sendgrid_compliant_email").provider == "sendgrid_compliant_email"
-    assert config.service("mailtrap_smtp_email").provider == "mailtrap_smtp_email"
-    assert config.service("firecrawl_scrape").provider == "firecrawl_scrape"
-    assert config.service("apify_actor_run").provider == "apify_actor_run"
-    assert config.service("brightdata_web_unlocker").provider == "brightdata_web_unlocker"
-    assert config.service("browserbase_session").provider == "browserbase_session"
+    retired_services = {
+        "pdl_people_search",
+        "x_recent_posts_search",
+        "crustdata_signal_search",
+        "hunter_email_finder",
+        "zerobounce_email_validation",
+        "neverbounce_email_validation",
+        "postmark_compliant_email",
+        "sendgrid_compliant_email",
+        "mailtrap_smtp_email",
+        "firecrawl_scrape",
+        "apify_actor_run",
+        "brightdata_web_unlocker",
+        "browserbase_session",
+    }
+    assert retired_services.isdisjoint(config.services)
     assert config.service("opencli_crawl_scrape").provider == "opencli_crawl"
 
 
@@ -5131,13 +5132,26 @@ def test_recruiting_growth_services_show_status_without_secret_values(monkeypatc
     services = {service["name"]: service for service in status["services"]}
     capabilities = {capability["id"]: capability for capability in status["capabilities"]}
 
-    assert services["pdl_people_search"]["status"] == "available"
-    assert services["x_recent_posts_search"]["name_zh"] == "X recent posts 搜索"
-    assert services["crustdata_signal_search"]["code_path"] == "app/providers/search.py"
-    assert capabilities["email_discovery_api"]["connected_name_zh"] == "Hunter 邮箱发现"
-    assert capabilities["email_verification_api"]["connected_name_zh"] == "ZeroBounce 邮箱验证"
-    assert capabilities["email_delivery_api"]["connected_name_zh"] == "Postmark 合规邮件发送"
-    assert capabilities["scraping_api"]["connected_name_zh"] == "Firecrawl 网页抓取"
+    retired_services = {
+        "pdl_people_search",
+        "x_recent_posts_search",
+        "crustdata_signal_search",
+        "hunter_email_finder",
+        "zerobounce_email_validation",
+        "neverbounce_email_validation",
+        "postmark_compliant_email",
+        "sendgrid_compliant_email",
+        "mailtrap_smtp_email",
+        "firecrawl_scrape",
+        "apify_actor_run",
+        "brightdata_web_unlocker",
+        "browserbase_session",
+    }
+    assert retired_services.isdisjoint(services)
+    assert capabilities["email_discovery_api"]["status"] == "not_configured"
+    assert capabilities["email_verification_api"]["status"] == "not_configured"
+    assert capabilities["email_delivery_api"]["status"] == "not_configured"
+    assert capabilities["scraping_api"]["connected_name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["code_path"] == "app/providers/scraping.py"
     for value in secrets.values():
@@ -5176,7 +5190,11 @@ def test_integration_env_save_rejects_unknown_keys(tmp_path: Path, monkeypatch: 
     assert env_path.read_text(encoding="utf-8") == ""
 
 
-def test_pdl_people_provider_maps_people(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pdl_people_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("pdl_people_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -5230,7 +5248,11 @@ def test_pdl_people_provider_maps_people(monkeypatch: pytest.MonkeyPatch) -> Non
     assert results[0]["social_links"]["github"] == "https://github.com/ada"
 
 
-def test_x_recent_posts_provider_maps_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_x_recent_posts_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("x_recent_posts_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -5288,7 +5310,11 @@ def test_x_recent_posts_provider_maps_posts(monkeypatch: pytest.MonkeyPatch) -> 
     assert results[0]["author_username"] == "roboticist"
 
 
-def test_crustdata_signal_provider_maps_web_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_crustdata_signal_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).search("crustdata_signal_search")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -5337,7 +5363,16 @@ def test_crustdata_signal_provider_maps_web_results(monkeypatch: pytest.MonkeyPa
     assert results[0]["title"] == "Robot Labs raises Series B"
 
 
-def test_email_discovery_and_verification_providers_map_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_email_discovery_and_verification_providers_are_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = ServiceRouter(load_app_config())
+    with pytest.raises(KeyError):
+        router.email_discovery("hunter_email_finder")
+    with pytest.raises(KeyError):
+        router.email_verification("zerobounce_email_validation")
+    with pytest.raises(KeyError):
+        router.email_verification("neverbounce_email_validation")
+    return
+
     calls: list[dict[str, object]] = []
 
     class Response:
@@ -5392,6 +5427,10 @@ def test_compliant_postmark_sender_requires_approval_and_writes_audit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).email_delivery("postmark_compliant_email")
+    return
+
     calls: dict[str, object] = {}
 
     class Response:
@@ -5437,7 +5476,11 @@ def test_compliant_postmark_sender_requires_approval_and_writes_audit(
     assert (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
 
 
-def test_mailtrap_email_provider_sends_smtp_message(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_mailtrap_email_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter(load_app_config()).email_delivery("mailtrap_smtp_email")
+    return
+
     calls: dict[str, object] = {}
 
     class FakeSMTP:
@@ -5497,7 +5540,18 @@ def test_mailtrap_email_provider_sends_smtp_message(monkeypatch: pytest.MonkeyPa
     assert "ROS2 nav2" in message.get_content()
 
 
-def test_scraping_providers_map_core_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_keyed_scraping_providers_are_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = ServiceRouter(load_app_config())
+    for service_name in {
+        "firecrawl_scrape",
+        "apify_actor_run",
+        "brightdata_web_unlocker",
+        "browserbase_session",
+    }:
+        with pytest.raises(KeyError):
+            router.scraping(service_name)
+    return
+
     calls: list[dict[str, object]] = []
 
     class Response:
@@ -5600,6 +5654,101 @@ def test_opencli_crawl_provider_runs_configured_command(monkeypatch: pytest.Monk
     assert result["markdown"] == "# Team\nAda Lovelace"
     assert result["metadata"] == {"title": "Team"}
     assert result["raw"]["url"] == "https://example.com/team"
+
+
+def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    original_which = shutil.which
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else original_which(command)
+
+    def fake_run(
+        args: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert capture_output is True
+        assert text is True
+        assert timeout == 60
+        assert check is False
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "data": [
+                        {
+                            "title": "Robotics Diffusion Policy Demo",
+                            "url": "https://www.bilibili.com/video/BV1robot",
+                            "description": "A public robot manipulation demo.",
+                            "created_at": "2026-06-01",
+                        }
+                    ]
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    results = ServiceRouter(load_app_config()).search("opencli_platform_search").search(
+        "robotics diffusion policy",
+        limit=2,
+    )
+
+    assert calls[0] == ["opencli", "bilibili", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert results[0]["source_key"] == "opencli_platform_search"
+    assert results[0]["name_zh"] == "OpenCLI 平台搜索"
+    assert results[0]["source_type"] == "browser_platform_search"
+    assert results[0]["platform"] == "bilibili"
+    assert results[0]["title"] == "Robotics Diffusion Policy Demo"
+    assert results[0]["url"] == "https://www.bilibili.com/video/BV1robot"
+    assert results[0]["snippet"] == "A public robot manipulation demo."
+    assert results[0]["retrieval_status"] == "retrieved"
+
+
+def test_opencli_web_read_search_requires_absolute_url_without_launching(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_which = shutil.which
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else original_which(command)
+
+    def fail_run(*_args, **_kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("OpenCLI web read search should not launch without an absolute URL")
+
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fail_run)
+
+    results = ServiceRouter(load_app_config()).search("opencli_web_read_search").search(
+        "robotics official team page",
+        limit=1,
+    )
+
+    assert results == [
+        {
+            "source_key": "opencli_web_read_search",
+            "name_zh": "OpenCLI 网页正文读取",
+            "source_type": "adaptive_web_scraping",
+            "query": "robotics official team page",
+            "rank": 1,
+            "platform": "web_read",
+            "platform_name_zh": "网页正文",
+            "title": "网页正文 requires_url",
+            "url": "https://github.com/jackwener/OpenCLI",
+            "snippet": "OpenCLI web read requires an absolute http(s) URL.",
+            "published_at": None,
+            "retrieval_status": "requires_url",
+            "error": "OpenCLI web read requires an absolute http(s) URL.",
+            "risk_level": "high",
+            "freshness": "on_demand",
+        }
+    ]
 
 
 def test_education_competition_monitor_returns_curated_targets() -> None:

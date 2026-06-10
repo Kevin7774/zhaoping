@@ -48,15 +48,15 @@ describe("human gate request helpers", () => {
             omitted_count: 0,
             search_trace: {
               query: "robotics VLA",
-              services: ["github_repositories", "pdl_people_search"],
+              services: ["github_repositories", "github_code"],
               result_count: 3,
-              errors: [{ service: "pdl_people_search", reason: "missing_credentials:PDL_API_KEY" }],
+              errors: [{ service: "github_code", reason: "deferred_by_live_budget" }],
               research_layers: [
                 {
                   id: "people_network",
                   name_zh: "人才网络",
                   purpose: "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
-                  services: ["github_repositories", "pdl_people_search"],
+                  services: ["github_repositories", "github_code"],
                   result_count: 3,
                   error_count: 1,
                 },
@@ -112,7 +112,7 @@ describe("human gate request helpers", () => {
     expect(request?.leadPreview?.totalCount).toBe(1);
     expect(request?.leadPreview?.searchTrace).toMatchObject({
       query: "robotics VLA",
-      services: ["github_repositories", "pdl_people_search"],
+      services: ["github_repositories", "github_code"],
       resultCount: 3,
       researchLayers: [
         {

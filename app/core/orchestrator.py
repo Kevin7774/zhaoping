@@ -16,6 +16,7 @@ import importlib.util
 import os
 import re
 import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -179,9 +180,6 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "github_code",
     "github_topics",
     "huggingface_models",
-    "pdl_people_search",
-    "x_recent_posts_search",
-    "crustdata_signal_search",
     "brave_web_search",
     "agent_reach_social_search",
     "gdelt_doc_news",
@@ -215,9 +213,7 @@ SEARCH_MODE_METADATA: dict[str, dict[str, Any]] = {
     "social_expansion": {
         "label": "社媒扩展",
         "live_services": (
-            "x_recent_posts_search",
             "agent_reach_social_search",
-            "crustdata_signal_search",
         ),
         "external_request_policy": "bounded_live",
     },
@@ -285,13 +281,9 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
             "huggingface_models",
         ),
     },
-    "people_database": {
-        "label": "人脉数据库",
-        "services": ("pdl_people_search",),
-    },
     "social": {
         "label": "社媒/社区",
-        "services": ("x_recent_posts_search", "agent_reach_social_search", "crustdata_signal_search"),
+        "services": ("agent_reach_social_search", "opencli_platform_search"),
     },
     "news_funding": {
         "label": "新闻/融资",
@@ -303,12 +295,7 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
     },
     "crawler_snapshot": {
         "label": "网页抓取/快照",
-        "services": (
-            "scrapling_adaptive_scrape",
-            "browser_use_agent_search",
-            "claude_chrome_supervised_search",
-            "web_access_cdp_search",
-        ),
+        "services": ("opencli_web_read_search",),
     },
     "due_diligence": {
         "label": "公司/合规尽调",
@@ -318,8 +305,6 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
             "sec_insider_transactions",
             "sec_ownership_activism",
             "sec_investment_adviser_reports",
-            "companies_house_search",
-            "courtlistener_search",
             "patentsview_patents",
             "ofac_sanctions_lists",
             "federal_register_documents",
@@ -335,7 +320,6 @@ SEARCH_PROFILE_DEFAULT_LAYERS: dict[str, tuple[str, ...]] = {
         "live_web",
         "academic",
         "code_model",
-        "people_database",
         "social",
         "news_funding",
         "education_competition",
@@ -344,7 +328,6 @@ SEARCH_PROFILE_DEFAULT_LAYERS: dict[str, tuple[str, ...]] = {
         "live_web",
         "academic",
         "code_model",
-        "people_database",
         "social",
         "news_funding",
         "education_competition",
@@ -397,7 +380,7 @@ TOP_DOWN_RESEARCH_LAYERS = (
         "id": "market_map",
         "name_zh": "行业/市场地图",
         "purpose": "先确认公司、融资、招聘需求和市场变化，避免直接从单个候选人猜方向。",
-        "services": ("brave_web_search", "gdelt_doc_news", "gnews_funding_news", "crustdata_signal_search"),
+        "services": ("brave_web_search", "gdelt_doc_news", "gnews_funding_news"),
     },
     {
         "id": "technical_evidence",
@@ -418,7 +401,6 @@ TOP_DOWN_RESEARCH_LAYERS = (
         "name_zh": "人才网络",
         "purpose": "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
         "services": (
-            "pdl_people_search",
             "openalex_authors_search",
             "semantic_scholar_authors_search",
             "github_candidates",
@@ -430,8 +412,8 @@ TOP_DOWN_RESEARCH_LAYERS = (
     {
         "id": "social_signal",
         "name_zh": "社媒/社区信号",
-        "purpose": "补充 X、微博、B站、知乎、V2EX 等社区里的近期项目、Demo 和流动信号。",
-        "services": ("x_recent_posts_search", "agent_reach_social_search"),
+        "purpose": "补充微博、B站、知乎、V2EX 等社区里的近期项目、Demo 和流动信号。",
+        "services": ("agent_reach_social_search",),
     },
     {
         "id": "school_competition",
@@ -1616,8 +1598,12 @@ def _normalize_search_config(value: Any) -> dict[str, Any]:
         execution_policy = DEFAULT_EXECUTION_POLICY
 
     raw_layers = state.get("source_layers") or state.get("sourceLayers") or legacy_config.get("source_layers") or {}
-    source_layers = _normalize_source_layers(search_profile, raw_layers)
     budget = _normalize_search_budget(execution_policy, state.get("search_budget") or state.get("budget") or {})
+    source_layers = _normalize_source_layers(search_profile, raw_layers)
+    if source_layers.get("crawler_snapshot") and (
+        execution_policy != "deep_live" or int(budget.get("max_crawl_pages") or 0) <= 0
+    ):
+        source_layers["crawler_snapshot"] = False
 
     if execution_policy == "planning_only":
         search_mode = "planning_only"
@@ -2391,11 +2377,12 @@ def _search_service_health(router, service_name: str) -> dict[str, Any]:
 
     missing_credentials = _missing_required_credentials(service)
     missing_runtime = _missing_runtime_requirements(service)
+    missing_manual_setup = _missing_manual_setup_requirements(service)
     if missing_credentials:
         status = "missing_key"
     elif missing_runtime:
         status = "missing_tool"
-    elif (service.model_extra or {}).get("manual_setup_required"):
+    elif missing_manual_setup or (service.model_extra or {}).get("manual_setup_required"):
         status = "manual_setup"
     else:
         status = "ready"
@@ -2405,6 +2392,7 @@ def _search_service_health(router, service_name: str) -> dict[str, Any]:
         "status": status,
         "missing_credentials": missing_credentials,
         "missing_runtime": missing_runtime,
+        "missing_manual_setup": missing_manual_setup,
     }
 
 
@@ -2415,7 +2403,8 @@ def _provider_skip_reason(health: dict[str, Any]) -> str:
     if status == "missing_tool":
         return "missing_tool:" + ",".join(str(item) for item in health.get("missing_runtime", []))
     if status == "manual_setup":
-        return "manual_setup"
+        missing = ",".join(str(item) for item in health.get("missing_manual_setup", []))
+        return "manual_setup:" + missing if missing else "manual_setup"
     return status
 
 
@@ -2477,12 +2466,14 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         return "robotics diffusion policy language:Python"
     if role_key == "vla_embodied_expert" and service_name == "openalex_works_search":
         return "robot foundation model"
-    if service_name in {"pdl_people_search", "openalex_authors_search", "semantic_scholar_authors_search"}:
+    if service_name in {"openalex_authors_search", "semantic_scholar_authors_search"}:
         return f"{role_query} researcher engineer".strip()
-    if service_name == "x_recent_posts_search":
-        return f"{role_query} demo hiring has:links -is:retweet"
-    if service_name in {"agent_reach_social_search", "crustdata_signal_search"}:
+    if service_name == "agent_reach_social_search":
         return f"{role_query} hiring demo team"
+    if service_name == "opencli_platform_search":
+        return f"{role_query} demo talk profile"
+    if service_name == "opencli_web_read_search":
+        return fallback_query if urlparse(fallback_query).scheme in {"http", "https"} else f"{role_query} official team page"
     if service_name in {"github_candidates", "github_users", "github_repositories", "github_code"}:
         return f"{role_query} language:Python"
     if service_name == "github_topics":
@@ -2543,6 +2534,47 @@ def _missing_runtime_requirements(service) -> list[str]:
         if not os.path.exists(expanded_path):
             missing.append(required_skill_path)
     return missing
+
+
+def _missing_manual_setup_requirements(service) -> list[str]:
+    settings = service.model_extra or {}
+    if not settings.get("requires_browser_bridge"):
+        return []
+    command = settings.get("required_command")
+    command_name = str(command) if isinstance(command, str) and command else "opencli"
+    if not shutil.which(command_name):
+        return []
+    try:
+        completed = subprocess.run(
+            [command_name, "doctor"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return ["OpenCLI Browser Bridge: opencli doctor timed out"]
+    output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+    connected = completed.returncode == 0 and not _opencli_doctor_output_has_failure(output)
+    if connected:
+        return []
+    reason = _opencli_doctor_failure_reason(output, completed.returncode)
+    return [f"OpenCLI Browser Bridge: {reason}"]
+
+
+def _opencli_doctor_output_has_failure(output: str) -> bool:
+    normalized = output.lower()
+    return any(marker in normalized for marker in ("[fail]", "[missing]", "not connected", "connectivity: failed"))
+
+
+def _opencli_doctor_failure_reason(output: str, returncode: int) -> str:
+    if "Browser Bridge extension not connected" in output:
+        return "Browser Bridge extension not connected"
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if "[FAIL]" in line or "[MISSING]" in line or "not connected" in line.lower():
+            return line
+    return f"opencli doctor exited {returncode}"
 
 
 def _summarize_live_result(item: dict[str, Any]) -> dict[str, Any]:

@@ -56,7 +56,17 @@ function integrationsPayload(overrides: Record<string, string> = {}) {
   const statusFor = (id: string) => overrides[id] ?? "active";
   return {
     capabilities: [
-      { id: "search_api", service_type: "search", status: statusFor("search_api"), connected: statusFor("search_api") === "active" },
+      {
+        id: "search_api",
+        service_type: "search",
+        status: statusFor("search_api"),
+        connected: statusFor("search_api") === "active",
+        services: [
+          { name: "agent_reach_social_search", status: statusFor("agent_reach_social_search") },
+          { name: "opencli_platform_search", status: statusFor("opencli_platform_search") },
+          { name: "opencli_web_read_search", status: statusFor("opencli_web_read_search") },
+        ],
+      },
       { id: "llm_api", service_type: "llm", status: statusFor("llm_api"), connected: statusFor("llm_api") === "active" },
       {
         id: "embedding_api",
@@ -293,7 +303,7 @@ describe("ProjectDetailPage backend hardening", () => {
           draftId: "draft_backend_1",
           status: simulated ? "simulated" : "sent",
           deliveryMode: simulated ? "simulated" : "real",
-          providerStatus: simulated ? "simulated" : "mailtrap_smtp_email:sent",
+          providerStatus: simulated ? "simulated" : "test_email_delivery:sent",
         });
       }
       if (url.startsWith("/api/outreach/history")) return jsonResponse({ items: [] });
@@ -573,19 +583,22 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(screen.getAllByText("GitHub/代码/模型").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/GitHub 搜人、Repo、Code、Topic/)).toBeTruthy();
     expect(screen.getByText(/最多 8 个 provider/)).toBeTruthy();
-    expect(screen.getByText(/当前已选 19 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/当前已选 17 个 provider/)).toBeTruthy();
     expect(screen.getByText(/开放网页 · 1 provider/)).toBeTruthy();
     expect(screen.getByText(/GitHub\/代码\/模型 · 6 provider/)).toBeTruthy();
     expect(screen.getByText("brave_web_search")).toBeTruthy();
     expect(screen.getByText("github_candidates")).toBeTruthy();
-    expect(screen.getByText("pdl_people_search")).toBeTruthy();
+    expect(screen.queryByText("pdl_people_search")).toBeNull();
+    expect(screen.queryByLabelText("人脉库")).toBeNull();
+    expect(screen.getByLabelText("网页抓取")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("搜索深度"), { target: { value: "deep_live" } });
     fireEvent.click(screen.getByLabelText("网页抓取"));
     fireEvent.click(screen.getByLabelText("尽调源"));
-    expect(screen.getByText(/当前已选 36 个 provider/)).toBeTruthy();
-    expect(screen.getByText(/网页抓取 · 4 provider/)).toBeTruthy();
-    expect(screen.getByText("scrapling_adaptive_scrape")).toBeTruthy();
-    expect(screen.getByText(/尽调源 · 13 provider/)).toBeTruthy();
+    expect(screen.getByText(/当前已选 29 个 provider/)).toBeTruthy();
+    expect(screen.queryByText("scrapling_adaptive_scrape")).toBeNull();
+    expect(screen.getByText(/网页抓取 · 1 provider/)).toBeTruthy();
+    expect(screen.getByText("opencli_web_read_search")).toBeTruthy();
+    expect(screen.getByText(/尽调源 · 11 provider/)).toBeTruthy();
     expect(screen.getByText("sec_edgar_company_filings")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "找候选人" }));
 

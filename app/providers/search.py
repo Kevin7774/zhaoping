@@ -17,6 +17,7 @@ from typing import Any
 from xml.etree import ElementTree
 from urllib.parse import urljoin
 from urllib.parse import quote_plus
+from urllib.parse import urlparse
 
 
 class SearchProviderProtocol:
@@ -552,6 +553,250 @@ class AgentReachSocialSearchProvider:
             "只使用公开页面、官方 API、授权账号、用户提供材料或人工确认过的登录态。",
             "不绕过登录、付费墙、robots.txt、访问控制、平台条款或明确反爬限制。",
             "社媒内容只能作为候选线索；关键结论必须回看原文并交叉验证。",
+            "候选人相关信息仅限公开职业信息和岗位相关能力证据。",
+        ]
+
+
+class OpenCLICommandSearchProvider:
+    """Executable OpenCLI command adapter for browser-backed platform evidence."""
+
+    def __init__(
+        self,
+        service_name: str,
+        display_name_zh: str,
+        source_type: str,
+        platform_commands: dict[str, dict[str, Any]],
+        required_command: str = "opencli",
+        supported_platforms: list[str] | None = None,
+        project_url: str = "https://github.com/jackwener/OpenCLI",
+        timeout_seconds: int = 60,
+        risk_level: str = "high",
+        freshness: str = "daily",
+        requires_absolute_url: bool = False,
+    ) -> None:
+        self.service_name = service_name
+        self.display_name_zh = display_name_zh
+        self.source_type = source_type
+        self.platform_commands = platform_commands
+        self.required_command = required_command
+        self.supported_platforms = supported_platforms or list(platform_commands)
+        self.project_url = project_url
+        self.timeout_seconds = timeout_seconds
+        self.risk_level = risk_level
+        self.freshness = freshness
+        self.requires_absolute_url = requires_absolute_url
+
+    def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        normalized_limit = max(1, min(int(limit), 20))
+        if self.requires_absolute_url and not self._is_absolute_http_url(query):
+            first_platform, first_settings = next(iter(self.platform_commands.items()))
+            name_zh = str(first_settings.get("name_zh") or first_platform)
+            return [
+                self._status_result(
+                    query=query,
+                    rank=1,
+                    platform=first_platform,
+                    name_zh=name_zh,
+                    status="requires_url",
+                    message="OpenCLI web read requires an absolute http(s) URL.",
+                )
+            ]
+
+        if not shutil.which(self.required_command):
+            first_platform, first_settings = next(iter(self.platform_commands.items()))
+            name_zh = str(first_settings.get("name_zh") or first_platform)
+            return [
+                self._status_result(
+                    query=query,
+                    rank=1,
+                    platform=first_platform,
+                    name_zh=name_zh,
+                    status="setup_required",
+                    message=f"Missing command: {self.required_command}",
+                )
+            ]
+
+        results: list[dict[str, Any]] = []
+        rank = 1
+        for platform, settings in self.platform_commands.items():
+            args_template = [str(item) for item in settings.get("args", [])]
+            name_zh = str(settings.get("name_zh") or platform)
+            if not args_template:
+                results.append(
+                    self._status_result(
+                        query=query,
+                        rank=rank,
+                        platform=platform,
+                        name_zh=name_zh,
+                        status="config_error",
+                        message="Missing OpenCLI args config.",
+                    )
+                )
+                rank += 1
+                continue
+
+            args = [self.required_command, *self._render_args(args_template, query=query, limit=normalized_limit)]
+            try:
+                completed = subprocess.run(
+                    args,
+                    capture_output=True,
+                    check=False,
+                    text=True,
+                    timeout=self.timeout_seconds,
+                )
+            except subprocess.TimeoutExpired:
+                results.append(
+                    self._status_result(
+                        query=query,
+                        rank=rank,
+                        platform=platform,
+                        name_zh=name_zh,
+                        status="error",
+                        message=f"Timed out after {self.timeout_seconds}s",
+                    )
+                )
+                rank += 1
+                continue
+
+            if completed.returncode != 0:
+                message = (completed.stderr or completed.stdout or "").strip()[:300]
+                results.append(
+                    self._status_result(
+                        query=query,
+                        rank=rank,
+                        platform=platform,
+                        name_zh=name_zh,
+                        status="error",
+                        message=message,
+                    )
+                )
+                rank += 1
+                continue
+
+            items = AgentReachSocialSearchProvider._items_from_output(completed.stdout)
+            if not items:
+                results.append(
+                    self._status_result(
+                        query=query,
+                        rank=rank,
+                        platform=platform,
+                        name_zh=name_zh,
+                        status="empty",
+                        message="No results returned.",
+                    )
+                )
+                rank += 1
+                continue
+
+            for item in items[:normalized_limit]:
+                results.append(self._to_result(query=query, rank=rank, platform=platform, name_zh=name_zh, item=item))
+                rank += 1
+        return results
+
+    def plan(self, query: str, limit: int = 5) -> dict[str, Any]:
+        return {
+            "query": query,
+            "mode": "opencli_command_search",
+            "service": self.service_name,
+            "supported_platforms": self.supported_platforms,
+            "runtime_requirements": [
+                {
+                    "type": "command",
+                    "name": self.required_command,
+                    "present": bool(shutil.which(self.required_command)),
+                }
+            ],
+            "command_previews": {
+                platform: [
+                    self.required_command,
+                    *self._render_args([str(item) for item in settings.get("args", [])], query=query, limit=max(1, int(limit))),
+                ]
+                for platform, settings in self.platform_commands.items()
+            },
+            "guardrails": self._guardrails(),
+        }
+
+    def source_metadata(self) -> dict[str, str]:
+        return {
+            "source_key": self.service_name,
+            "name_zh": self.display_name_zh,
+            "source_type": self.source_type,
+        }
+
+    @staticmethod
+    def _render_args(args: list[str], *, query: str, limit: int) -> list[str]:
+        values = {
+            "query": query,
+            "query_json": json.dumps(query, ensure_ascii=False),
+            "query_url": quote_plus(query),
+            "limit": str(limit),
+        }
+        rendered = []
+        for arg in args:
+            value = arg
+            for key, replacement in values.items():
+                value = value.replace("{" + key + "}", replacement)
+            rendered.append(value)
+        return rendered
+
+    def _to_result(self, *, query: str, rank: int, platform: str, name_zh: str, item: dict[str, Any]) -> dict[str, Any]:
+        title = (
+            item.get("title")
+            or item.get("name")
+            or item.get("desc")
+            or item.get("text")
+            or item.get("content")
+            or f"{name_zh} result"
+        )
+        url = item.get("url") or item.get("link") or item.get("href") or item.get("share_url") or ""
+        snippet = item.get("snippet") or item.get("description") or item.get("text") or item.get("content") or ""
+        return {
+            "source_key": self.service_name,
+            "name_zh": self.display_name_zh,
+            "source_type": self.source_type,
+            "query": query,
+            "rank": rank,
+            "platform": platform,
+            "platform_name_zh": name_zh,
+            "title": str(title)[:300],
+            "url": str(url),
+            "snippet": str(snippet)[:1000],
+            "published_at": item.get("published_at") or item.get("created_at") or item.get("time") or item.get("date"),
+            "retrieval_status": "retrieved",
+            "risk_level": self.risk_level,
+            "freshness": self.freshness,
+            "raw": item,
+        }
+
+    def _status_result(self, *, query: str, rank: int, platform: str, name_zh: str, status: str, message: str) -> dict[str, Any]:
+        return {
+            "source_key": self.service_name,
+            "name_zh": self.display_name_zh,
+            "source_type": self.source_type,
+            "query": query,
+            "rank": rank,
+            "platform": platform,
+            "platform_name_zh": name_zh,
+            "title": f"{name_zh} {status}",
+            "url": self.project_url,
+            "snippet": message,
+            "published_at": None,
+            "retrieval_status": status,
+            "error": message if status in {"setup_required", "config_error", "error", "requires_url"} else None,
+            "risk_level": self.risk_level,
+            "freshness": self.freshness,
+        }
+
+    @staticmethod
+    def _is_absolute_http_url(value: str) -> bool:
+        parsed = urlparse(value)
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+    @staticmethod
+    def _guardrails() -> list[str]:
+        return [
+            "只使用公开页面、官方 API、授权账号、用户提供材料或人工确认过的登录态。",
+            "不绕过登录、付费墙、robots.txt、访问控制、平台条款或明确反爬限制。",
             "候选人相关信息仅限公开职业信息和岗位相关能力证据。",
         ]
 
@@ -5584,8 +5829,6 @@ class DueDiligenceFederatedSearchProvider:
             "ofac_sanctions_lists",
             "github_repositories",
             "huggingface_models",
-            "companies_house_search",
-            "courtlistener_search",
             "sec_company_facts",
             "sec_insider_transactions",
             "sec_ownership_activism",
@@ -5603,13 +5846,9 @@ class DueDiligenceFederatedSearchProvider:
             "epa_echo_facilities",
             "clinicaltrials_studies",
             "cms_openpayments",
-            "census_international_trade",
-            "fred_series_search",
             "gnews_funding_news",
             "sec_enforcement_search",
-            "usajobs_search",
             "procurement_tenders",
-            "sam_gov_opportunities",
             "grants_gov_opportunities",
             "standards_certifications",
             "datasets_benchmarks",
@@ -5623,8 +5862,6 @@ class DueDiligenceFederatedSearchProvider:
             "funding_private_market",
             "business_databases_cn",
             "market_data_secondary",
-            "pdl_people_search",
-            "crustdata_signal_search",
             "earnings_calls_transcripts",
             "supply_chain_import_export",
             "job_salary_labor_market",
@@ -5861,21 +6098,15 @@ class DueDiligenceFederatedSearchProvider:
                 "business_databases_cn",
                 "market_data_secondary",
                 "earnings_calls_transcripts",
-                "census_international_trade",
                 "fdic_bankfind_institutions",
                 "sec_investment_adviser_reports",
-                "fred_series_search",
                 "gnews_funding_news",
                 "grants_gov_opportunities",
             },
-            "macro_market_context": {
-                "fred_series_search",
-                "census_international_trade",
-            },
+            "macro_market_context": set(),
             "non_dilutive_funding": {
                 "grants_gov_opportunities",
                 "usaspending_awards",
-                "sam_gov_opportunities",
             },
             "technical_evidence": {
                 "patent_databases",
@@ -5890,17 +6121,12 @@ class DueDiligenceFederatedSearchProvider:
                 "github_code",
                 "github_topics",
                 "huggingface_models",
-                "scrapling_adaptive_scrape",
             },
             "people_and_hiring": {
                 "recruitment_boards_cn",
                 "professional_profiles",
                 "job_salary_labor_market",
-                "usajobs_search",
                 "agent_reach_social_search",
-                "browser_use_agent_search",
-                "claude_chrome_supervised_search",
-                "web_access_cdp_search",
             },
             "community_signal": {
                 "developer_communities",
@@ -5908,14 +6134,9 @@ class DueDiligenceFederatedSearchProvider:
                 "gdelt_doc_news",
                 "brave_web_search",
                 "agent_reach_social_search",
-                "scrapling_adaptive_scrape",
-                "browser_use_agent_search",
-                "claude_chrome_supervised_search",
-                "web_access_cdp_search",
             },
             "regulatory_enforcement": {
                 "ofac_sanctions_lists",
-                "courtlistener_search",
                 "sec_enforcement_search",
                 "fdic_bankfind_institutions",
                 "sec_investment_adviser_reports",
@@ -5933,7 +6154,6 @@ class DueDiligenceFederatedSearchProvider:
                 "nhtsa_recalls",
             },
             "ownership_governance": {
-                "companies_house_search",
                 "fdic_bankfind_institutions",
                 "sec_investment_adviser_reports",
                 "sec_insider_transactions",
@@ -5943,7 +6163,6 @@ class DueDiligenceFederatedSearchProvider:
             "investment_adviser_due_diligence": {
                 "sec_investment_adviser_reports",
                 "sec_enforcement_search",
-                "courtlistener_search",
             },
             "financial_institution_risk": {
                 "fdic_bankfind_institutions",
@@ -5954,7 +6173,6 @@ class DueDiligenceFederatedSearchProvider:
             },
             "environmental_supply_chain": {
                 "epa_echo_facilities",
-                "census_international_trade",
                 "fda_device_registration_listing",
                 "supply_chain_import_export",
             },
@@ -5970,7 +6188,6 @@ class DueDiligenceFederatedSearchProvider:
             "government_procurement": {
                 "procurement_tenders",
                 "usaspending_awards",
-                "sam_gov_opportunities",
                 "grants_gov_opportunities",
             },
         }
@@ -6133,7 +6350,6 @@ class DueDiligenceFederatedSearchProvider:
             "ClinicalTrialsStudySearchProvider": ("clinicaltrials_studies", "ClinicalTrials.gov 试验登记", "clinical_trial_registry"),
             "CMSOpenPaymentsSearchProvider": ("cms_openpayments", "CMS Open Payments 医疗付款", "healthcare_payments"),
             "USASpendingAwardSearchProvider": ("usaspending_awards", "USAspending 政府采购与拨款", "procurement_awards"),
-            "SAMGovOpportunitySearchProvider": ("sam_gov_opportunities", "SAM.gov 合同机会", "procurement_opportunity"),
             "GrantsGovOpportunitySearchProvider": ("grants_gov_opportunities", "Grants.gov 资助机会", "grant_opportunity"),
             "PatentsViewPatentSearchProvider": ("patentsview_patents", "PatentsView 专利", "patent"),
             "OFACSanctionsListSearchProvider": ("ofac_sanctions_lists", "OFAC 制裁清单", "sanctions"),
@@ -6143,15 +6359,10 @@ class DueDiligenceFederatedSearchProvider:
             "GitHubCodeSearchProvider": ("github_code", "GitHub 代码搜索", "code_search"),
             "GitHubTopicSearchProvider": ("github_topics", "GitHub Topic 搜索", "code_topic"),
             "HuggingFaceModelSearchProvider": ("huggingface_models", "Hugging Face 模型库", "model_repository"),
-            "CompaniesHouseCompanySearchProvider": ("companies_house_search", "Companies House 公司注册", "company_registry"),
-            "CourtListenerSearchProvider": ("courtlistener_search", "CourtListener 司法检索", "litigation"),
             "SECCompanyFactsProvider": ("sec_company_facts", "SEC Company Facts", "financial_facts"),
             "FederalRegisterDocumentSearchProvider": ("federal_register_documents", "Federal Register 监管文件", "regulatory_policy"),
-            "CensusInternationalTradeProvider": ("census_international_trade", "US Census 国际贸易", "trade_flows"),
-            "FREDSeriesSearchProvider": ("fred_series_search", "FRED 宏观经济序列", "macroeconomic_time_series"),
             "GNewsFundingNewsProvider": ("gnews_funding_news", "GNews 融资事件新闻", "funding_news"),
             "SECEnforcementSearchProvider": ("sec_enforcement_search", "SEC 执法/处罚搜索", "regulatory_enforcement"),
-            "USAJobsSearchProvider": ("usajobs_search", "USAJOBS 招聘薪酬", "job_salary"),
             "BraveWebSearchProvider": ("brave_web_search", "Brave Search", "open_web"),
         }
         providers = list(self.live_searches)

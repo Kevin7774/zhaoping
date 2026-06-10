@@ -12,33 +12,14 @@ from app.providers.embedding import SentenceTransformerEmbeddingProvider
 from app.providers.evaluation import SelfRSIEvaluator
 from app.providers.llm import AnthropicCompatibleLLMProvider, OpenRouterChatLLMProvider
 from app.providers.ocr import AliyunOCRProvider, DoclingOCRProvider
-from app.providers.outreach import (
-    HunterEmailFinderProvider,
-    MailtrapSMTPEmailProvider,
-    NeverBounceEmailValidationProvider,
-    PostmarkCompliantEmailProvider,
-    SendGridCompliantEmailProvider,
-    ZeroBounceEmailValidationProvider,
-)
-from app.providers.scraping import (
-    ApifyActorRunProvider,
-    BrightDataWebUnlockerProvider,
-    BrowserbaseSessionProvider,
-    FirecrawlScrapeProvider,
-    OpenCLICrawlProvider,
-    PublicWebSnapshotMonitorProvider,
-)
+from app.providers.scraping import OpenCLICrawlProvider
 from app.providers.search import (
     AgentReachSocialSearchProvider,
     BraveWebSearchProvider,
     CFPBConsumerComplaintProvider,
     CMSOpenPaymentsSearchProvider,
     ClinicalTrialsStudySearchProvider,
-    CompaniesHouseCompanySearchProvider,
-    CourtListenerSearchProvider,
-    CrustdataSignalSearchProvider,
     CPSCRecallSearchProvider,
-    CensusInternationalTradeProvider,
     DueDiligenceFederatedSearchProvider,
     EPAEchoFacilityComplianceProvider,
     ExternalSearchToolProvider,
@@ -49,7 +30,6 @@ from app.providers.search import (
     FDADeviceRegistrationListingProvider,
     FDAEnforcementRecallProvider,
     FederalRegisterDocumentSearchProvider,
-    FREDSeriesSearchProvider,
     GDELTDocNewsSearchProvider,
     GNewsFundingNewsProvider,
     GrantsGovOpportunitySearchProvider,
@@ -62,12 +42,11 @@ from app.providers.search import (
     NHTSARecallSearchProvider,
     OFACSanctionsListSearchProvider,
     OpenAlexAuthorsSearchProvider,
+    OpenCLICommandSearchProvider,
     OpenAlexInstitutionsSearchProvider,
     OpenAlexWorksSearchProvider,
     PatentsViewPatentSearchProvider,
-    PeopleDataLabsPeopleSearchProvider,
     EducationCompetitionMonitorProvider,
-    SAMGovOpportunitySearchProvider,
     SECEdgarCompanyFilingsProvider,
     SECEnforcementSearchProvider,
     SECCompanyFactsProvider,
@@ -77,9 +56,7 @@ from app.providers.search import (
     SearchSourceCatalogProvider,
     SemanticScholarAuthorSearchProvider,
     SemanticScholarPaperSearchProvider,
-    USAJobsSearchProvider,
     USASpendingAwardSearchProvider,
-    XRecentPostsSearchProvider,
 )
 from app.providers.structured_output import OutlinesStructuredOutputProvider
 from app.providers.vector_store import QdrantLocalVectorStore
@@ -222,6 +199,24 @@ class ServiceRouter:
                 freshness=str(settings.get("freshness", "daily")),
             )
 
+        if service.type == "search" and provider == "opencli_command":
+            return OpenCLICommandSearchProvider(
+                service_name=service.name,
+                display_name_zh=str(settings["display_name_zh"]),
+                source_type=str(settings["source_type"]),
+                platform_commands={
+                    str(platform): dict(platform_settings)
+                    for platform, platform_settings in settings.get("platform_commands", {}).items()
+                },
+                required_command=str(settings.get("required_command", "opencli")),
+                supported_platforms=[str(item) for item in settings.get("supported_platforms", [])],
+                project_url=str(settings.get("project_url", "https://github.com/jackwener/OpenCLI")),
+                timeout_seconds=int(settings.get("timeout_seconds", 60)),
+                risk_level=str(settings.get("risk_level", "high")),
+                freshness=str(settings.get("freshness", "daily")),
+                requires_absolute_url=bool(settings.get("requires_absolute_url", False)),
+            )
+
         if service.type == "search" and provider == "external_search_tool":
             return ExternalSearchToolProvider(
                 service_name=service.name,
@@ -302,47 +297,6 @@ class ServiceRouter:
 
         if service.type == "search" and provider == "huggingface_models":
             return HuggingFaceModelSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                token_env=str(settings["token_env"]) if "token_env" in settings else None,
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "search" and provider == "people_data_labs_people":
-            return PeopleDataLabsPeopleSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                dataset=str(settings.get("dataset", "all")),
-                data_include=str(settings["data_include"]) if "data_include" in settings else None,
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "x_recent_posts":
-            return XRecentPostsSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                bearer_token_env=str(settings["bearer_token_env"]),
-                sort_order=str(settings.get("sort_order", "recency")),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "search" and provider == "crustdata_signals":
-            return CrustdataSignalSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                api_version=str(settings["api_version"]),
-                sources=[str(source) for source in settings.get("sources", ["web", "news", "social"])],
-                location=str(settings.get("location", "US")),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "companies_house":
-            return CompaniesHouseCompanySearchProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "search" and provider == "courtlistener":
-            return CourtListenerSearchProvider(
                 endpoint=str(settings["endpoint"]),
                 token_env=str(settings["token_env"]) if "token_env" in settings else None,
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
@@ -511,14 +465,6 @@ class ServiceRouter:
                 dataset_limit=int(settings.get("dataset_limit", 100)),
             )
 
-        if service.type == "search" and provider == "census_international_trade":
-            return CensusInternationalTradeProvider(
-                imports_endpoint=str(settings["imports_endpoint"]),
-                exports_endpoint=str(settings["exports_endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
         if service.type == "search" and provider == "gdelt_doc_news":
             return GDELTDocNewsSearchProvider(
                 endpoint=str(settings["endpoint"]),
@@ -541,27 +487,10 @@ class ServiceRouter:
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
             )
 
-        if service.type == "search" and provider == "usajobs":
-            return USAJobsSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                user_agent_env=str(settings["user_agent_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
         if service.type == "search" and provider == "usaspending_awards":
             return USASpendingAwardSearchProvider(
                 endpoint=str(settings["endpoint"]),
                 fiscal_years=[int(year) for year in settings.get("fiscal_years", [])],
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "sam_gov_opportunities":
-            return SAMGovOpportunitySearchProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                posted_from=str(settings.get("posted_from", "01/01/2025")),
-                posted_to=str(settings.get("posted_to", "12/31/2026")),
                 timeout_seconds=int(settings.get("timeout_seconds", 30)),
             )
 
@@ -570,14 +499,6 @@ class ServiceRouter:
                 endpoint=str(settings["endpoint"]),
                 opportunity_statuses=str(settings.get("opportunity_statuses", "forecasted|posted")),
                 timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "fred_series_search":
-            return FREDSeriesSearchProvider(
-                search_endpoint=str(settings["search_endpoint"]),
-                observations_endpoint=str(settings["observations_endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
             )
 
         if service.type == "search" and provider == "patentsview_patents":
@@ -640,118 +561,11 @@ class ServiceRouter:
                 raise RuntimeError(f"Missing required environment variable: {env_name}")
             return PostgresDatabaseProvider(database_url)
 
-        if service.type == "email_discovery" and provider == "hunter_email_finder":
-            return HunterEmailFinderProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "email_verification" and provider == "zerobounce_email_validation":
-            return ZeroBounceEmailValidationProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "email_verification" and provider == "neverbounce_email_validation":
-            return NeverBounceEmailValidationProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "email_delivery" and provider == "postmark_compliant_email":
-            return PostmarkCompliantEmailProvider(
-                provider=provider,
-                endpoint=str(settings["endpoint"]),
-                token_env=str(settings["server_token_env"]),
-                from_email_env=str(settings["from_email_env"]),
-                unsubscribe_base_url_env=str(settings["unsubscribe_base_url_env"]),
-                suppression_list_path=str(settings["suppression_list_path"]),
-                audit_log_path=str(settings["audit_log_path"]),
-                daily_send_limit=int(settings.get("daily_send_limit", 50)),
-                manual_approval_required=bool(settings.get("manual_approval_required", True)),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "email_delivery" and provider == "sendgrid_compliant_email":
-            return SendGridCompliantEmailProvider(
-                provider=provider,
-                endpoint=str(settings["endpoint"]),
-                token_env=str(settings["api_key_env"]),
-                from_email_env=str(settings["from_email_env"]),
-                unsubscribe_base_url_env=str(settings["unsubscribe_base_url_env"]),
-                suppression_list_path=str(settings["suppression_list_path"]),
-                audit_log_path=str(settings["audit_log_path"]),
-                daily_send_limit=int(settings.get("daily_send_limit", 50)),
-                manual_approval_required=bool(settings.get("manual_approval_required", True)),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "email_delivery" and provider == "mailtrap_smtp_email":
-            return MailtrapSMTPEmailProvider(
-                provider=provider,
-                host_env=str(settings["host_env"]),
-                port_env=str(settings["port_env"]),
-                username_env=str(settings["username_env"]),
-                password_env=str(settings["password_env"]),
-                from_email_env=str(settings["from_email_env"]),
-                unsubscribe_base_url_env=str(settings["unsubscribe_base_url_env"]),
-                suppression_list_path=str(settings["suppression_list_path"]),
-                audit_log_path=str(settings["audit_log_path"]),
-                daily_send_limit=int(settings.get("daily_send_limit", 50)),
-                manual_approval_required=bool(settings.get("manual_approval_required", True)),
-                use_starttls=bool(settings.get("use_starttls", True)),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "scraping" and provider == "firecrawl_scrape":
-            return FirecrawlScrapeProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 60)),
-            )
-
         if service.type == "scraping" and provider == "opencli_crawl":
             return OpenCLICrawlProvider(
                 command=str(settings.get("required_command", "opencli")),
                 command_args=[str(item) for item in settings.get("command_args", [])],
                 timeout_seconds=int(settings.get("timeout_seconds", 60)),
-            )
-
-        if service.type == "scraping" and provider == "apify_actor_run":
-            return ApifyActorRunProvider(
-                endpoint_template=str(settings["endpoint_template"]),
-                api_token_env=str(settings["api_token_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 60)),
-            )
-
-        if service.type == "scraping" and provider == "brightdata_web_unlocker":
-            return BrightDataWebUnlockerProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                zone_env=str(settings["zone_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 60)),
-            )
-
-        if service.type == "scraping" and provider == "browserbase_session":
-            return BrowserbaseSessionProvider(
-                endpoint=str(settings["endpoint"]),
-                api_key_env=str(settings["api_key_env"]),
-                project_id_env=str(settings["project_id_env"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "scraping" and provider == "public_web_snapshot_monitor":
-            return PublicWebSnapshotMonitorProvider(
-                snapshot_dir=str(settings["snapshot_dir"]),
-                primary_scrape_provider=self.scraping(str(settings["primary_scraping_service"])),
-                browser_session_provider=self.scraping(str(settings["browser_session_service"])),
-                target_groups={
-                    str(group): [str(url) for url in urls]
-                    for group, urls in settings.get("target_groups", {}).items()
-                },
             )
 
         if provider == "disabled":

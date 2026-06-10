@@ -464,7 +464,7 @@ def check_integrations() -> dict[str, Any]:
     segments = {key: by_id.get(key) for key in ("segments.query", "segments.create", "segments.read")}
     return {
         "emailDeliveryStatus": email.get("status") if isinstance(email, dict) else None,
-        "mailtrapAvailable": bool(isinstance(email, dict) and email.get("status") in {"active", "available"}),
+        "emailDeliveryAvailable": bool(isinstance(email, dict) and email.get("status") in {"active", "available"}),
         "segments": redact(segments),
     }
 

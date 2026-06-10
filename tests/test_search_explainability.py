@@ -72,9 +72,39 @@ def test_search_config_layers_are_additive_and_budgeted() -> None:
     }
     assert "openalex_works_search" in services
     assert "github_repositories" in services
-    assert "x_recent_posts_search" in services
-    assert "scrapling_adaptive_scrape" in services
+    assert "agent_reach_social_search" in services
+    assert "opencli_web_read_search" in services
+    assert "x_recent_posts_search" not in services
+    assert "scrapling_adaptive_scrape" not in services
     assert "pdl_people_search" not in services
+
+
+def test_crawler_snapshot_layer_requires_deep_live_crawl_budget() -> None:
+    bounded_config = orchestrator._search_config_from_ctx(
+        {
+            "frontend_state": {
+                "search_profile": "candidate_sourcing",
+                "execution_policy": "bounded_live",
+                "source_layers": {"crawler_snapshot": True},
+                "search_budget": {"max_crawl_pages": 3},
+            }
+        }
+    )
+    zero_budget_config = orchestrator._search_config_from_ctx(
+        {
+            "frontend_state": {
+                "search_profile": "candidate_sourcing",
+                "execution_policy": "deep_live",
+                "source_layers": {"crawler_snapshot": True},
+                "search_budget": {"max_crawl_pages": 0},
+            }
+        }
+    )
+
+    assert bounded_config["source_layers"]["crawler_snapshot"] is False
+    assert zero_budget_config["source_layers"]["crawler_snapshot"] is False
+    assert "opencli_web_read_search" not in orchestrator._live_services_for_search_config(bounded_config)
+    assert "opencli_web_read_search" not in orchestrator._live_services_for_search_config(zero_budget_config)
 
 
 def test_legacy_social_expansion_search_mode_is_additive() -> None:
@@ -83,7 +113,8 @@ def test_legacy_social_expansion_search_mode_is_additive() -> None:
 
     assert config["search_profile"] == "candidate_sourcing"
     assert config["source_layers"]["social"] is True
-    assert "x_recent_posts_search" in services
+    assert "agent_reach_social_search" in services
+    assert "x_recent_posts_search" not in services
     assert "github_repositories" in services
     assert "openalex_works_search" in services
 
@@ -195,7 +226,7 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
             "source_layers": {"academic": True, "social": True},
             "budget": {"max_providers": 8, "per_provider_limit": 2, "timeout_seconds": 6, "max_crawl_pages": 0},
         },
-        recommended_sources=[{"source_key": "github"}, {"source_key": "x_recent_posts_search"}],
+        recommended_sources=[{"source_key": "github"}, {"source_key": "agent_reach_social_search"}],
         records=[
             {"source_tier": "primary", "validation_status": "verified"},
             {"source_tier": "secondary", "validation_status": "needs_cross_check"},
@@ -204,13 +235,13 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
         live_context={
             "search_mode": "social_expansion",
             "mode_label": "社媒扩展",
-            "services": ["x_recent_posts_search"],
+            "services": ["agent_reach_social_search"],
             "result_count": 2,
-            "errors": [{"service": "agent_reach_social_search", "reason": "missing_tool:opencli"}],
+            "errors": [{"service": "github_code", "reason": "deferred_by_live_budget"}],
             "research_layers": [{"id": "social_signal", "result_count": 2, "error_count": 1}],
             "provider_health": [
-                {"service": "x_recent_posts_search", "status": "ready"},
-                {"service": "agent_reach_social_search", "status": "missing_tool", "missing_runtime": ["opencli"]},
+                {"service": "agent_reach_social_search", "status": "ready"},
+                {"service": "github_code", "status": "ready"},
             ],
             "provider_budget": {"max_live_providers": 8, "selected": 1, "skipped": 1},
             "external_request_policy": "bounded_live",
@@ -227,12 +258,12 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
         "external_request_policy": "bounded_live",
         "provider_budget": {"max_live_providers": 8, "selected": 1, "skipped": 1},
         "providers": {
-            "selected": ["x_recent_posts_search"],
+            "selected": ["agent_reach_social_search"],
             "health": [
-                {"service": "x_recent_posts_search", "status": "ready"},
-                {"service": "agent_reach_social_search", "status": "missing_tool", "missing_runtime": ["opencli"]},
+                {"service": "agent_reach_social_search", "status": "ready"},
+                {"service": "github_code", "status": "ready"},
             ],
-            "errors": [{"service": "agent_reach_social_search", "reason": "missing_tool:opencli"}],
+            "errors": [{"service": "github_code", "reason": "deferred_by_live_budget"}],
         },
         "result_count": 2,
         "research_layers": [{"id": "social_signal", "result_count": 2, "error_count": 1}],
@@ -242,7 +273,7 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
             "source_tiers": {"primary": 2, "secondary": 1},
             "validation_statuses": {"verified": 2, "needs_cross_check": 1},
         },
-        "evidence_gaps": ["社媒扩展层缺少可用 provider 或存在异常，需要补齐工具/Key 后复跑。"],
+        "evidence_gaps": [],
         "next_queries": ["robotics diffusion policy hiring site:github.com", "robotics diffusion policy hiring demo hiring team"],
         "next_actions": [
             "补齐缺失 provider 的凭证或本地工具后重跑同一 search_mode。",

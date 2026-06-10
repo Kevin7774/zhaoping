@@ -102,7 +102,7 @@ def main() -> None:
         {"id": "GAP-6", "severity": "P1", "item": "Scenario D report parsing failure silently falls back to persisted/empty report with no user notice (ProjectDetailPage.tsx:493-494, 592-593)."},
         {"id": "GAP-7", "severity": "LIMITED", "item": "JSON workflow is API/backend specialty only; no full TS product page. validate/run/human_gate/confirm/resume verified by API + unit tests."},
         {"id": "GAP-8", "severity": "LIMITED", "item": "Public website email extraction has no active TS product entry; not forced through product E2E."},
-        {"id": "GAP-9", "severity": "LIMITED", "item": "Mailtrap/Postmark/SendGrid keys absent: real email send disabled (503, no fake success); simulated send only."},
+        {"id": "GAP-9", "severity": "LIMITED", "item": "Real email delivery is not configured: real send disabled (503, no fake success); simulated send only."},
         {"id": "GAP-10", "severity": "P2-product-gap", "item": "Application-level auth is lightweight local JWT; organization and sender identity flows still need hardening for production."},
         {"id": "GAP-11", "severity": "LIMITED", "item": "Primary soak runner is sequential; concurrency covered by a second concurrent Hanno flow (scripts/e2e_pg_concurrent_hanno_load.py), still below true multi-user load."},
         {"id": "GAP-12", "severity": "P2", "item": "Small-screen (390px): main workspace requires horizontal scrolling (~570px overflow); Hanno page logs console 404 noise from reports/latest empty state."},
@@ -145,7 +145,7 @@ def main() -> None:
                                       "historyStatuses": compliance.get("historyStatuses")},
         "outreach": {
             "candidateWithoutEmail": specialty.get("candidateWithoutEmail"),
-            "providerState": "Mailtrap/Postmark/SendGrid unavailable; real send 503; simulated send records history",
+            "providerState": "Real email delivery unavailable; real send 503; simulated send records history",
         },
         "segments": {
             "queryCreateReadList": "PASS via API probes (segments query/create/read/list all 200)",

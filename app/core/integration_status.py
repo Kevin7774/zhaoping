@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import importlib.util
 import shutil
+import subprocess
 from collections import defaultdict
 from typing import Any
 
@@ -159,10 +160,8 @@ SERVICE_NAME_ZH = {
     "aliyun_ocr": "阿里云 OCR",
     "talent_source_catalog": "人才来源目录搜索",
     "agent_reach_social_search": "Agent-Reach 社媒搜索",
-    "scrapling_adaptive_scrape": "Scrapling 自适应抓取",
-    "browser_use_agent_search": "Browser-use 浏览器操作",
-    "claude_chrome_supervised_search": "Claude in Chrome 监督操作",
-    "web_access_cdp_search": "Web-access Chrome 联网",
+    "opencli_platform_search": "OpenCLI 平台搜索",
+    "opencli_web_read_search": "OpenCLI 网页正文读取",
     "brave_web_search": "Brave 开放网页搜索",
     "github_repositories": "GitHub 代码仓库搜索",
     "github_candidates": "GitHub 候选人搜索",
@@ -170,11 +169,6 @@ SERVICE_NAME_ZH = {
     "github_code": "GitHub 代码搜索",
     "github_topics": "GitHub Topic 搜索",
     "huggingface_models": "Hugging Face 模型搜索",
-    "pdl_people_search": "People Data Labs 人员补全",
-    "x_recent_posts_search": "X recent posts 搜索",
-    "crustdata_signal_search": "Crustdata 实时信号",
-    "companies_house_search": "Companies House 公司注册搜索",
-    "courtlistener_search": "CourtListener 司法检索",
     "openalex_works_search": "OpenAlex 学术作品搜索",
     "openalex_authors_search": "OpenAlex 作者搜索",
     "openalex_institutions_search": "OpenAlex 机构搜索",
@@ -199,35 +193,19 @@ SERVICE_NAME_ZH = {
     "epa_echo_facilities": "EPA ECHO 设施合规",
     "clinicaltrials_studies": "ClinicalTrials.gov 试验登记",
     "cms_openpayments": "CMS Open Payments 医疗付款",
-    "census_international_trade": "US Census 国际贸易",
-    "fred_series_search": "FRED 宏观经济序列",
     "gdelt_doc_news": "GDELT 全球新闻",
     "gnews_funding_news": "GNews 融资事件新闻",
     "sec_enforcement_search": "SEC 执法/处罚搜索",
-    "usajobs_search": "USAJOBS 招聘薪酬",
     "usaspending_awards": "USAspending 政府采购与拨款",
-    "sam_gov_opportunities": "SAM.gov 合同机会",
     "grants_gov_opportunities": "Grants.gov 资助机会",
     "patentsview_patents": "PatentsView 专利检索",
     "ofac_sanctions_lists": "OFAC 制裁清单",
     "due_diligence_federated_search": "尽调级联邦情报搜索",
     "outlines_structured_output": "Outlines 结构化输出",
-    "token_plan_anthropic": "Anthropic 兼容大模型",
     "openrouter_auto_reasoning": "OpenRouter 自动推理",
     "openrouter_online_research": "OpenRouter 联网研究",
     "openrouter_evidence_judge": "OpenRouter 证据裁判",
-    "hunter_email_finder": "Hunter 邮箱发现",
-    "zerobounce_email_validation": "ZeroBounce 邮箱验证",
-    "neverbounce_email_validation": "NeverBounce 邮箱验证",
-    "postmark_compliant_email": "Postmark 合规邮件发送",
-    "sendgrid_compliant_email": "SendGrid 合规邮件发送",
-    "mailtrap_smtp_email": "Mailtrap 邮件沙箱",
-    "firecrawl_scrape": "Firecrawl 网页抓取",
     "opencli_crawl_scrape": "OpenCLI 本地抓取",
-    "public_web_snapshot_monitor": "公开网页快照监控",
-    "apify_actor_run": "Apify Actor 运行",
-    "brightdata_web_unlocker": "Bright Data Web Unlocker",
-    "browserbase_session": "Browserbase 云浏览器会话",
 }
 
 PROVIDER_CODE_PATHS = {
@@ -237,12 +215,6 @@ PROVIDER_CODE_PATHS = {
     ("document_parser", "plain_text"): "app/providers/document.py",
     ("embedding", "sentence_transformers"): "app/providers/embedding.py",
     ("evaluation", "self_rsi"): "app/providers/evaluation.py",
-    ("email_discovery", "hunter_email_finder"): "app/providers/outreach.py",
-    ("email_verification", "zerobounce_email_validation"): "app/providers/outreach.py",
-    ("email_verification", "neverbounce_email_validation"): "app/providers/outreach.py",
-    ("email_delivery", "postmark_compliant_email"): "app/providers/outreach.py",
-    ("email_delivery", "sendgrid_compliant_email"): "app/providers/outreach.py",
-    ("email_delivery", "mailtrap_smtp_email"): "app/providers/outreach.py",
     ("llm", "anthropic_compatible"): "app/providers/llm.py",
     ("llm", "openrouter_chat"): "app/providers/llm.py",
     ("mcp", "local"): "app/providers/mcp.py",
@@ -250,6 +222,7 @@ PROVIDER_CODE_PATHS = {
     ("ocr", "docling"): "app/providers/ocr.py",
     ("search", "brave_web"): "app/providers/search.py",
     ("search", "agent_reach_social"): "app/providers/search.py",
+    ("search", "opencli_command"): "app/providers/search.py",
     ("search", "external_search_tool"): "app/providers/search.py",
     ("search", "github_repositories"): "app/providers/search.py",
     ("search", "github_candidates"): "app/providers/search.py",
@@ -257,11 +230,6 @@ PROVIDER_CODE_PATHS = {
     ("search", "github_code"): "app/providers/search.py",
     ("search", "github_topics"): "app/providers/search.py",
     ("search", "huggingface_models"): "app/providers/search.py",
-    ("search", "people_data_labs_people"): "app/providers/search.py",
-    ("search", "x_recent_posts"): "app/providers/search.py",
-    ("search", "crustdata_signals"): "app/providers/search.py",
-    ("search", "companies_house"): "app/providers/search.py",
-    ("search", "courtlistener"): "app/providers/search.py",
     ("search", "due_diligence_federated"): "app/providers/search.py",
     ("search", "openalex_works"): "app/providers/search.py",
     ("search", "openalex_authors"): "app/providers/search.py",
@@ -287,24 +255,15 @@ PROVIDER_CODE_PATHS = {
     ("search", "epa_echo_facilities"): "app/providers/search.py",
     ("search", "clinicaltrials_studies"): "app/providers/search.py",
     ("search", "cms_openpayments"): "app/providers/search.py",
-    ("search", "census_international_trade"): "app/providers/search.py",
-    ("search", "fred_series_search"): "app/providers/search.py",
     ("search", "gdelt_doc_news"): "app/providers/search.py",
     ("search", "gnews_funding_news"): "app/providers/search.py",
     ("search", "sec_enforcement"): "app/providers/search.py",
-    ("search", "usajobs"): "app/providers/search.py",
     ("search", "usaspending_awards"): "app/providers/search.py",
-    ("search", "sam_gov_opportunities"): "app/providers/search.py",
     ("search", "grants_gov_opportunities"): "app/providers/search.py",
     ("search", "patentsview_patents"): "app/providers/search.py",
     ("search", "ofac_sanctions_lists"): "app/providers/search.py",
     ("search", "source_catalog"): "app/providers/search.py",
-    ("scraping", "firecrawl_scrape"): "app/providers/scraping.py",
     ("scraping", "opencli_crawl"): "app/providers/scraping.py",
-    ("scraping", "apify_actor_run"): "app/providers/scraping.py",
-    ("scraping", "brightdata_web_unlocker"): "app/providers/scraping.py",
-    ("scraping", "browserbase_session"): "app/providers/scraping.py",
-    ("scraping", "public_web_snapshot_monitor"): "app/providers/scraping.py",
     ("structured_output", "outlines"): "app/providers/structured_output.py",
     ("vector_store", "qdrant_local"): "app/providers/vector_store.py",
 }
@@ -353,7 +312,16 @@ def _service_status(config: AppConfig, service: ServiceConfig) -> dict[str, Any]
     credentials = _credential_requirements(settings)
     missing_credentials = [item for item in credentials if not item["present"]]
     runtime_requirements = _runtime_requirements(settings)
-    missing_runtime = [item for item in runtime_requirements if not item["present"]]
+    missing_runtime = [
+        item
+        for item in runtime_requirements
+        if not item["present"] and item.get("type") != "browser_bridge"
+    ]
+    missing_manual_setup = [
+        item
+        for item in runtime_requirements
+        if not item["present"] and item.get("type") == "browser_bridge"
+    ]
     is_default = config.defaults.get(service.type) == service.name
 
     if service.provider == "disabled":
@@ -364,7 +332,7 @@ def _service_status(config: AppConfig, service: ServiceConfig) -> dict[str, Any]
         status = "missing_key"
     elif missing_runtime:
         status = "missing_tool"
-    elif settings.get("manual_setup_required"):
+    elif missing_manual_setup or settings.get("manual_setup_required"):
         status = "manual_setup"
     elif is_default:
         status = "active"
@@ -513,6 +481,10 @@ def _runtime_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
 
+    if settings.get("requires_browser_bridge"):
+        command = required_command if isinstance(required_command, str) and required_command else "opencli"
+        requirements.append(_opencli_browser_bridge_requirement(command))
+
     required_skill_path = settings.get("required_skill_path")
     if isinstance(required_skill_path, str) and required_skill_path:
         expanded_path = os.path.expanduser(required_skill_path)
@@ -524,6 +496,58 @@ def _runtime_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return requirements
+
+
+def _opencli_browser_bridge_requirement(command: str) -> dict[str, Any]:
+    if not shutil.which(command):
+        return {
+            "type": "browser_bridge",
+            "name": "OpenCLI Browser Bridge",
+            "present": False,
+            "command": command,
+            "reason": f"{command} command not found",
+        }
+    try:
+        completed = subprocess.run(
+            [command, "doctor"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "type": "browser_bridge",
+            "name": "OpenCLI Browser Bridge",
+            "present": False,
+            "command": command,
+            "reason": "opencli doctor timed out",
+        }
+
+    output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+    connected = completed.returncode == 0 and not _opencli_doctor_output_has_failure(output)
+    return {
+        "type": "browser_bridge",
+        "name": "OpenCLI Browser Bridge",
+        "present": connected,
+        "command": command,
+        "reason": "ready" if connected else _opencli_doctor_failure_reason(output, completed.returncode),
+    }
+
+
+def _opencli_doctor_output_has_failure(output: str) -> bool:
+    normalized = output.lower()
+    return any(marker in normalized for marker in ("[fail]", "[missing]", "not connected", "connectivity: failed"))
+
+
+def _opencli_doctor_failure_reason(output: str, returncode: int) -> str:
+    if "Browser Bridge extension not connected" in output:
+        return "Browser Bridge extension not connected"
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if "[FAIL]" in line or "[MISSING]" in line or "not connected" in line.lower():
+            return line
+    return f"opencli doctor exited {returncode}"
 
 
 def _unique_credentials(services: list[dict[str, Any]]) -> list[dict[str, Any]]:

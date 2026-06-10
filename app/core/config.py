@@ -94,18 +94,24 @@ class AppConfig(BaseModel):
             ("ocr", "aliyun_ocr"): ("access_key_id_env", "access_key_secret_env", "region_id", "endpoint"),
             ("search", "source_catalog"): ("skill_name",),
             ("search", "agent_reach_social"): ("platform_commands", "supported_platforms", "required_commands"),
+            ("search", "opencli_command"): (
+                "required_command",
+                "platform_commands",
+                "display_name_zh",
+                "source_type",
+                "project_url",
+                "purpose",
+                "access_pattern",
+                "risk_level",
+                "freshness",
+            ),
             ("search", "brave_web"): ("api_key_env", "endpoint"),
-            ("search", "people_data_labs_people"): ("api_key_env", "endpoint"),
-            ("search", "x_recent_posts"): ("bearer_token_env", "endpoint"),
-            ("search", "crustdata_signals"): ("api_key_env", "endpoint", "api_version"),
             ("search", "github_repositories"): ("endpoint",),
             ("search", "github_users"): ("endpoint",),
             ("search", "github_code"): ("endpoint",),
             ("search", "github_topics"): ("endpoint",),
             ("search", "github_candidates"): ("users_endpoint", "repositories_endpoint", "code_endpoint"),
             ("search", "huggingface_models"): ("endpoint",),
-            ("search", "companies_house"): ("endpoint", "api_key_env"),
-            ("search", "courtlistener"): ("endpoint",),
             ("search", "openalex_works"): ("endpoint",),
             ("search", "openalex_authors"): ("endpoint",),
             ("search", "openalex_institutions"): ("endpoint",),
@@ -142,14 +148,10 @@ class AppConfig(BaseModel):
             ("search", "epa_echo_facilities"): ("endpoint",),
             ("search", "clinicaltrials_studies"): ("endpoint",),
             ("search", "cms_openpayments"): ("metastore_endpoint", "datastore_endpoint_template"),
-            ("search", "census_international_trade"): ("imports_endpoint", "exports_endpoint"),
-            ("search", "fred_series_search"): ("search_endpoint", "observations_endpoint", "api_key_env"),
             ("search", "gdelt_doc_news"): ("endpoint",),
             ("search", "gnews_funding_news"): ("endpoint", "api_key_env"),
             ("search", "sec_enforcement"): ("endpoint",),
-            ("search", "usajobs"): ("endpoint", "api_key_env", "user_agent_env"),
             ("search", "usaspending_awards"): ("endpoint",),
-            ("search", "sam_gov_opportunities"): ("endpoint", "api_key_env"),
             ("search", "grants_gov_opportunities"): ("endpoint",),
             ("search", "patentsview_patents"): ("endpoint",),
             ("search", "ofac_sanctions_lists"): ("sdn_xml_url", "consolidated_xml_url"),
@@ -165,49 +167,7 @@ class AppConfig(BaseModel):
                 "risk_level",
                 "freshness",
             ),
-            ("email_discovery", "hunter_email_finder"): ("endpoint", "api_key_env"),
-            ("email_verification", "zerobounce_email_validation"): ("endpoint", "api_key_env"),
-            ("email_verification", "neverbounce_email_validation"): ("endpoint", "api_key_env"),
-            ("email_delivery", "postmark_compliant_email"): (
-                "endpoint",
-                "server_token_env",
-                "from_email_env",
-                "unsubscribe_base_url_env",
-                "suppression_list_path",
-                "audit_log_path",
-                "daily_send_limit",
-            ),
-            ("email_delivery", "sendgrid_compliant_email"): (
-                "endpoint",
-                "api_key_env",
-                "from_email_env",
-                "unsubscribe_base_url_env",
-                "suppression_list_path",
-                "audit_log_path",
-                "daily_send_limit",
-            ),
-            ("email_delivery", "mailtrap_smtp_email"): (
-                "host_env",
-                "port_env",
-                "username_env",
-                "password_env",
-                "from_email_env",
-                "unsubscribe_base_url_env",
-                "suppression_list_path",
-                "audit_log_path",
-                "daily_send_limit",
-            ),
-            ("scraping", "firecrawl_scrape"): ("endpoint", "api_key_env"),
-            ("scraping", "apify_actor_run"): ("endpoint_template", "api_token_env"),
-            ("scraping", "brightdata_web_unlocker"): ("endpoint", "api_key_env", "zone_env"),
-            ("scraping", "browserbase_session"): ("endpoint", "api_key_env", "project_id_env"),
             ("scraping", "opencli_crawl"): ("required_command", "command_args"),
-            ("scraping", "public_web_snapshot_monitor"): (
-                "primary_scraping_service",
-                "browser_session_service",
-                "snapshot_dir",
-                "target_groups",
-            ),
         }
         for field_name in required_by_provider.get((service.type, service.provider), ()):
             if field_name not in data:
@@ -277,20 +237,6 @@ class AppConfig(BaseModel):
                 if live_search.type != "search":
                     raise ValueError(
                         f"Federated search '{service.name}' live_search_services must point to search services."
-                    )
-
-        if service.type == "scraping" and service.provider == "public_web_snapshot_monitor":
-            for referenced_field in ("primary_scraping_service", "browser_session_service"):
-                referenced_name = str(data[referenced_field])
-                referenced = self.services.get(referenced_name)
-                if referenced is None:
-                    raise ValueError(
-                        f"Public web snapshot monitor '{service.name}' references unknown "
-                        f"{referenced_field} '{referenced_name}'."
-                    )
-                if referenced.type != "scraping":
-                    raise ValueError(
-                        f"Public web snapshot monitor '{service.name}' {referenced_field} must point to a scraping service."
                     )
 
 

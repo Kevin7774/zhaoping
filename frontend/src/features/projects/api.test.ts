@@ -478,7 +478,7 @@ describe("projects api", () => {
           social: true,
           newsFunding: false,
           educationCompetition: false,
-          crawlerSnapshot: true,
+          crawlerSnapshot: false,
           dueDiligence: false,
         },
         budget: {
@@ -489,7 +489,6 @@ describe("projects api", () => {
         },
       },
       providerPreflight: [
-        { service: "x_recent_posts_search", status: "missing_key", reason: "缺少 Key" },
         { service: "agent_reach_social_search", status: "missing_tool", reason: "缺少运行工具" },
       ],
       actionExplanation: {
@@ -517,7 +516,7 @@ describe("projects api", () => {
           social: true,
           news_funding: false,
           education_competition: false,
-          crawler_snapshot: true,
+          crawler_snapshot: false,
           due_diligence: false,
         },
         search_budget: {
@@ -527,7 +526,6 @@ describe("projects api", () => {
           max_crawl_pages: 2,
         },
         provider_preflight: [
-          { service: "x_recent_posts_search", status: "missing_key" },
           { service: "agent_reach_social_search", status: "missing_tool" },
         ],
         action_explainability: {

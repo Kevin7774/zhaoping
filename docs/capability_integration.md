@@ -148,15 +148,16 @@ or external judge calls must remain opt-in and must not run from unit tests.
 
 ## Current Search And Scraping Integrations
 
-The search stack now includes executable or routable providers for recruiting, academic, social, school/competition, and web snapshot workflows:
+The search stack now includes executable or routable providers for recruiting, academic, social, school/competition, and local web-read workflows:
 
 - `agent_reach_social_search` (`search` / `agent_reach_social`): executable fan-out provider. Weibo uses `mcporter` direct Weibo search. Bilibili, V2EX, Zhihu, Juejin, CSDN, and SegmentFault use `mcporter` Exa site search. Runtime requirements are `agent-reach`, `mcporter`, and `opencli`.
 - `openalex_works_search`, `openalex_authors_search`, `openalex_institutions_search`: OpenAlex providers for papers, authors, institutions, schools, labs, citations, and topics.
 - `semantic_scholar_papers_search`, `semantic_scholar_authors_search`: Semantic Scholar Graph API providers for papers, authors, venues, h-index, and citation evidence.
 - `github_candidates`, `github_users`, `github_repositories`, `github_code`, `github_topics`: GitHub REST providers for public developer profiles, repositories, code snippets, topics, representative repository evidence, deterministic GitHub scoring, and HumanGate-ready candidate lead previews. Token-required providers are gated by `GITHUB_TOKEN` and can be disabled with `GITHUB_SEARCH_ENABLED=false`.
 - `education_competition_monitor`: curated monitoring target provider for school/lab pages and competitions such as Tianchi, DataFountain, CCF, ICPC/CCPC, Lanqiao, and Kaggle.
-- `opencli_crawl_scrape`: local OpenCLI web reader using `opencli web read --url {url} -f json`. The CLI can be installed while Browser Bridge remains disconnected; live browser-backed reads require the Chrome/Chromium extension.
-- `public_web_snapshot_monitor`: writes timestamped snapshot manifests under `data/snapshots/public_web/` using `firecrawl_scrape` as the primary scrape provider and optional `browserbase_session` metadata.
+- `opencli_platform_search` (`search` / `opencli_command`): local OpenCLI browser-backed platform commands for Bilibili, Zhihu, Xiaohongshu, LinkedIn, and YouTube. It requires the `opencli` command and a connected Browser Bridge extension.
+- `opencli_web_read_search` (`search` / `opencli_command`): URL-backed OpenCLI web reader facade for crawler snapshot workflows. It returns `requires_url` without launching a browser when the query is not an absolute `http(s)` URL.
+- `opencli_crawl_scrape`: local OpenCLI web reader using `opencli web read --url {url} -f json`. The CLI can be installed while Browser Bridge remains disconnected; live browser-backed reads require the Chrome/Chromium extension. Integration status reports command absence as `missing_tool` and disconnected Browser Bridge as `manual_setup`.
 
 Scenario B candidate sourcing exposes a top-down research trace in the HumanGate
 lead preview. The backend groups live sources into market map, technical
@@ -174,9 +175,12 @@ sourcing or due diligence. `execution_policy` controls depth and external
 request risk: `planning_only` must not call live providers, `bounded_live`
 uses a capped provider budget, and `deep_live` allows a larger bounded budget.
 `source_layers` is additive, not mutually exclusive; layers such as academic,
-code/model, people database, social, news/funding, school/competition, crawler
-snapshot, and due diligence can be enabled together. `search_budget` caps
-provider count, per-provider limit, timeout, and crawl pages.
+code/model, social, news/funding, school/competition, crawler snapshot, and due
+diligence can be enabled together. `search_budget` caps provider count,
+per-provider limit, timeout, and crawl pages. The `crawler_snapshot` layer is
+accepted only when `execution_policy = "deep_live"` and
+`search_budget.max_crawl_pages > 0`; otherwise it is normalized off before live
+provider selection.
 
 Legacy `frontend_state.search_mode` values (`planning_only`,
 `live_recruiting`, `due_diligence`, `social_expansion`) remain accepted for

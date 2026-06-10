@@ -23,6 +23,8 @@ export const PATH_PRODUCTIZATION = {
   '/integrations/env': 'system',
   '/integrations/status': 'system',
   '/jobs/match': 'productized',
+  '/monitor/start': 'system',
+  '/monitor/status': 'system',
   '/outreach/draft': 'productized',
   '/outreach/drafts/{draft_id}': 'productized',
   '/outreach/history': 'productized',

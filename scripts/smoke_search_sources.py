@@ -37,19 +37,6 @@ def _summarize_scrape(result: dict) -> dict:
     }
 
 
-def _summarize_snapshot(result: dict) -> dict:
-    return {
-        "provider": result.get("provider"),
-        "job_name": result.get("job_name"),
-        "manifest_path": result.get("manifest_path"),
-        "item_count": len(result.get("items") or []),
-        "statuses": [item.get("status") for item in result.get("items") or []],
-        "browserbase_session_id": (result.get("browserbase_session") or {}).get("session_id"),
-        "retrieval_status": result.get("retrieval_status"),
-        "error": result.get("error"),
-    }
-
-
 class _SafeSearchProvider:
     def __init__(self, service_name: str, provider) -> None:
         self.service_name = service_name
@@ -85,17 +72,6 @@ class _SafeScrapingProvider:
                 "url": url,
                 "retrieval_status": "error",
                 "error": str(exc)[:500],
-            }
-
-    def snapshot(self, **kwargs) -> dict:
-        try:
-            return self.provider.snapshot(**kwargs)
-        except Exception as exc:  # pragma: no cover - exercised by live smoke only
-            return {
-                "provider": self.service_name,
-                "retrieval_status": "error",
-                "error": str(exc)[:500],
-                "items": [],
             }
 
 
@@ -135,33 +111,19 @@ def main() -> None:
     parser.add_argument("--epa-query", default="battery manufacturing")
     parser.add_argument("--clinical-query", default="robotic surgery")
     parser.add_argument("--openpayments-query", default="Medtronic")
-    parser.add_argument("--trade-query", default="854231 imports")
-    parser.add_argument("--fred-query", default="inflation interest rate")
     parser.add_argument("--news-query", default="robotics funding")
     parser.add_argument("--funding-query", default="robotics funding")
     parser.add_argument("--enforcement-query", default="robotics")
-    parser.add_argument("--jobs-query", default="robotics engineer")
     parser.add_argument("--spending-query", default="robotics")
-    parser.add_argument("--sam-query", default="robotics")
     parser.add_argument("--grants-query", default="robotics")
     parser.add_argument("--patent-query", default="robot manipulation")
     parser.add_argument("--sanctions-query", default="example")
     parser.add_argument("--github-query", default="robotics foundation model")
     parser.add_argument("--hf-query", default="robotics")
-    parser.add_argument("--pdl-query", default="robotics machine learning lead")
-    parser.add_argument("--x-query", default="robotics VLA demo -is:retweet")
-    parser.add_argument("--crustdata-query", default="robotics hiring funding")
-    parser.add_argument("--company-query", default="openai")
-    parser.add_argument("--court-query", default="robotics")
     parser.add_argument("--social-query", default="robotics VLA demo")
     parser.add_argument("--education-query", default="机器人 天池 高校 实验室")
-    parser.add_argument("--scrape-query", default="https://example.com robotics")
+    parser.add_argument("--opencli-platform-query", default="robotics VLA demo")
     parser.add_argument("--opencli-url", default="https://example.com")
-    parser.add_argument("--snapshot-url", default="https://example.com")
-    parser.add_argument("--snapshot-job-name", default="smoke-public-web")
-    parser.add_argument("--browser-query", default="Find robotics hiring evidence on an authorized site")
-    parser.add_argument("--chrome-query", default="Review a complex authorized page under supervision")
-    parser.add_argument("--web-access-query", default="robotics hiring search with public web first")
     parser.add_argument("--web-query", default="robot foundation model")
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--include-brave", action="store_true")
@@ -173,26 +135,14 @@ def main() -> None:
         "agent_reach_social_search": _summarize(
             router.search("agent_reach_social_search").search(args.social_query, limit=args.limit)
         ),
-        "scrapling_adaptive_scrape": _summarize(
-            router.search("scrapling_adaptive_scrape").search(args.scrape_query, limit=args.limit)
+        "opencli_platform_search": _summarize(
+            router.search("opencli_platform_search").search(args.opencli_platform_query, limit=args.limit)
+        ),
+        "opencli_web_read_search": _summarize(
+            router.search("opencli_web_read_search").search(args.opencli_url, limit=args.limit)
         ),
         "opencli_crawl_scrape": _summarize_scrape(
             router.scraping("opencli_crawl_scrape").scrape(args.opencli_url)
-        ),
-        "public_web_snapshot_monitor": _summarize_snapshot(
-            router.scraping("public_web_snapshot_monitor").snapshot(
-                urls=[args.snapshot_url],
-                job_name=args.snapshot_job_name,
-            )
-        ),
-        "browser_use_agent_search": _summarize(
-            router.search("browser_use_agent_search").search(args.browser_query, limit=args.limit)
-        ),
-        "claude_chrome_supervised_search": _summarize(
-            router.search("claude_chrome_supervised_search").search(args.chrome_query, limit=args.limit)
-        ),
-        "web_access_cdp_search": _summarize(
-            router.search("web_access_cdp_search").search(args.web_access_query, limit=args.limit)
         ),
     }
     if args.external_only:
@@ -293,32 +243,11 @@ def main() -> None:
         "huggingface_models": _summarize(
             router.search("huggingface_models").search(args.hf_query, limit=args.limit)
         ),
-        "pdl_people_search": _summarize(
-            router.search("pdl_people_search").search(args.pdl_query, limit=args.limit)
-        ),
-        "x_recent_posts_search": _summarize(
-            router.search("x_recent_posts_search").search(args.x_query, limit=args.limit)
-        ),
-        "crustdata_signal_search": _summarize(
-            router.search("crustdata_signal_search").search(args.crustdata_query, limit=args.limit)
-        ),
-        "courtlistener_search": _summarize(
-            router.search("courtlistener_search").search(args.court_query, limit=args.limit)
-        ),
         "education_competition_monitor": _summarize(
             router.search("education_competition_monitor").search(args.education_query, limit=args.limit)
         ),
         **external_output,
     }
-    if os.getenv("COMPANIES_HOUSE_API_KEY"):
-        output["companies_house_search"] = _summarize(
-            router.search("companies_house_search").search(args.company_query, limit=args.limit)
-        )
-    else:
-        output["companies_house_search"] = {
-            "status": "skipped",
-            "reason": "COMPANIES_HOUSE_API_KEY is not set.",
-        }
     if os.getenv("GNEWS_API_KEY"):
         output["gnews_funding_news"] = _summarize(
             router.search("gnews_funding_news").search(args.funding_query, limit=args.limit)
@@ -327,42 +256,6 @@ def main() -> None:
         output["gnews_funding_news"] = {
             "status": "skipped",
             "reason": "GNEWS_API_KEY is not set.",
-        }
-    if os.getenv("USAJOBS_API_KEY") and os.getenv("USAJOBS_USER_AGENT"):
-        output["usajobs_search"] = _summarize(
-            router.search("usajobs_search").search(args.jobs_query, limit=args.limit)
-        )
-    else:
-        output["usajobs_search"] = {
-            "status": "skipped",
-            "reason": "USAJOBS_API_KEY or USAJOBS_USER_AGENT is not set.",
-        }
-    if os.getenv("FRED_API_KEY"):
-        output["fred_series_search"] = _summarize(
-            router.search("fred_series_search").search(args.fred_query, limit=args.limit)
-        )
-    else:
-        output["fred_series_search"] = {
-            "status": "skipped",
-            "reason": "FRED_API_KEY is not set.",
-        }
-    if os.getenv("CENSUS_API_KEY"):
-        output["census_international_trade"] = _summarize(
-            router.search("census_international_trade").search(args.trade_query, limit=args.limit)
-        )
-    else:
-        output["census_international_trade"] = {
-            "status": "skipped",
-            "reason": "CENSUS_API_KEY is not set.",
-        }
-    if os.getenv("SAM_GOV_API_KEY"):
-        output["sam_gov_opportunities"] = _summarize(
-            router.search("sam_gov_opportunities").search(args.sam_query, limit=args.limit)
-        )
-    else:
-        output["sam_gov_opportunities"] = {
-            "status": "skipped",
-            "reason": "SAM_GOV_API_KEY is not set.",
         }
 
     if args.include_brave:
