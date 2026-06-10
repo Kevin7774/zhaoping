@@ -300,6 +300,100 @@ def test_extract_candidate_leads_from_search_and_structured_outputs() -> None:
     assert leads[1]["github_url"] == "https://github.com/bob"
 
 
+def test_candidate_lead_preview_redacts_email_and_reports_ingestion_action(
+    session_factory: sessionmaker[Session],
+) -> None:
+    from app.core.candidate_lead_ingestion import preview_candidate_leads
+
+    lead = {
+        **github_lead(),
+        "source_platform": "public_web",
+        "source_url": "https://example.com/profiles/alice-wang",
+        "contact_source": "public_profile_scrape",
+    }
+
+    with session_factory() as session:
+        preview = preview_candidate_leads(
+            session,
+            project_id="project_2026_ai_team",
+            job_id="job_vla_algorithm",
+            raw_leads=[lead],
+            limit=5,
+        )
+
+    assert preview["total_count"] == 1
+    assert preview["omitted_count"] == 0
+    assert preview["leads"][0] == {
+        "name": "Alice Wang",
+        "source_platform": "public_web",
+        "source_url": "https://example.com/profiles/alice-wang",
+        "evidence_summary": "Maintains robot-vla with diffusion policy and VLA examples.",
+        "confidence": 0.91,
+        "matched_job": "VLA / 具身智能算法工程师",
+        "compliance_status": "pending_compliance_review",
+        "ingestion_action": "insert",
+        "email": "[redacted]",
+    }
+    assert "alice@example.com" not in str(preview)
+
+    with session_factory() as session:
+        assert session.scalar(select(func.count(Candidate.id))) == 1
+        assert session.scalar(select(func.count(JobCandidate.id))) == 1
+
+
+def test_scenario_b_awaiting_payload_contains_lead_preview(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(orchestrator.AgentRunner, "STEP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(orchestrator, "_source_intelligence_with_audit", fake_source_intelligence)
+    monkeypatch.setattr(orchestrator, "project_session_factory", lambda: session_factory)
+
+    task_id = start_scenario_b(client)
+    awaiting = wait_for_status(client, task_id, "awaiting_human")
+
+    payload = awaiting["awaiting"]
+    assert payload["requires_lead_preview"] is True
+    assert payload["lead_preview"]["total_count"] == 2
+    assert payload["lead_preview"]["omitted_count"] == 0
+    assert len(payload["lead_preview"]["leads"]) == 2
+    first = payload["lead_preview"]["leads"][0]
+    assert first["name"] == "alicewang"
+    assert first["source_platform"] == "github_repositories"
+    assert first["source_url"] == "https://github.com/alicewang/robot-vla"
+    assert first["evidence_summary"] == "robot-vla; Alice Wang maintains robot-vla with diffusion policy examples."
+    assert first["confidence"] == 0.86
+    assert first["matched_job"] == "VLA / 具身智能算法工程师"
+    assert first["compliance_status"] == "clear"
+    assert first["ingestion_action"] == "insert"
+
+
+def test_scenario_b_reject_does_not_ingest_candidate_leads(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(orchestrator.AgentRunner, "STEP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(orchestrator, "_source_intelligence_with_audit", fake_source_intelligence)
+    monkeypatch.setattr(orchestrator, "project_session_factory", lambda: session_factory)
+
+    before = client.get("/projects/project_2026_ai_team/candidates")
+    assert before.headers["x-total-count"] == "1"
+
+    task_id = start_scenario_b(client)
+    wait_for_status(client, task_id, "awaiting_human")
+    reject = client.post(f"/tasks/{task_id}/confirm", json={"decision": "reject", "edits": "线索来源不足"})
+    assert reject.status_code == 200
+    final = wait_for_status(client, task_id, "error")
+    assert "人工拒绝" in final["error"]
+
+    after = client.get("/projects/project_2026_ai_team/candidates")
+    assert after.headers["x-total-count"] == "1"
+
+
 def test_scenario_b_result_contains_lead_ingestion_and_increases_candidate_count(
     client: TestClient,
     session_factory: sessionmaker[Session],

@@ -117,6 +117,33 @@ CAPABILITY_SPECS: tuple[dict[str, str], ...] = (
     },
 )
 
+ENDPOINT_CAPABILITY_SPECS: tuple[dict[str, str], ...] = (
+    {
+        "id": "segments.query",
+        "service_type": "segments.query",
+        "label": "Segments Query API",
+        "name_zh": "人群查询 API",
+        "description": "Built-in candidate segment query endpoint backed by the project database.",
+        "code_path": "app/api/routers/segments.py",
+    },
+    {
+        "id": "segments.create",
+        "service_type": "segments.create",
+        "label": "Segments Create API",
+        "name_zh": "人群保存 API",
+        "description": "Built-in candidate segment persistence endpoint backed by the project database.",
+        "code_path": "app/api/routers/segments.py",
+    },
+    {
+        "id": "segments.read",
+        "service_type": "segments.read",
+        "label": "Segments Read API",
+        "name_zh": "人群读取 API",
+        "description": "Built-in candidate segment read/list endpoints backed by the project database.",
+        "code_path": "app/api/routers/segments.py",
+    },
+)
+
 SECRET_FIELD_MARKERS = ("secret", "token", "password", "credential", "api_key", "access_key")
 CONNECTED_STATUSES = {"active", "available"}
 CODED_STATUSES = CONNECTED_STATUSES | {"missing_key", "missing_tool", "manual_setup"}
@@ -307,7 +334,8 @@ def get_integration_status(config: AppConfig | None = None) -> dict[str, Any]:
         "capabilities": [
             _capability_status(spec, config, services_by_type.get(spec["service_type"], []))
             for spec in capability_specs
-        ],
+        ]
+        + [_endpoint_capability_status(spec) for spec in ENDPOINT_CAPABILITY_SPECS],
         "services": services,
     }
 
@@ -394,6 +422,20 @@ def _capability_status(
             }
             for service in services
         ],
+    }
+
+
+def _endpoint_capability_status(spec: dict[str, str]) -> dict[str, Any]:
+    return {
+        **spec,
+        "status": "active",
+        "connected": True,
+        "connected_name_zh": "内置项目数据库",
+        "code_path": spec["code_path"],
+        "default_service": None,
+        "credential_status": "not_required",
+        "credentials": [],
+        "services": [],
     }
 
 

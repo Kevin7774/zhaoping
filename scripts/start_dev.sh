@@ -35,6 +35,8 @@ PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/.venv/bin/python}"
 BACKEND_RELOAD="${BACKEND_RELOAD:-1}"
 PNPM_BIN="${PNPM_BIN:-}"
 NPM_BIN="${NPM_BIN:-}"
+DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-project_2026_ai_team}"
+CHECK_DEFAULT_PROJECT="${CHECK_DEFAULT_PROJECT:-1}"
 
 pids=()
 cleaning_up=0
@@ -350,6 +352,42 @@ wait_for_backend() {
   return 1
 }
 
+seed_database_command() {
+  if [[ "${USE_CONDA}" == "0" ]]; then
+    local python_cmd
+    if [[ -x "$PYTHON_BIN" ]]; then
+      python_cmd="$PYTHON_BIN"
+    else
+      python_cmd="python3"
+    fi
+    echo "set -a; source .env; set +a; ${python_cmd} scripts/seed_db.py"
+  else
+    echo "set -a; source .env; set +a; ${conda_bin:-conda} run --no-capture-output -n ${CONDA_ENV} python scripts/seed_db.py"
+  fi
+}
+
+check_default_project() {
+  if [[ "$CHECK_DEFAULT_PROJECT" != "1" || -z "$DEFAULT_PROJECT_ID" ]]; then
+    return 0
+  fi
+
+  local status
+  status="$(curl -sS -o /dev/null -w "%{http_code}" "${BACKEND_URL}/projects/${DEFAULT_PROJECT_ID}" || true)"
+  if [[ "$status" == "404" ]]; then
+    cat <<EOF
+[dev] warning: default project not found: ${DEFAULT_PROJECT_ID}
+[dev] frontend pages will keep returning 404 until the project database is initialized.
+[dev] seed local demo data, if this is your dev database:
+[dev]   $(seed_database_command)
+[dev] set CHECK_DEFAULT_PROJECT=0 to skip this check.
+
+EOF
+  elif [[ "$status" != "200" ]]; then
+    echo "[dev] warning: default project check returned HTTP ${status}: ${BACKEND_URL}/projects/${DEFAULT_PROJECT_ID}" >&2
+    echo
+  fi
+}
+
 wait_for_frontend() {
   for _ in $(seq 1 60); do
     if curl -fsS "${FRONTEND_LOCAL_URL}" >/dev/null 2>&1; then
@@ -432,6 +470,7 @@ echo "[dev] starting backend: ${BACKEND_BIND_URL}"
 pids+=("$!")
 
 wait_for_backend
+check_default_project
 
 echo "[dev] starting frontend: ${FRONTEND_BIND_URL}"
 if [[ "$(basename "$frontend_bin")" == "pnpm" ]]; then

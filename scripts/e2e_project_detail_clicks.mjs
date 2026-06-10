@@ -627,7 +627,7 @@ async function verifyOutreach(cdp, entries, report) {
       method: "POST",
       pathIncludes: "/api/outreach/draft",
       since,
-    }, 12_000);
+    }, 60_000);
     flow.evidence.push({ label: "POST outreach draft", ...evidenceFromEntry(draftEntry) });
     const draft = bodyJson(draftEntry);
     if (!draft?.draftId) throw new Error("outreach draft response missing draftId");

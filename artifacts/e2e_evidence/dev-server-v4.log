@@ -1,0 +1,45 @@
+[dev] starting backend: http://0.0.0.0:8011
+/home/lison/Desktop/zhaoping/app/core/workflow_dsl.py:21: UserWarning: Field name "schema" in "StepDefinition" shadows an attribute in parent "BaseModel"
+  class StepDefinition(BaseModel):
+INFO:     Started server process [4190163]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8011 (Press CTRL+C to quit)
+INFO:     127.0.0.1:46500 - "GET /health HTTP/1.1" 200 OK
+[dev] starting frontend: http://0.0.0.0:5178
+$ vite --host 0.0.0.0 --port 5178
+node:internal/fs/watchers:321
+    const error = new UVException({
+                  ^
+
+Error: ENOSPC: System limit for number of file watchers reached, watch '/home/lison/Desktop/zhaoping/frontend/vite.config.js'
+    at FSWatcher.<computed> (node:internal/fs/watchers:321:19)
+    at Object.watch (node:fs:2548:36)
+    at createFsWatchInstance (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8496:16)
+    at setFsWatchListener (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8538:14)
+    at NodeFsHandler._watchWithNodeFs (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8652:20)
+    at NodeFsHandler._handleFile (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8696:24)
+    at NodeFsHandler._addToNodeFs (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8870:26)
+    at async file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:9510:18
+    at async Promise.all (index 1)
+Emitted 'error' event on FSWatcher instance at:
+    at FSWatcher._handleError (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:9669:146)
+    at NodeFsHandler._addToNodeFs (file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:8875:18)
+    at async file:///home/lison/Desktop/zhaoping/frontend/node_modules/.pnpm/vite@8.0.14_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:9510:18
+    at async Promise.all (index 1) {
+  errno: -28,
+  syscall: 'watch',
+  code: 'ENOSPC',
+  path: '/home/lison/Desktop/zhaoping/frontend/vite.config.js',
+  filename: '/home/lison/Desktop/zhaoping/frontend/vite.config.js'
+}
+
+Node.js v24.16.0
+[ELIFECYCLE] Command failed with exit code 1.
+[dev] frontend process exited before readiness check passed
+
+[dev] stopping services...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4190163]

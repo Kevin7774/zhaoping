@@ -54,7 +54,7 @@ class WorkflowRuntimeState(BaseModel):
     ) -> "WorkflowRuntimeState":
         return cls(
             workflow_id=workflow.id,
-            workflow=workflow.model_dump(mode="json"),
+            workflow=workflow.model_dump(mode="json", by_alias=True),
             context=normalize_context_value(initial_context),
             conversation_id=conversation_id,
         )
@@ -117,7 +117,7 @@ class StepExecutor:
         llm = self.router.llm(step_def.service)
         prompt = (
             "请从输入中抽取结构化数据。只输出合法 JSON，不要输出 Markdown 或解释。\n\n"
-            f"Schema:\n{json.dumps(step_def.schema, ensure_ascii=False, indent=2)}\n\n"
+            f"Schema:\n{json.dumps(step_def.json_schema, ensure_ascii=False, indent=2)}\n\n"
             f"Input:\n{source}"
         )
         last_output = ""
@@ -129,7 +129,7 @@ class StepExecutor:
             output = llm.text(prompt, max_tokens=max_tokens)
             try:
                 parsed = json.loads(output)
-                _validate_schema(parsed, step_def.schema or {})
+                _validate_schema(parsed, step_def.json_schema or {})
                 return StepResult(
                     step_id=step_def.id,
                     output_key=step_def.output_key,
@@ -146,7 +146,7 @@ class StepExecutor:
                     "retry_count": attempt + 1,
                     "last_error": last_error,
                 }
-                prompt = retry_prompt(step_def.schema or {}, last_output, raw_error)
+                prompt = retry_prompt(step_def.json_schema or {}, last_output, raw_error)
         if step_def.on_failure == "human_gate":
             raise HumanGateRequiredException(
                 {

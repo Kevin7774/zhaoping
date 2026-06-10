@@ -1536,6 +1536,11 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert capabilities["llm_api"]["default_service"] == "openrouter_auto_reasoning"
     assert capabilities["llm_api"]["connected_name_zh"] == "OpenRouter 自动推理"
     assert capabilities["llm_api"]["code_path"] == "app/providers/llm.py"
+    for capability_id in ("segments.query", "segments.create", "segments.read"):
+        assert capabilities[capability_id]["status"] == "active"
+        assert capabilities[capability_id]["connected"] is True
+        assert capabilities[capability_id]["credential_status"] == "not_required"
+        assert capabilities[capability_id]["code_path"] == "app/api/routers/segments.py"
     assert any(
         credential["env"] == "OPENROUTER_API_KEY" and credential["present"]
         for credential in capabilities["llm_api"]["credentials"]

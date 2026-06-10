@@ -29,6 +29,7 @@ from app.core.candidate_lead_ingestion import (
     empty_lead_ingestion_result,
     extract_candidate_leads,
     ingest_candidate_leads,
+    preview_candidate_leads,
 )
 from app.db.session import project_session_factory
 from app.db.task_models import AgentEventModel, TaskModel, make_task_session_factory
@@ -700,9 +701,12 @@ def _b_strategy(ctx: Dict[str, Any]) -> Any:
 
 
 def _b_hitl(ctx: Dict[str, Any]) -> Any:
+    lead_preview = _preview_scenario_b_candidate_leads(ctx)
     return {
         "prompt": "请确认目标公司与触达策略，可通过或填写调整意见。",
         "draft": ctx["data"]["strategy"],
+        "requires_lead_preview": True,
+        "lead_preview": lead_preview,
     }
 
 
@@ -749,6 +753,30 @@ def _ingest_scenario_b_candidate_leads(ctx: Dict[str, Any], result: Dict[str, An
             job_id=job_id,
             source_task_id=task_id,
             raw_leads=raw_leads,
+        )
+
+
+def _preview_scenario_b_candidate_leads(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    target = _project_sourcing_target(ctx.get("frontend_state"))
+    if target is None:
+        return {
+            "total_count": 0,
+            "omitted_count": 0,
+            "leads": [],
+            "rejected_reasons": {"project_id/job_id not provided": 1},
+        }
+    project_id, job_id = target
+    preview_source = dict(ctx["data"].get("talent_map") or {})
+    if ctx["data"].get("industry_intelligence"):
+        preview_source["搜索证据"] = ctx["data"]["industry_intelligence"]
+    raw_leads = extract_candidate_leads(preview_source)
+    with project_session_factory()() as session:
+        return preview_candidate_leads(
+            session,
+            project_id=project_id,
+            job_id=job_id,
+            raw_leads=raw_leads,
+            limit=5,
         )
 
 
@@ -3154,6 +3182,9 @@ class AgentRunner(threading.Thread):
                             "prompt": payload.get("prompt", "请确认"),
                             "draft": payload.get("draft", {}),
                         }
+                        for key, value in payload.items():
+                            if key not in awaiting:
+                                awaiting[key] = value
                         if _should_auto_confirm_human_gate(ctx):
                             decision = {"decision": "approve", "edits": "scheduler auto approve"}
                             ctx["human"] = decision

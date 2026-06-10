@@ -1,0 +1,1412 @@
+{
+  "generatedAt": "2026-06-09T14:15:48.583Z",
+  "appUrl": "http://127.0.0.1:5173/projects/project_hanno_ai_hardware",
+  "apiBase": "http://127.0.0.1:8000",
+  "projectId": "project_hanno_ai_hardware",
+  "projectTitle": "汉诺云智边缘计算与 AI 综合解决方案招聘",
+  "status": "PASS",
+  "flows": [
+    {
+      "name": "岗位分析：scenario A task/SSE + task control",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:15:49.199Z",
+      "ui": {
+        "button": "岗位分析",
+        "sectionTitle": "岗位进展",
+        "occurrence": 0,
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "岗位分析",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario A",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "A",
+            "input": "请对「AI 全栈 Agent 系统架构师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_hanno_ai_hardware",
+              "job_profile_id": "job_agent_fullstack_architect",
+              "job_title": "AI 全栈 Agent 系统架构师",
+              "jobTitle": "AI 全栈 Agent 系统架构师",
+              "action": "job_analysis"
+            }
+          },
+          "response": {
+            "task_id": "bfadfc945e75",
+            "scenario": "A",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/bfadfc945e75/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task cancel",
+          "method": "POST",
+          "path": "/api/tasks/bfadfc945e75/cancel",
+          "status": 200,
+          "response": {
+            "task_id": "bfadfc945e75",
+            "scenario": "A",
+            "scenario_id": "A",
+            "input": "请对「AI 全栈 Agent 系统架构师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_hanno_ai_hardware",
+              "job_profile_id": "job_agent_fullstack_architect",
+              "job_title": "AI 全栈 Agent 系统架构师",
+              "jobTitle": "AI 全栈 Agent 系统架构师",
+              "action": "job_analysis"
+            },
+            "status": "cancelled",
+            "current_agent": null,
+            "current_step": 0,
+            "total_steps": 7,
+            "logs": {
+              "type": "array",
+              "length": 4,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 0,
+              "sample": []
+            },
+            "awaiting": null,
+            "result": null,
+            "error": "用户取消任务",
+            "created_at": "2026-06-09T14:15:49.206837",
+            "updated_at": "2026-06-09T14:15:49.318994"
+          }
+        },
+        {
+          "label": "POST task retry",
+          "method": "POST",
+          "path": "/api/tasks/bfadfc945e75/retry",
+          "status": 200,
+          "response": {
+            "task_id": "6fa55707e935",
+            "scenario": "A",
+            "status": "processing"
+          }
+        }
+      ],
+      "notes": [],
+      "taskId": "bfadfc945e75",
+      "taskControls": {
+        "status": "PASS",
+        "evidence": [
+          {
+            "label": "POST task cancel",
+            "method": "POST",
+            "path": "/api/tasks/bfadfc945e75/cancel",
+            "status": 200,
+            "response": {
+              "task_id": "bfadfc945e75",
+              "scenario": "A",
+              "scenario_id": "A",
+              "input": "请对「AI 全栈 Agent 系统架构师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+              "team_constraint": "真机泛化",
+              "aperture_weight": 0.7,
+              "frontend_state": {
+                "source": "ProjectDetailPage",
+                "project_id": "project_hanno_ai_hardware",
+                "job_profile_id": "job_agent_fullstack_architect",
+                "job_title": "AI 全栈 Agent 系统架构师",
+                "jobTitle": "AI 全栈 Agent 系统架构师",
+                "action": "job_analysis"
+              },
+              "status": "cancelled",
+              "current_agent": null,
+              "current_step": 0,
+              "total_steps": 7,
+              "logs": {
+                "type": "array",
+                "length": 4,
+                "sample": [
+                  {
+                    "type": "object",
+                    "keys": [
+                      "ts",
+                      "agent",
+                      "message",
+                      "level",
+                      "event_type"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "keys": [
+                      "ts",
+                      "agent",
+                      "message",
+                      "level",
+                      "event_type"
+                    ]
+                  }
+                ]
+              },
+              "steps_done": {
+                "type": "array",
+                "length": 0,
+                "sample": []
+              },
+              "awaiting": null,
+              "result": null,
+              "error": "用户取消任务",
+              "created_at": "2026-06-09T14:15:49.206837",
+              "updated_at": "2026-06-09T14:15:49.318994"
+            }
+          },
+          {
+            "label": "POST task retry",
+            "method": "POST",
+            "path": "/api/tasks/bfadfc945e75/retry",
+            "status": 200,
+            "response": {
+              "task_id": "6fa55707e935",
+              "scenario": "A",
+              "status": "processing"
+            }
+          }
+        ],
+        "notes": [],
+        "createdRetryTaskId": "6fa55707e935"
+      },
+      "finishedAt": "2026-06-09T14:15:49.897Z"
+    },
+    {
+      "name": "找候选人：scenario B task/SSE",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:15:49.913Z",
+      "ui": {
+        "button": "找候选人",
+        "sectionTitle": "岗位进展",
+        "occurrence": 0,
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "找候选人",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario B",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "B",
+            "input": "请围绕「AI 全栈 Agent 系统架构师」生成人才地图、候选人来源、搜索关键词和触达策略。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_hanno_ai_hardware",
+              "job_profile_id": "job_agent_fullstack_architect",
+              "job_title": "AI 全栈 Agent 系统架构师",
+              "jobTitle": "AI 全栈 Agent 系统架构师",
+              "action": "find_candidates"
+            }
+          },
+          "response": {
+            "task_id": "d659256294df",
+            "scenario": "B",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/d659256294df/stream",
+          "status": 200
+        }
+      ],
+      "notes": [],
+      "taskId": "d659256294df",
+      "finishedAt": "2026-06-09T14:15:50.023Z"
+    },
+    {
+      "name": "候选人评估 + 任务 HumanGate 确认",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:15:50.030Z",
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario C candidate",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "C",
+            "input": "请评估候选人「张载德」与「AI 全栈 Agent 系统架构师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_hanno_ai_hardware",
+              "candidate_id": "cand_lead_4e588f81bed81921",
+              "candidateId": "cand_lead_4e588f81bed81921",
+              "job_id": "job_agent_fullstack_architect",
+              "jobId": "job_agent_fullstack_architect",
+              "action": "candidate_evaluation"
+            }
+          },
+          "response": {
+            "task_id": "d0753b33dc06",
+            "scenario": "C",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/d0753b33dc06/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task confirm",
+          "method": "POST",
+          "path": "/api/tasks/d0753b33dc06/confirm",
+          "status": 200,
+          "request": {
+            "decision": "approve",
+            "edits": "",
+            "data": {
+              "draft": "",
+              "candidateName": "张载德"
+            }
+          },
+          "response": {
+            "task_id": "d0753b33dc06",
+            "scenario": "C",
+            "scenario_id": "C",
+            "input": "请评估候选人「张载德」与「AI 全栈 Agent 系统架构师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_hanno_ai_hardware",
+              "candidate_id": "cand_lead_4e588f81bed81921",
+              "candidateId": "cand_lead_4e588f81bed81921",
+              "job_id": "job_agent_fullstack_architect",
+              "jobId": "job_agent_fullstack_architect",
+              "action": "candidate_evaluation",
+              "project_candidate_evaluation_runtime": {
+                "type": "object",
+                "keys": [
+                  "type",
+                  "candidate_id",
+                  "job_id",
+                  "context",
+                  "report",
+                  "awaiting_step_index"
+                ]
+              }
+            },
+            "status": "processing",
+            "current_agent": "human_expert",
+            "current_step": 2,
+            "total_steps": 3,
+            "logs": {
+              "type": "array",
+              "length": 7,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 2,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                }
+              ]
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-09T14:15:50.036338",
+            "updated_at": "2026-06-09T14:15:51.502948"
+          }
+        },
+        {
+          "label": "GET task snapshot",
+          "method": "GET",
+          "path": "/api/tasks/d0753b33dc06",
+          "status": 200,
+          "response": {
+            "task_id": "d0753b33dc06",
+            "scenario": "C",
+            "scenario_id": "C",
+            "input": "请评估候选人「张载德」与「AI 全栈 Agent 系统架构师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_hanno_ai_hardware",
+              "candidate_id": "cand_lead_4e588f81bed81921",
+              "candidateId": "cand_lead_4e588f81bed81921",
+              "job_id": "job_agent_fullstack_architect",
+              "jobId": "job_agent_fullstack_architect",
+              "action": "candidate_evaluation"
+            },
+            "status": "processing",
+            "current_agent": "candidate_eval",
+            "current_step": 0,
+            "total_steps": 3,
+            "logs": {
+              "type": "array",
+              "length": 3,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 1,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                }
+              ]
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-09T14:15:50.036338",
+            "updated_at": "2026-06-09T14:15:50.049866"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "候选人评估",
+          "sectionTitle": "候选人名单"
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "taskId": "d0753b33dc06",
+      "humanGateModal": "opened",
+      "finishedAt": "2026-06-09T14:15:51.600Z"
+    },
+    {
+      "name": "招聘周报：scenario D task/SSE + HumanGate + 持久化",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:15:51.601Z",
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario D",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "D",
+            "input": "请基于「汉诺云智边缘计算与 AI 综合解决方案招聘」当前真实项目、岗位和候选人数据生成本周招聘周报。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_hanno_ai_hardware",
+              "action": "weekly_report"
+            }
+          },
+          "response": {
+            "task_id": "dd957aa9412b",
+            "scenario": "D",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/dd957aa9412b/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task confirm",
+          "method": "POST",
+          "path": "/api/tasks/dd957aa9412b/confirm",
+          "status": 200,
+          "request": {
+            "decision": "approve",
+            "edits": "{\n  \"下周行动建议\": [\n    \"更新岗位画像和目标公司列表。\",\n    \"校准候选人评分卡并补齐面试追问。\",\n    \"把人工修改、面试反馈和 offer / reject 结果回流到知识库、画像库和评分体系。\"\n  ]\n}",
+            "data": {
+              "draft": "{\n  \"下周行动建议\": [\n    \"更新岗位画像和目标公司列表。\",\n    \"校准候选人评分卡并补齐面试追问。\",\n    \"把人工修改、面试反馈和 offer / reject 结果回流到知识库、画像库和评分体系。\"\n  ]\n}"
+            }
+          },
+          "response": {
+            "task_id": "dd957aa9412b",
+            "scenario": "D",
+            "scenario_id": "D",
+            "input": "请基于「汉诺云智边缘计算与 AI 综合解决方案招聘」当前真实项目、岗位和候选人数据生成本周招聘周报。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_hanno_ai_hardware",
+              "action": "weekly_report",
+              "legacy_scenario_runtime": {
+                "type": "object",
+                "keys": [
+                  "type",
+                  "scenario",
+                  "next_step_index",
+                  "awaiting_step_index",
+                  "context"
+                ]
+              }
+            },
+            "status": "processing",
+            "current_agent": "human_expert",
+            "current_step": 3,
+            "total_steps": 5,
+            "logs": {
+              "type": "array",
+              "length": 16,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 3,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                }
+              ]
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-09T14:15:51.607927",
+            "updated_at": "2026-06-09T14:16:00.231043"
+          }
+        },
+        {
+          "label": "POST reports weekly",
+          "method": "POST",
+          "path": "/api/reports/weekly",
+          "status": 200,
+          "request": {
+            "projectId": "project_hanno_ai_hardware",
+            "sourceTaskId": "dd957aa9412b",
+            "report": {
+              "conclusion": "本周围绕机器人系统架构师推进招聘，需同时看岗位进展、候选人质量和市场信号。",
+              "topCandidates": {
+                "type": "array",
+                "length": 1,
+                "sample": [
+                  "从候选人画像库提取本周高分候选人，并附匹配评分、风险点和证据链。"
+                ]
+              },
+              "risks": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "缺少 offer / reject / 入职结果，候选人评分体系无法闭环校准。",
+                  "缺少面试反馈或人工校准记录，需补齐证据链。"
+                ]
+              },
+              "nextActions": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "更新岗位画像和目标公司列表。",
+                  "校准候选人评分卡并补齐面试追问。"
+                ]
+              }
+            }
+          },
+          "response": {
+            "reportId": "report_4c1c3bf53713",
+            "projectId": "project_hanno_ai_hardware",
+            "sourceTaskId": "dd957aa9412b",
+            "content": {
+              "conclusion": "本周围绕机器人系统架构师推进招聘，需同时看岗位进展、候选人质量和市场信号。",
+              "topCandidates": {
+                "type": "array",
+                "length": 1,
+                "sample": [
+                  "从候选人画像库提取本周高分候选人，并附匹配评分、风险点和证据链。"
+                ]
+              },
+              "risks": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "缺少 offer / reject / 入职结果，候选人评分体系无法闭环校准。",
+                  "缺少面试反馈或人工校准记录，需补齐证据链。"
+                ]
+              },
+              "nextActions": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "更新岗位画像和目标公司列表。",
+                  "校准候选人评分卡并补齐面试追问。"
+                ]
+              }
+            },
+            "createdAt": "2026-06-09T14:16:00.905614Z"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "生成周报",
+          "sectionTitle": null
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "taskId": "dd957aa9412b",
+      "finishedAt": "2026-06-09T14:16:00.928Z"
+    },
+    {
+      "name": "人群筛选闭环：后端查询 + 保存能力门控",
+      "status": "LIMITED",
+      "startedAt": "2026-06-09T14:16:00.929Z",
+      "evidence": [
+        {
+          "label": "POST segments query",
+          "method": "POST",
+          "path": "/api/segments/query",
+          "status": 200,
+          "request": {
+            "projectId": "project_hanno_ai_hardware",
+            "criteria": {
+              "jobProfileId": "all",
+              "minScore": 0,
+              "city": "",
+              "outreachStatus": "all",
+              "hasEmail": "all",
+              "sourcePlatform": "all"
+            }
+          },
+          "response": {
+            "projectId": "project_hanno_ai_hardware",
+            "criteria": {
+              "jobProfileId": "all",
+              "minScore": 0,
+              "city": "",
+              "outreachStatus": "all",
+              "hasEmail": "all",
+              "sourcePlatform": "all"
+            },
+            "total": 11,
+            "candidates": {
+              "type": "array",
+              "length": 11,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "notes": [
+        "保存目标人群被能力门控禁用：数据库 API 未接入"
+      ],
+      "ui": {
+        "query": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "查询目标人群",
+          "sectionTitle": "筛选条件"
+        },
+        "saveButton": {
+          "found": true,
+          "disabled": true,
+          "text": "保存目标人群",
+          "title": "数据库 API 未接入",
+          "occurrence": 0,
+          "sectionTitle": "筛选条件",
+          "availableButtons": [
+            "保存目标人群"
+          ]
+        }
+      },
+      "finishedAt": "2026-06-09T14:16:01.034Z"
+    },
+    {
+      "name": "邮件触达闭环：后端草稿 + 人工确认 + 模拟发送记录",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:16:01.034Z",
+      "evidence": [
+        {
+          "label": "POST outreach draft",
+          "method": "POST",
+          "path": "/api/outreach/draft",
+          "status": 200,
+          "request": {
+            "projectId": "project_hanno_ai_hardware",
+            "jobId": "job_agent_fullstack_architect",
+            "candidateId": "cand_lead_4e588f81bed81921"
+          },
+          "response": {
+            "draftId": "draft_0d73ef61ca28",
+            "projectId": "project_hanno_ai_hardware",
+            "jobId": "job_agent_fullstack_architect",
+            "candidateId": "cand_lead_4e588f81bed81921",
+            "segmentId": null,
+            "subject": "关于 Rust / Python 真机部署问题的技术切磋",
+            "body": "看到你材料里写到的「完成500+篇高密度会议纪要的文本清洗与结构化入库」，这个工程取舍很硬核。\n\n张载德，你好。我这边负责 汉诺云智边缘计算与 AI 综合解决方案招聘 的核心硬件产品落地，最近卡在算法、硬件拓扑和现场交付节奏之间的系统级取舍：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 Rust、Python、TypeScript 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接...",
+            "status": "draft",
+            "strategyTag": "场景叙事类",
+            "backendGenerated": true,
+            "createdAt": "2026-06-09T14:16:01.042286Z",
+            "updatedAt": "2026-06-09T14:16:01.042286Z"
+          }
+        },
+        {
+          "label": "GET outreach history",
+          "method": "GET",
+          "path": "/api/outreach/history?projectId=project_hanno_ai_hardware&candidateId=cand_lead_4e588f81bed81921",
+          "status": 200,
+          "response": {
+            "items": {
+              "type": "array",
+              "length": 3,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "historyId",
+                    "projectId",
+                    "jobId",
+                    "candidateId",
+                    "draftId",
+                    "segmentId",
+                    "email",
+                    "strategyTag",
+                    "subject",
+                    "body",
+                    "status",
+                    "deliveryMode"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "historyId",
+                    "projectId",
+                    "jobId",
+                    "candidateId",
+                    "draftId",
+                    "segmentId",
+                    "email",
+                    "strategyTag",
+                    "subject",
+                    "body",
+                    "status",
+                    "deliveryMode"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "label": "PATCH outreach draft",
+          "method": "PATCH",
+          "path": "/api/outreach/drafts/draft_0d73ef61ca28",
+          "status": 200,
+          "request": {
+            "subject": "E2E 自动验证主题 1781014568658",
+            "body": "看到你材料里写到的「完成500+篇高密度会议纪要的文本清洗与结构化入库」，这个工程取舍很硬核。\n\n张载德，你好。我这边负责 汉诺云智边缘计算与 AI 综合解决方案招聘 的核心硬件产品落地，最近卡在算法、硬件拓扑和现场交付节奏之间的系统级取舍：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 Rust、Python、TypeScript 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接..."
+          },
+          "response": {
+            "draftId": "draft_0d73ef61ca28",
+            "projectId": "project_hanno_ai_hardware",
+            "jobId": "job_agent_fullstack_architect",
+            "candidateId": "cand_lead_4e588f81bed81921",
+            "segmentId": null,
+            "subject": "E2E 自动验证主题 1781014568658",
+            "body": "看到你材料里写到的「完成500+篇高密度会议纪要的文本清洗与结构化入库」，这个工程取舍很硬核。\n\n张载德，你好。我这边负责 汉诺云智边缘计算与 AI 综合解决方案招聘 的核心硬件产品落地，最近卡在算法、硬件拓扑和现场交付节奏之间的系统级取舍：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 Rust、Python、TypeScript 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接...",
+            "status": "draft",
+            "strategyTag": "场景叙事类",
+            "backendGenerated": true,
+            "createdAt": "2026-06-09T14:16:01.042286Z",
+            "updatedAt": "2026-06-09T14:16:08.697160Z"
+          }
+        },
+        {
+          "label": "POST outreach send",
+          "method": "POST",
+          "path": "/api/outreach/send",
+          "status": 200,
+          "request": {
+            "draftId": "draft_0d73ef61ca28",
+            "decision": "approve",
+            "simulate": true
+          },
+          "response": {
+            "historyId": "history_29687a37c582",
+            "projectId": "project_hanno_ai_hardware",
+            "jobId": "job_agent_fullstack_architect",
+            "candidateId": "cand_lead_4e588f81bed81921",
+            "draftId": "draft_0d73ef61ca28",
+            "segmentId": null,
+            "email": "1264355217@qq.com",
+            "strategyTag": "场景叙事类",
+            "subject": "E2E 自动验证主题 1781014568658",
+            "body": "看到你材料里写到的「完成500+篇高密度会议纪要的文本清洗与结构化入库」，这个工程取舍很硬核。\n\n张载德，你好。我这边负责 汉诺云智边缘计算与 AI 综合解决方案招聘 的核心硬件产品落地，最近卡在算法、硬件拓扑和现场交付节奏之间的系统级取舍：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 Rust、Python、TypeScript 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接...",
+            "status": "simulated",
+            "deliveryMode": "simulated",
+            "providerStatus": "simulated",
+            "createdAt": "2026-06-09T14:16:08.718195Z"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "生成草稿",
+          "sectionTitle": "候选人名单"
+        },
+        "openConfirm": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "确认草稿",
+          "sectionTitle": "邮件草稿"
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "deliveryMode": "simulated",
+      "finishedAt": "2026-06-09T14:16:08.796Z"
+    },
+    {
+      "name": "岗位匹配 UI：真实 /jobs/match 结果",
+      "status": "PASS",
+      "startedAt": "2026-06-09T14:16:08.796Z",
+      "evidence": [
+        {
+          "label": "POST jobs match",
+          "method": "POST",
+          "path": "/api/jobs/match",
+          "status": 200,
+          "request": {
+            "query": "AI 全栈 Agent 系统架构师",
+            "top_k": 5
+          },
+          "response": {
+            "results": {
+              "type": "array",
+              "length": 2,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "candidate_id",
+                    "candidate_name",
+                    "job_id",
+                    "job_title",
+                    "match_score",
+                    "pipeline_status",
+                    "source"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "candidate_id",
+                    "candidate_name",
+                    "job_id",
+                    "job_title",
+                    "match_score",
+                    "pipeline_status",
+                    "source"
+                  ]
+                }
+              ]
+            },
+            "source": "project_database"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "岗位匹配",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "resultCount": 2,
+      "finishedAt": "2026-06-09T14:16:08.901Z"
+    }
+  ],
+  "createdTaskIds": [
+    "bfadfc945e75",
+    "6fa55707e935",
+    "d659256294df",
+    "d0753b33dc06",
+    "dd957aa9412b"
+  ],
+  "cleanup": {
+    "outreachDraftIds": [
+      "draft_0d73ef61ca28"
+    ],
+    "outreachHistoryIds": [
+      "history_29687a37c582"
+    ],
+    "segmentIds": [],
+    "reportIds": [
+      "report_4c1c3bf53713"
+    ],
+    "candidateLinks": [
+      {
+        "candidateId": "cand_lead_4e588f81bed81921",
+        "jobId": "job_agent_fullstack_architect",
+        "matchScore": 92,
+        "pipelineStatus": "pending_outreach"
+      }
+    ]
+  },
+  "initialData": {
+    "project": {
+      "method": "GET",
+      "path": "/api/projects/project_hanno_ai_hardware",
+      "status": 200,
+      "response": {
+        "id": "project_hanno_ai_hardware",
+        "name": "汉诺云智边缘计算与 AI 综合解决方案招聘",
+        "status": "active",
+        "createdAt": "2026-06-09T13:46:07Z",
+        "openJobs": 14,
+        "totalCandidates": 2,
+        "awaitingHuman": 0,
+        "averageMatchScore": 82
+      }
+    },
+    "jobs": {
+      "method": "GET",
+      "path": "/api/projects/project_hanno_ai_hardware/jobs",
+      "status": 200,
+      "response": {
+        "type": "array",
+        "length": 14,
+        "sample": [
+          {
+            "id": "job_agent_fullstack_architect",
+            "projectId": "project_hanno_ai_hardware",
+            "title": "AI 全栈 Agent 系统架构师",
+            "headcount": 2,
+            "status": "sourcing",
+            "pipelineStatus": "pending_outreach",
+            "candidateCount": 2,
+            "averageMatchScore": 86
+          },
+          {
+            "id": "job_edge_ai_platform",
+            "projectId": "project_hanno_ai_hardware",
+            "title": "边缘 AI 平台工程师",
+            "headcount": 2,
+            "status": "sourcing",
+            "pipelineStatus": "sourcing",
+            "candidateCount": 0,
+            "averageMatchScore": 0
+          }
+        ]
+      }
+    },
+    "candidates": {
+      "method": "GET",
+      "path": "/api/projects/project_hanno_ai_hardware/candidates?skip=0&limit=50",
+      "status": 200,
+      "response": {
+        "type": "array",
+        "length": 11,
+        "sample": [
+          {
+            "name": "张载德",
+            "title": "AI 全栈工程师",
+            "currentCompany": "华控基金",
+            "location": "北京",
+            "city": "北京",
+            "email": "1264355217@qq.com",
+            "homepageUrl": "https://www.clawflow.com.cn",
+            "sourcePlatform": "resume_file",
+            "sourceUrl": "https://www.clawflow.com.cn",
+            "evidence": {
+              "type": "array",
+              "length": 9,
+              "sample": [
+                "完成500+篇高密度会议纪要的文本清洗与结构化入库",
+                "构建PostgreSQL多租户隔离与微信支付APIv3集成"
+              ]
+            },
+            "skills": {
+              "type": "array",
+              "length": 12,
+              "sample": [
+                "Rust",
+                "Python"
+              ]
+            },
+            "createdFromTaskId": "4e0264866afa",
+            "id": "cand_lead_4e588f81bed81921",
+            "jobCandidateId": 14,
+            "jobId": "job_agent_fullstack_architect",
+            "jobTitle": "AI 全栈 Agent 系统架构师",
+            "matchScore": 92,
+            "pipelineStatus": "pending_outreach"
+          },
+          {
+            "name": "代宁",
+            "title": "后端开发",
+            "currentCompany": "快手信息技术有限公司",
+            "location": "北京",
+            "city": "北京",
+            "email": "15229216182@163.com",
+            "sourcePlatform": "resume_file",
+            "evidence": {
+              "type": "array",
+              "length": 8,
+              "sample": [
+                "存储节省7%，回收存储空间1.7G",
+                "后端RT p995从1.6s降低至700ms"
+              ]
+            },
+            "skills": {
+              "type": "array",
+              "length": 10,
+              "sample": [
+                "Java",
+                "MySQL"
+              ]
+            },
+            "createdFromTaskId": "bd6aec597593",
+            "id": "cand_lead_a4598a70c76a793e",
+            "jobCandidateId": 15,
+            "jobId": "job_agent_fullstack_architect",
+            "jobTitle": "AI 全栈 Agent 系统架构师",
+            "matchScore": 80,
+            "pipelineStatus": "sourced",
+            "jobEvidence": {
+              "type": "array",
+              "length": 8,
+              "sample": [
+                "存储节省7%，回收存储空间1.7G",
+                "后端RT p995从1.6s降低至700ms"
+              ]
+            },
+            "sourceTaskId": "bd6aec597593"
+          }
+        ]
+      }
+    },
+    "integrations": {
+      "method": "GET",
+      "path": "/api/integrations/status",
+      "status": 200,
+      "response": {
+        "config_path": "config/services.toml",
+        "defaults": {
+          "document_parser": "auto_document_parser",
+          "embedding": "bge_m3_local",
+          "evaluation": "self_rsi_evaluator",
+          "vector_store": "qdrant_local",
+          "ocr": "aliyun_ocr",
+          "search": "due_diligence_federated_search",
+          "mcp": "disabled_mcp",
+          "structured_output": "outlines_structured_output",
+          "database": "disabled_database",
+          "llm": "openrouter_auto_reasoning",
+          "email_discovery": "hunter_email_finder",
+          "email_verification": "zerobounce_email_validation",
+          "email_delivery": "postmark_compliant_email",
+          "scraping": "firecrawl_scrape"
+        },
+        "capabilities": {
+          "type": "array",
+          "length": 15,
+          "sample": [
+            {
+              "type": "object",
+              "keys": [
+                "id",
+                "service_type",
+                "label",
+                "name_zh",
+                "description",
+                "status",
+                "connected",
+                "connected_name_zh",
+                "code_path",
+                "default_service",
+                "credential_status",
+                "credentials"
+              ]
+            },
+            {
+              "type": "object",
+              "keys": [
+                "id",
+                "service_type",
+                "label",
+                "name_zh",
+                "description",
+                "status",
+                "connected",
+                "connected_name_zh",
+                "code_path",
+                "default_service",
+                "credential_status",
+                "credentials"
+              ]
+            }
+          ]
+        },
+        "services": {
+          "type": "array",
+          "length": 79,
+          "sample": [
+            {
+              "type": "object",
+              "keys": [
+                "name",
+                "type",
+                "provider",
+                "name_zh",
+                "description",
+                "is_default",
+                "status",
+                "code_path",
+                "credentials",
+                "runtime_requirements",
+                "settings"
+              ]
+            },
+            {
+              "type": "object",
+              "keys": [
+                "name",
+                "type",
+                "provider",
+                "name_zh",
+                "description",
+                "is_default",
+                "status",
+                "code_path",
+                "credentials",
+                "runtime_requirements",
+                "settings"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "latestReport": {
+      "method": "GET",
+      "path": "/api/projects/project_hanno_ai_hardware/reports/latest",
+      "status": 200,
+      "response": {
+        "reportId": "report_9d61df1f0eb3",
+        "projectId": "project_hanno_ai_hardware",
+        "sourceTaskId": "a5b51cd505f1",
+        "content": {
+          "conclusion": "本周围绕机器人系统架构师推进招聘，需同时看岗位进展、候选人质量和市场信号。",
+          "topCandidates": {
+            "type": "array",
+            "length": 1,
+            "sample": [
+              "从候选人画像库提取本周高分候选人，并附匹配评分、风险点和证据链。"
+            ]
+          },
+          "risks": {
+            "type": "array",
+            "length": 3,
+            "sample": [
+              "缺少 offer / reject / 入职结果，候选人评分体系无法闭环校准。",
+              "缺少面试反馈或人工校准记录，需补齐证据链。"
+            ]
+          },
+          "nextActions": {
+            "type": "array",
+            "length": 3,
+            "sample": [
+              "更新岗位画像和目标公司列表。",
+              "校准候选人评分卡并补齐面试追问。"
+            ]
+          }
+        },
+        "createdAt": "2026-06-09T14:08:21.077450Z"
+      }
+    },
+    "projectNameVisible": false
+  },
+  "capabilities": {
+    "search": {
+      "id": "search_api",
+      "status": "active",
+      "connected": true
+    },
+    "code": {
+      "id": "code_api",
+      "status": "not_configured",
+      "connected": false
+    },
+    "embedding": {
+      "id": "embedding_api",
+      "status": "active",
+      "connected": true
+    },
+    "evaluation": {
+      "id": "evaluation_api",
+      "status": "active",
+      "connected": true
+    },
+    "email_discovery": {
+      "id": "email_discovery_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "email_verification": {
+      "id": "email_verification_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "email_delivery": {
+      "id": "email_delivery_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "scraping": {
+      "id": "scraping_api",
+      "status": "available",
+      "connected": true
+    },
+    "vector_store": {
+      "id": "vector_api",
+      "status": "active",
+      "connected": true
+    },
+    "llm": {
+      "id": "llm_api",
+      "status": "active",
+      "connected": true
+    },
+    "ocr": {
+      "id": "ocr_api",
+      "status": "active",
+      "connected": true
+    },
+    "structured_output": {
+      "id": "structured_output_api",
+      "status": "active",
+      "connected": true
+    },
+    "mcp": {
+      "id": "mcp_api",
+      "status": "disabled",
+      "connected": false
+    },
+    "database": {
+      "id": "database_api",
+      "status": "disabled",
+      "connected": false
+    },
+    "document_parser": {
+      "id": "document_parser_api",
+      "status": "active",
+      "connected": true
+    }
+  },
+  "finishedAt": "2026-06-09T14:16:08.901Z"
+}

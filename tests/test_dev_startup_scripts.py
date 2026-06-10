@@ -30,3 +30,13 @@ def test_dev_script_loads_env_and_can_release_known_dev_ports() -> None:
     assert 'kill_known_dev_processes_on_port "frontend" "$FRONTEND_PORT"' in content
     assert "assert_port_free \"$BACKEND_HOST\" \"$BACKEND_PORT\"" not in content
     assert "assert_port_free \"$FRONTEND_HOST\" \"$FRONTEND_PORT\"" not in content
+
+
+def test_dev_script_reports_seed_command_when_default_project_is_missing() -> None:
+    content = (ROOT / "scripts" / "start_dev.sh").read_text(encoding="utf-8")
+
+    assert "DEFAULT_PROJECT_ID=\"${DEFAULT_PROJECT_ID:-project_2026_ai_team}\"" in content
+    assert "CHECK_DEFAULT_PROJECT=\"${CHECK_DEFAULT_PROJECT:-1}\"" in content
+    assert "check_default_project" in content
+    assert '"${BACKEND_URL}/projects/${DEFAULT_PROJECT_ID}"' in content
+    assert "scripts/seed_db.py" in content

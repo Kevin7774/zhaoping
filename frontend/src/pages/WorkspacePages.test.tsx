@@ -34,6 +34,19 @@ const projectPayload = {
   averageMatchScore: 86,
 };
 
+const activeProjectStorageKey = "zhaoping_active_project_id";
+
+const hannoProjectPayload = {
+  id: "project_hanno_ai_hardware",
+  name: "汉诺云智招聘",
+  status: "active",
+  createdAt: "2026-06-10T00:00:00Z",
+  openJobs: 1,
+  totalCandidates: 0,
+  awaitingHuman: 0,
+  averageMatchScore: 0,
+};
+
 const jobsPayload = [
   {
     id: "job_vla_algorithm",
@@ -44,6 +57,19 @@ const jobsPayload = [
     pipelineStatus: "processing",
     candidateCount: 2,
     averageMatchScore: 86,
+  },
+];
+
+const hannoJobsPayload = [
+  {
+    id: "job_hanno_edge_ai",
+    projectId: "project_hanno_ai_hardware",
+    title: "边缘 AI 架构师",
+    headcount: 1,
+    status: "sourcing",
+    pipelineStatus: "sourcing",
+    candidateCount: 0,
+    averageMatchScore: 0,
   },
 ];
 
@@ -114,11 +140,20 @@ describe("workspace sidebar pages", () => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url === "/api/projects") return jsonResponse([projectPayload]);
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload);
       if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
       if (url.startsWith("/api/projects/project_2026_ai_team/candidates")) {
         return jsonResponse(candidatesPayload, 200, {
           "X-Total-Count": String(candidatesPayload.length),
+          "X-Has-More": "false",
+        });
+      }
+      if (url === "/api/projects/project_hanno_ai_hardware") return jsonResponse(hannoProjectPayload);
+      if (url === "/api/projects/project_hanno_ai_hardware/jobs") return jsonResponse(hannoJobsPayload);
+      if (url.startsWith("/api/projects/project_hanno_ai_hardware/candidates")) {
+        return jsonResponse([], 200, {
+          "X-Total-Count": "0",
           "X-Has-More": "false",
         });
       }
@@ -175,7 +210,7 @@ describe("workspace sidebar pages", () => {
   });
 
   it.each([
-    ["工作台", <DashboardPage />, "招聘流程入口"],
+    ["工作台", <DashboardPage />, "项目列表"],
     ["岗位分析", <JobsPage />, "岗位列表"],
     ["找候选人", <TalentMapPage />, "来源分布"],
     ["候选人评估", <ScenariosPage />, "候选人评估队列"],
@@ -207,5 +242,18 @@ describe("workspace sidebar pages", () => {
     });
     expect(window.localStorage.getItem(RECENT_TASK_IDS_KEY)).toContain("task_resume");
     expect(await screen.findByText("已创建导入任务：task_resume")).toBeTruthy();
+  });
+
+  it("loads workspace pages from the active project instead of the default project", async () => {
+    window.localStorage.setItem(activeProjectStorageKey, "project_hanno_ai_hardware");
+
+    renderPage(<JobsPage />);
+
+    expect(await screen.findByRole("heading", { name: "岗位分析" })).toBeTruthy();
+    expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_hanno_ai_hardware/jobs",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });

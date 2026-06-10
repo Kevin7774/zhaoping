@@ -1,0 +1,7 @@
+$ vite preview --host 0.0.0.0 --port 5174
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: http://192.168.50.137:5174/
+  ➜  Network: http://100.103.83.71:5174/
+  ➜  Network: http://172.18.0.1:5174/
+  ➜  press h + enter to show help
+[ELIFECYCLE] Command failed.

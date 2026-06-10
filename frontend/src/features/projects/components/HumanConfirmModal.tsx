@@ -1,11 +1,15 @@
 import { useEffect, useId, useState } from "react";
 
+import type { LeadPreview } from "../humanGate";
+
 type HumanConfirmModalProps = {
   open: boolean;
   busy: boolean;
   context: string;
   draft: string;
   candidateName?: string;
+  requiresLeadPreview?: boolean;
+  leadPreview?: LeadPreview;
   onApprove: (draft: string, decision: "approve" | "edit") => void;
   onReject: () => void;
   onClose: () => void;
@@ -17,6 +21,8 @@ export function HumanConfirmModal({
   context,
   draft,
   candidateName,
+  requiresLeadPreview,
+  leadPreview,
   onApprove,
   onReject,
   onClose,
@@ -29,6 +35,8 @@ export function HumanConfirmModal({
   }, [draft, open]);
 
   if (!open) return null;
+  const missingRequiredLeadPreview = Boolean(requiresLeadPreview && !leadPreview);
+  const approveDisabled = busy || missingRequiredLeadPreview;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#111827]/45 px-4 py-6">
@@ -36,7 +44,7 @@ export function HumanConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="human-confirm-title"
-        className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
+        className="w-full max-w-[720px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
       >
         <div className="border-b border-[#EEF2F7] px-6 py-5">
           <div className="flex items-start justify-between gap-4">
@@ -63,6 +71,45 @@ export function HumanConfirmModal({
             <p className="mt-1 text-[13px] leading-5 text-[#92400E]">{context}</p>
           </div>
 
+          {requiresLeadPreview ? (
+            <section className="rounded-[12px] border border-[#D1D5DB] bg-[#F9FAFB] px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-[14px] font-semibold text-[#111827]">即将入库的候选线索</h3>
+                {leadPreview ? (
+                  <span className="text-[12px] text-[#6B7280]">
+                    {leadPreview.totalCount} 条{leadPreview.omittedCount > 0 ? `，另有 ${leadPreview.omittedCount} 条未展示` : ""}
+                  </span>
+                ) : null}
+              </div>
+              {leadPreview ? (
+                <div className="mt-3 space-y-2">
+                  {leadPreview.leads.map((lead, index) => (
+                    <article key={`${lead.sourceUrl || lead.name || index}-${index}`} className="rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-[#111827]">
+                        <span>{lead.name || "Unknown Candidate"}</span>
+                        <span className="text-[12px] font-medium text-[#6B7280]">{lead.sourcePlatform || "unknown_source"}</span>
+                        {lead.confidence !== undefined ? (
+                          <span className="text-[12px] font-medium text-[#047857]">{Math.round(lead.confidence * 100)}%</span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-[12px] leading-[18px] text-[#4B5563]">{lead.evidenceSummary || "暂无证据摘要"}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#6B7280]">
+                        <span>岗位：{lead.matchedJob || "未匹配"}</span>
+                        <span>动作：{lead.ingestionAction || "unknown"}</span>
+                        <span>合规：{lead.complianceStatus || "unknown"}</span>
+                      </div>
+                      {lead.sourceUrl ? (
+                        <div className="mt-1 truncate text-[11px] text-[#6B7280]">{lead.sourceUrl}</div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-[13px] leading-5 text-[#B45309]">缺少候选线索预览，无法确认入库。</p>
+              )}
+            </section>
+          ) : null}
+
           <label htmlFor={textareaId} className="block text-[13px] font-semibold text-[#374151]">
             草稿正文
           </label>
@@ -75,7 +122,10 @@ export function HumanConfirmModal({
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-6 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+          {requiresLeadPreview ? (
+            <p className="text-[12px] leading-5 text-[#6B7280] sm:mr-auto">确认后将把这些线索写入项目候选人库。</p>
+          ) : null}
           <button
             type="button"
             onClick={onReject}
@@ -87,7 +137,7 @@ export function HumanConfirmModal({
           <button
             type="button"
             onClick={() => onApprove(draftText, "edit")}
-            disabled={busy}
+            disabled={approveDisabled}
             className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
           >
             编辑后通过
@@ -95,7 +145,7 @@ export function HumanConfirmModal({
           <button
             type="button"
             onClick={() => onApprove(draftText, "approve")}
-            disabled={busy}
+            disabled={approveDisabled}
             className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-60"
           >
             通过

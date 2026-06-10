@@ -1,66 +1,42 @@
-$ .venv/bin/python -m pytest -q
-started_at=2026-06-09T10:49:42.341Z
-finished_at=2026-06-09T10:49:44.881Z
-exit_code=0
-signal=
-timed_out=false
-
-## stdout
-........................................................................ [ 45%]
-........................................................................ [ 91%]
-.............                                                            [100%]
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+....................................................                     [100%]
 =============================== warnings summary ===============================
-.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
-  /home/lison/Desktop/zhaoping/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/lison/Desktop/zhaoping/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
     from starlette.testclient import TestClient as TestClient  # noqa
 
-app/core/workflow_dsl.py:16
-  /home/lison/Desktop/zhaoping/app/core/workflow_dsl.py:16: UserWarning: Field name "schema" in "StepDefinition" shadows an attribute in parent "BaseModel"
+app/core/workflow_dsl.py:21
+  /home/lison/Desktop/zhaoping/app/core/workflow_dsl.py:21: UserWarning: Field name "schema" in "StepDefinition" shadows an attribute in parent "BaseModel"
     class StepDefinition(BaseModel):
 
-tests/test_candidate_evaluation_task.py: 2 warnings
-tests/test_json_workflow_engine.py: 7 warnings
-tests/test_product_loop_api.py: 13 warnings
-tests/test_static_contracts.py: 16 warnings
-  /usr/lib/python3.11/asyncio/events.py:80: DeprecationWarning: Passing 'msg' argument to Task.cancel() is deprecated since Python 3.11, and scheduled for removal in Python 3.14.
-    self._context.run(self._callback, *self._args)
+app/api/main.py:78
+  /home/lison/Desktop/zhaoping/app/api/main.py:78: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
 
-tests/test_candidate_evaluation_task.py: 2 warnings
-tests/test_json_workflow_engine.py: 7 warnings
-tests/test_product_loop_api.py: 13 warnings
-tests/test_static_contracts.py: 16 warnings
-  /usr/lib/python3.11/asyncio/events.py:80: DeprecationWarning: Passing 'msg' argument to Future.cancel() is deprecated since Python 3.11, and scheduled for removal in Python 3.14.
-    self._context.run(self._callback, *self._args)
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4598
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4598
+  /home/lison/Desktop/zhaoping/.venv/lib/python3.12/site-packages/fastapi/applications.py:4598: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
-tests/test_candidate_evaluation_task.py: 2 warnings
-tests/test_json_workflow_engine.py: 7 warnings
-tests/test_product_loop_api.py: 13 warnings
-tests/test_static_contracts.py: 16 warnings
-  /home/lison/Desktop/zhaoping/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py:605: DeprecationWarning: Passing 'msg' argument to Task.cancel() is deprecated since Python 3.11, and scheduled for removal in Python 3.14.
-    should_retry = scope._deliver_cancellation(origin) or should_retry
-
-tests/test_candidate_evaluation_task.py: 2 warnings
-tests/test_json_workflow_engine.py: 7 warnings
-tests/test_product_loop_api.py: 13 warnings
-tests/test_static_contracts.py: 16 warnings
-  /home/lison/Desktop/zhaoping/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py:605: DeprecationWarning: Passing 'msg' argument to Future.cancel() is deprecated since Python 3.11, and scheduled for removal in Python 3.14.
-    should_retry = scope._deliver_cancellation(origin) or should_retry
+app/api/main.py:86
+  /home/lison/Desktop/zhaoping/app/api/main.py:86: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-157 passed, 154 warnings in 2.22s
-
-
-## stderr
-I2026-06-09 18:49:42.349048 instance.cpp:1394] Override Enabled Addons: {}
-I2026-06-09 18:49:42.349088 instance.cpp:1395] Override Disabled Addons: {}
-I2026-06-09 18:49:42.351399 addonmanager.cpp:191] Loaded addon xcb
-I2026-06-09 18:49:42.352133 addonmanager.cpp:191] Loaded addon quickphrase
-I2026-06-09 18:49:42.352199 addonmanager.cpp:191] Loaded addon imselector
-I2026-06-09 18:49:42.354509 addonmanager.cpp:191] Loaded addon keyboard
-E2026-06-09 18:49:42.355199 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
-I2026-06-09 18:49:42.355212 addonmanager.cpp:188] Could not load addon dbus
-I2026-06-09 18:49:42.355224 addonmanager.cpp:297] Unloading addon keyboard
-I2026-06-09 18:49:42.355275 addonmanager.cpp:297] Unloading addon imselector
-I2026-06-09 18:49:42.355283 addonmanager.cpp:297] Unloading addon quickphrase
-I2026-06-09 18:49:42.355350 addonmanager.cpp:297] Unloading addon xcb
-I2026-06-09 18:49:42.355357 inputcontextmanager.cpp:318] All display connections are gone, exit now.
+196 passed, 6 warnings in 45.13s

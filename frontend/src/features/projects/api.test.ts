@@ -4,15 +4,18 @@ import type { Candidate } from "../candidates/types";
 import {
   cancelTask,
   confirmTask,
+  createProject,
   createOutreachDraft,
   createSegment,
   getIntegrationsStatus,
   getLatestWeeklyReport,
   getProject,
+  listProjects,
   getProjectCandidates,
   getProjectCandidatesPage,
   getProjectJobs,
   getOutreachHistory,
+  previewProjectFromBp,
   uploadProjectResume,
   retryTask,
   runJobMatch,
@@ -79,6 +82,62 @@ describe("projects api", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_2026_ai_team", expect.objectContaining({ method: "GET" }));
   });
 
+  it("lists all projects from the workspace endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "project_hanno_ai_hardware",
+          name: "汉诺云智招聘",
+          status: "active",
+          createdAt: "2026-06-10T00:00:00Z",
+          openJobs: 14,
+          totalCandidates: 0,
+          awaitingHuman: 0,
+          averageMatchScore: 0,
+        },
+      ]),
+    );
+
+    await expect(listProjects()).resolves.toMatchObject([
+      {
+        projectId: "project_hanno_ai_hardware",
+        name: "汉诺云智招聘",
+        openJobs: 14,
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("creates an empty isolated project", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          id: "project_new_market",
+          name: "新市场招聘项目",
+          status: "active",
+          createdAt: "2026-06-10T00:00:00Z",
+          openJobs: 0,
+          totalCandidates: 0,
+          awaitingHuman: 0,
+          averageMatchScore: 0,
+        },
+        201,
+      ),
+    );
+
+    await expect(createProject({ id: "project_new_market", name: "新市场招聘项目", status: "active" })).resolves.toMatchObject({
+      projectId: "project_new_market",
+      openJobs: 0,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ id: "project_new_market", name: "新市场招聘项目", status: "active" }),
+      }),
+    );
+  });
+
   it("maps backend jobs into the dashboard job profile shape", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse([
@@ -113,6 +172,52 @@ describe("projects api", () => {
         expect.objectContaining({ key: "sourcing", status: "processing" }),
         expect.objectContaining({ key: "evaluation", status: "processing" }),
       ]),
+    );
+  });
+
+  it("previews BP-generated roles without persisting them", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        projectId: "project_hanno_ai_hardware",
+        projectName: "汉诺云智招聘",
+        promptName: "bp_deconstructor_v2",
+        jobCount: 14,
+        jobs: [
+          {
+            id: "job_edge_ai",
+            projectId: "project_hanno_ai_hardware",
+            title: "边缘 AI 架构师",
+            headcount: 1,
+            status: "sourcing",
+            pipelineStatus: "sourcing",
+            candidateCount: 0,
+            averageMatchScore: 0,
+            mustHaveSkills: ["Edge AI"],
+          },
+        ],
+        industryReading: "边缘 AI 项目",
+        technicalAssumptions: ["需要云边协同"],
+        coverageGaps: [],
+      }),
+    );
+
+    const response = await previewProjectFromBp("project_hanno_ai_hardware", {
+      projectName: "汉诺云智招聘",
+      bpFilePath: "data/input/projects/bp_ai_hardware.md",
+      minimumRoleCount: 14,
+    });
+
+    expect(response.jobs[0]).toMatchObject({ jobProfileId: "job_edge_ai", roleName: "边缘 AI 架构师" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_hanno_ai_hardware/preview-from-bp",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          projectName: "汉诺云智招聘",
+          bpFilePath: "data/input/projects/bp_ai_hardware.md",
+          minimumRoleCount: 14,
+        }),
+      }),
     );
   });
 

@@ -5,16 +5,17 @@ import {
   candidateCounts,
   DataError,
   DataLoading,
-  DEFAULT_PROJECT_ID,
   MetricStrip,
   PageHeader,
   SectionPanel,
   StatusPill,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
 export function JobsPage() {
-  const data = useWorkspaceData();
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId });
 
   if (data.loading) return <DataLoading />;
   if (data.error) return <DataError message={data.error} onRetry={data.reload} />;
@@ -30,7 +31,7 @@ export function JobsPage() {
         subtitle="集中查看当前项目的岗位画像进度、候选人关联数和招聘漏斗状态。"
         action={
           <Link
-            to={`/projects/${DEFAULT_PROJECT_ID}`}
+            to={`/projects/${encodeURIComponent(data.projectId)}`}
             className="inline-flex h-9 items-center rounded-[10px] bg-[#2563EB] px-3 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8]"
           >
             回到项目执行

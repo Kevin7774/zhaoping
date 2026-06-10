@@ -100,12 +100,26 @@ def send_outreach_draft(
     candidate = _require_candidate(session, draft.candidate_id)
     if not candidate.email:
         raise HTTPException(status_code=409, detail="Candidate email is required before outreach send")
-    _require_contact_compliance_unlocked(session, draft.job_id, candidate.id)
+
+    compliance_status = _contact_compliance_status(session, draft.job_id, candidate.id)
+    if compliance_status in {"pending_compliance_review", "rejected"}:
+        if not request.simulate:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Candidate contact compliance status blocks real send: {compliance_status}",
+            )
+        return _record_outreach_history(
+            session,
+            draft=draft,
+            candidate=candidate,
+            status="blocked_simulation",
+            delivery_mode="simulated",
+            provider_status=f"blocked_by_compliance:{compliance_status}",
+        )
 
     if not request.simulate and not _email_delivery_active():
         raise HTTPException(status_code=503, detail="email_delivery is not active; real send is disabled")
 
-    now = _now()
     provider_result: dict[str, Any] | None = None
     delivery_mode = "simulated"
     history_status = "simulated"
@@ -123,7 +137,27 @@ def send_outreach_draft(
         history_status = str(provider_result.get("status") or "sent")
         provider_status = _provider_status(provider_result)
 
-    draft.status = history_status
+    return _record_outreach_history(
+        session,
+        draft=draft,
+        candidate=candidate,
+        status=history_status,
+        delivery_mode=delivery_mode,
+        provider_status=provider_status,
+    )
+
+
+def _record_outreach_history(
+    session: Session,
+    *,
+    draft: OutreachDraft,
+    candidate: Candidate,
+    status: str,
+    delivery_mode: str,
+    provider_status: str,
+) -> OutreachHistoryRecord:
+    now = _now()
+    draft.status = status
     draft.updated_at = now
     history = OutreachHistory(
         id=_new_id("history"),
@@ -136,7 +170,7 @@ def send_outreach_draft(
         strategy_tag=draft.strategy_tag,
         subject=draft.subject,
         body=draft.body,
-        status=history_status,
+        status=status,
         delivery_mode=delivery_mode,
         provider_status=provider_status,
         created_at=now,
@@ -464,17 +498,22 @@ def _require_draft(session: Session, draft_id: str) -> OutreachDraft:
 
 
 def _require_contact_compliance_unlocked(session: Session, job_id: str, candidate_id: str) -> None:
+    status = _contact_compliance_status(session, job_id, candidate_id)
+    if status in {"pending_compliance_review", "rejected"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Candidate contact compliance status blocks outreach drafting: {status}",
+        )
+
+
+def _contact_compliance_status(session: Session, job_id: str, candidate_id: str) -> str | None:
     link = session.scalar(
         select(JobCandidate).where(
             JobCandidate.job_id == job_id,
             JobCandidate.candidate_id == candidate_id,
         )
     )
-    if link is not None and link.pipeline_status == "pending_compliance_review":
-        raise HTTPException(
-            status_code=409,
-            detail="Candidate contact source is pending compliance review",
-        )
+    return link.pipeline_status if link is not None else None
 
 
 def _draft_response(draft: OutreachDraft) -> OutreachDraftResponse:

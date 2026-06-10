@@ -1,0 +1,26 @@
+{
+  "apiBase": "http://127.0.0.1:8010/api",
+  "beforeCandidateTotal": "5",
+  "afterCandidateTotal": "6",
+  "scenarioBTaskId": "d7eeb79c3b73",
+  "scenarioBLeadIngestion": null,
+  "created": {
+    "taskIds": [
+      "b55fee75eb18",
+      "012f67e7f896"
+    ],
+    "segmentIds": [
+      "segment_ccfa186784b9"
+    ],
+    "scheduleJobIds": [
+      "job_vla_algorithm"
+    ],
+    "reportIds": []
+  },
+  "cleanup": {
+    "scheduleDisabledJobIds": [
+      "job_vla_algorithm"
+    ]
+  }
+}
+written: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/supplemental-api-probes-v4.json

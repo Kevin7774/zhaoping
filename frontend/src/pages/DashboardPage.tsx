@@ -1,151 +1,191 @@
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
+import { createProject, listProjects, type ProjectRecord } from "../features/projects/api";
 import {
-  averageMatchScore,
   DataError,
   DataLoading,
-  DEFAULT_PROJECT_ID,
-  emptyWeeklyReport,
   formatDateTime,
-  hasWeeklyReport,
-  isCapabilityConnected,
   MetricStrip,
   PageHeader,
+  rememberActiveProjectId,
   SectionPanel,
   StatusPill,
-  topCandidates,
-  useWorkspaceData,
 } from "./projectWorkspace";
 
-const pipeline = [
-  { label: "岗位分析", path: "/jobs", description: "查看岗位画像、人数、候选人关联和当前状态" },
-  { label: "找候选人", path: "/talent-map", description: "按来源、城市、公司分布检查人才地图" },
-  { label: "候选人评估", path: "/scenarios", description: "从候选人列表启动 Agent 评估任务" },
-  { label: "人群筛选", path: "/candidates", description: "按岗位、城市、分数、邮箱状态筛选候选人" },
-  { label: "邮件触达", path: "/outreach", description: "生成后端邮件草稿并查看触达记录" },
-  { label: "招聘周报", path: "/reports", description: "读取或启动本周招聘周报任务" },
-];
+function projectUrl(projectId: string) {
+  return `/projects/${encodeURIComponent(projectId)}`;
+}
 
 export function DashboardPage() {
-  const data = useWorkspaceData({
-    includeIntegrations: true,
-    includeLatestReport: true,
-    includeScenarios: true,
-  });
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectStatus, setProjectStatus] = useState("active");
+  const [reloadToken, setReloadToken] = useState(0);
 
-  if (data.loading) return <DataLoading />;
-  if (data.error) return <DataError message={data.error} onRetry={data.reload} />;
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    listProjects()
+      .then((items) => {
+        if (!cancelled) setProjects(items);
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "项目列表加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
 
-  const score = data.project?.averageMatchScore || averageMatchScore(data.candidates);
-  const connectedCapabilities =
-    data.integrations?.capabilities?.filter((capability) => isCapabilityConnected(capability)).length ?? 0;
-  const report = data.latestReport?.content ?? emptyWeeklyReport();
+  const totals = useMemo(
+    () => ({
+      jobs: projects.reduce((total, project) => total + project.openJobs, 0),
+      candidates: projects.reduce((total, project) => total + project.totalCandidates, 0),
+      awaiting: projects.reduce((total, project) => total + project.awaitingHuman, 0),
+    }),
+    [projects],
+  );
+
+  async function handleCreateProject() {
+    const id = projectId.trim();
+    const name = projectName.trim();
+    if (!id || !name) {
+      setCreateError("请填写项目 ID 和项目名称。");
+      return;
+    }
+    setCreating(true);
+    setCreateError("");
+    try {
+      const created = await createProject({ id, name, status: projectStatus });
+      setProjects((current) => [created, ...current.filter((project) => project.projectId !== created.projectId)]);
+      rememberActiveProjectId(created.projectId);
+      navigate(projectUrl(created.projectId));
+    } catch (createProjectError) {
+      setCreateError(createProjectError instanceof Error ? createProjectError.message : "项目创建失败");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (loading) return <DataLoading />;
+  if (error) return <DataError message={error} onRetry={() => setReloadToken((current) => current + 1)} />;
 
   return (
     <div className="pb-8">
       <PageHeader
         title="工作台"
-        subtitle="汇总当前招聘项目的真实后端数据，并把岗位、候选人、任务、周报等能力入口放到一个工作面。"
-        action={
-          <Link
-            to={`/projects/${DEFAULT_PROJECT_ID}`}
-            className="inline-flex h-9 items-center rounded-[10px] bg-[#2563EB] px-3 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8]"
-          >
-            进入招聘项目
-          </Link>
-        }
+        subtitle="项目是顶层隔离空间。先选择或创建项目，再进入该项目的岗位、候选人、周报和触达流程。"
       />
 
       <MetricStrip
         items={[
-          { label: "当前项目", value: data.project?.name ?? "—", helper: formatDateTime(data.project?.updatedAt) },
-          { label: "开放岗位", value: data.jobs.length, helper: "GET /projects/{projectId}/jobs", tone: "text-[#2563EB]" },
-          {
-            label: "候选人",
-            value: data.candidateTotal ?? data.candidates.length,
-            helper: data.hasMoreCandidates ? "已加载前 80 条" : "已加载全部",
-            tone: "text-[#16A34A]",
-          },
-          {
-            label: "平均匹配分",
-            value: score ?? "—",
-            helper: `${connectedCapabilities} 个后端能力已接入`,
-            tone: "text-[#111827]",
-          },
+          { label: "项目数", value: projects.length, helper: "GET /projects", tone: "text-[#2563EB]" },
+          { label: "开放岗位", value: totals.jobs, helper: "按项目汇总" },
+          { label: "候选人", value: totals.candidates, helper: "按项目去重统计", tone: "text-[#16A34A]" },
+          { label: "待人工确认", value: totals.awaiting, helper: "awaiting_human / compliance", tone: "text-[#F59E0B]" },
         ]}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-        <SectionPanel title="招聘流程入口" subtitle="侧栏每个入口都对应一个可独立查看的数据页。">
-          <div className="grid gap-3 md:grid-cols-2">
-            {pipeline.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className="rounded-[12px] border border-[#EEF2F7] bg-[#FCFCFD] p-4 transition hover:border-[#BFDBFE] hover:bg-[#EFF6FF]"
-              >
-                <div className="text-[14px] font-semibold text-[#111827]">{item.label}</div>
-                <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">{item.description}</p>
-              </Link>
-            ))}
-          </div>
-        </SectionPanel>
-
-        <SectionPanel title="本周状态" subtitle="周报和人工确认状态来自任务与项目接口。">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#F9FAFB] px-4 py-3">
-              <div>
-                <div className="text-[13px] font-semibold text-[#111827]">项目状态</div>
-                <div className="mt-0.5 text-[12px] text-[#6B7280]">{data.project?.projectId}</div>
-              </div>
-              <StatusPill status={data.project?.status} />
-            </div>
-            <div className="rounded-[12px] bg-[#F9FAFB] px-4 py-3">
-              <div className="text-[13px] font-semibold text-[#111827]">招聘周报</div>
-              <div className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
-                {hasWeeklyReport(report) ? report.conclusion || "已有持久化周报" : "暂无持久化周报，可在招聘周报页生成。"}
-              </div>
-            </div>
-            <div className="rounded-[12px] bg-[#F9FAFB] px-4 py-3">
-              <div className="text-[13px] font-semibold text-[#111827]">待人工确认</div>
-              <div className="mt-1 text-[20px] font-bold text-[#F59E0B]">{data.project?.awaitingHuman ?? 0}</div>
-            </div>
-          </div>
-        </SectionPanel>
-      </div>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <SectionPanel title="岗位概览" subtitle="来自当前项目岗位接口。">
-          {data.jobs.length ? (
-            <div className="space-y-3">
-              {data.jobs.map((job) => (
-                <div key={job.jobProfileId} className="flex items-center justify-between gap-4 rounded-[12px] bg-[#F9FAFB] px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
-                    <div className="mt-0.5 text-[12px] text-[#6B7280]">HC {job.headcount ?? "—"} · 候选人 {job.candidateCount ?? 0}</div>
-                  </div>
-                  <StatusPill status={job.pipelineStatus} />
-                </div>
-              ))}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <SectionPanel title="项目列表" subtitle="点击项目进入独立工作空间。">
+          {projects.length === 0 ? (
+            <div className="rounded-[12px] border border-dashed border-[#D1D5DB] bg-[#F9FAFB] px-5 py-8 text-center text-[13px] text-[#6B7280]">
+              暂无项目。先创建一个空项目，或进入项目后从 BP 智能生成岗位。
             </div>
           ) : (
-            <div className="text-[13px] text-[#6B7280]">暂无岗位。</div>
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] w-full text-left text-[13px] leading-5">
+                <thead className="h-11 bg-[#F9FAFB] text-[12px] font-semibold text-[#6B7280]">
+                  <tr>
+                    <th className="w-[260px] px-4">项目</th>
+                    <th className="w-[100px] px-3">岗位</th>
+                    <th className="w-[100px] px-3">候选人</th>
+                    <th className="w-[120px] px-3">状态</th>
+                    <th className="w-[170px] px-3">创建时间</th>
+                    <th className="px-4 text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EEF2F7]">
+                  {projects.map((project) => (
+                    <tr key={project.projectId}>
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-[#111827]">{project.name}</div>
+                        <div className="mt-1 font-mono text-[12px] text-[#9CA3AF]">{project.projectId}</div>
+                      </td>
+                      <td className="px-3 py-4 text-[#374151]">{project.openJobs}</td>
+                      <td className="px-3 py-4 text-[#374151]">{project.totalCandidates}</td>
+                      <td className="px-3 py-4">
+                        <StatusPill status={project.status} />
+                      </td>
+                      <td className="px-3 py-4 text-[#374151]">{formatDateTime(project.updatedAt)}</td>
+                      <td className="px-4 py-4 text-right">
+                        <Link
+                          to={projectUrl(project.projectId)}
+                          onClick={() => rememberActiveProjectId(project.projectId)}
+                          className="inline-flex h-9 items-center rounded-[10px] bg-[#2563EB] px-3 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8]"
+                        >
+                          进入项目
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </SectionPanel>
 
-        <SectionPanel title="Top 候选人" subtitle="按当前匹配分排序。">
-          <div className="space-y-3">
-            {topCandidates(data.candidates, 5).map((candidate) => (
-              <div key={candidate.candidateId} className="flex items-center justify-between gap-4 rounded-[12px] bg-[#F9FAFB] px-4 py-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-[#111827]">{candidate.name}</div>
-                  <div className="mt-0.5 truncate text-[12px] text-[#6B7280]">
-                    {candidate.currentCompany ?? "—"} · {candidate.city ?? "—"}
-                  </div>
-                </div>
-                <div className="text-[18px] font-bold text-[#2563EB]">{candidate.matchScore ?? "—"}</div>
-              </div>
-            ))}
+        <SectionPanel title="新建项目" subtitle="创建后会进入一个没有岗位和候选人的隔离空间。">
+          <div className="space-y-4">
+            <label className="block text-[12px] font-medium text-[#6B7280]">
+              项目 ID
+              <input
+                value={projectId}
+                onChange={(event) => setProjectId(event.currentTarget.value)}
+                placeholder="project_hanno_ai_hardware"
+                className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827] placeholder:text-[#9CA3AF]"
+              />
+            </label>
+            <label className="block text-[12px] font-medium text-[#6B7280]">
+              项目名称
+              <input
+                value={projectName}
+                onChange={(event) => setProjectName(event.currentTarget.value)}
+                placeholder="汉诺云智招聘"
+                className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827] placeholder:text-[#9CA3AF]"
+              />
+            </label>
+            <label className="block text-[12px] font-medium text-[#6B7280]">
+              状态
+              <select
+                value={projectStatus}
+                onChange={(event) => setProjectStatus(event.currentTarget.value)}
+                className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+              >
+                <option value="active">进行中</option>
+                <option value="paused">暂停</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleCreateProject}
+              disabled={creating}
+              className="h-10 w-full rounded-[10px] bg-[#2563EB] text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:bg-[#BFDBFE]"
+            >
+              {creating ? "创建中" : "创建空项目"}
+            </button>
+            {createError ? <div className="text-[13px] text-[#EF4444]">{createError}</div> : null}
           </div>
         </SectionPanel>
       </div>

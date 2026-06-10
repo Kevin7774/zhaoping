@@ -1,34 +1,10 @@
-$ pnpm --dir frontend build
-started_at=2026-06-09T10:49:39.512Z
-finished_at=2026-06-09T10:49:40.817Z
-exit_code=0
-signal=
-timed_out=false
-
-## stdout
+$ tsc -p tsconfig.json --noEmit && vite build
 vite v8.0.14 building client environment for production...
-[2Ktransforming...✓ 47 modules transformed.
+[2Ktransforming...✓ 50 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html                   0.48 kB │ gzip:   0.33 kB
-dist/assets/index-B43voliP.css   86.59 kB │ gzip:  16.06 kB
-dist/assets/index-CU-SKQT1.js   351.82 kB │ gzip: 107.91 kB
+dist/assets/index-giKpl4Rf.css   89.19 kB │ gzip:  16.54 kB
+dist/assets/index-BAaYwSPF.js   406.83 kB │ gzip: 119.75 kB
 
-✓ built in 151ms
-
-
-## stderr
-I2026-06-09 18:49:39.521051 instance.cpp:1394] Override Enabled Addons: {}
-I2026-06-09 18:49:39.521095 instance.cpp:1395] Override Disabled Addons: {}
-I2026-06-09 18:49:39.523772 addonmanager.cpp:191] Loaded addon xcb
-I2026-06-09 18:49:39.524888 addonmanager.cpp:191] Loaded addon quickphrase
-I2026-06-09 18:49:39.525006 addonmanager.cpp:191] Loaded addon imselector
-I2026-06-09 18:49:39.528758 addonmanager.cpp:191] Loaded addon keyboard
-E2026-06-09 18:49:39.529615 addonloader.cpp:61] Failed to create addon: dbus Unable to request dbus name. Is there another fcitx already running?
-I2026-06-09 18:49:39.529636 addonmanager.cpp:188] Could not load addon dbus
-I2026-06-09 18:49:39.529668 addonmanager.cpp:297] Unloading addon keyboard
-I2026-06-09 18:49:39.529743 addonmanager.cpp:297] Unloading addon imselector
-I2026-06-09 18:49:39.529758 addonmanager.cpp:297] Unloading addon quickphrase
-I2026-06-09 18:49:39.529847 addonmanager.cpp:297] Unloading addon xcb
-I2026-06-09 18:49:39.529858 inputcontextmanager.cpp:318] All display connections are gone, exit now.
-$ tsc -p tsconfig.json --noEmit && vite build
+✓ built in 250ms

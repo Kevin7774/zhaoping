@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 PLACEHOLDER_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
@@ -19,6 +19,8 @@ class WorkflowValidationException(ValueError):
 
 
 class StepDefinition(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
     type: Literal["search", "llm_prompt", "structured_extract", "save_artifact", "human_gate"]
     input: str | dict[str, Any] | None = None
@@ -29,7 +31,7 @@ class StepDefinition(BaseModel):
     limit: int | None = None
     max_tokens: int | None = None
     temperature: float | None = None
-    schema: dict[str, Any] | None = None
+    json_schema: dict[str, Any] | None = Field(default=None, alias="schema")
     max_retries: int = 0
     on_failure: Literal["error", "human_gate"] = "error"
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -49,7 +51,7 @@ class StepDefinition(BaseModel):
             raise WorkflowValidationException("search step requires input and output_key")
         if self.type == "llm_prompt" and (not self.prompt or not self.output_key):
             raise WorkflowValidationException("llm_prompt step requires prompt and output_key")
-        if self.type == "structured_extract" and (self.input is None or not self.schema or not self.output_key):
+        if self.type == "structured_extract" and (self.input is None or not self.json_schema or not self.output_key):
             raise WorkflowValidationException("structured_extract step requires input, schema, and output_key")
         if self.type == "save_artifact" and (self.input is None or not self.output_key):
             raise WorkflowValidationException("save_artifact step requires input and output_key")
@@ -60,7 +62,7 @@ class StepDefinition(BaseModel):
         if self.type in CONTEXT_REQUIRED_STEP_TYPES and self.output_type != CONTEXT_OUTPUT_TYPE:
             raise WorkflowValidationException(f"{self.type} step output_type must be context")
         if self.type == "structured_extract":
-            _validate_json_schema_contract(self.schema or {}, f"step '{self.id}' schema")
+            _validate_json_schema_contract(self.json_schema or {}, f"step '{self.id}' schema")
         if self.max_retries < 0 or self.max_retries > 5:
             raise WorkflowValidationException("max_retries must be between 0 and 5")
         if self.limit is not None and (self.limit < 1 or self.limit > 50):

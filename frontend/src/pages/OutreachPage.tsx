@@ -9,11 +9,13 @@ import {
   PageHeader,
   PrimaryButton,
   SectionPanel,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
 export function OutreachPage() {
-  const data = useWorkspaceData({ includeOutreachHistory: true });
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId, includeOutreachHistory: true });
   const [busyCandidateId, setBusyCandidateId] = useState<string | null>(null);
   const [draft, setDraft] = useState<OutreachDraft | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

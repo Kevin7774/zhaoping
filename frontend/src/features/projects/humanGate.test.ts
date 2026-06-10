@@ -33,4 +33,49 @@ describe("human gate request helpers", () => {
   it("ignores non-human-gate events", () => {
     expect(humanGateRequestFromEvent({ id: 8, type: "summary", message: "done" }, "task_1")).toBeNull();
   });
+
+  it("keeps Scenario B lead preview for non-blind HumanGate approval", () => {
+    const event: TaskStreamEvent = {
+      id: 9,
+      type: "human_gate",
+      message: "流程暂停，等待人工确认：请确认待入库线索",
+      data: {
+        awaiting: {
+          prompt: "确认后将把这些线索写入项目候选人库。",
+          requires_lead_preview: true,
+          lead_preview: {
+            total_count: 1,
+            omitted_count: 0,
+            leads: [
+              {
+                name: "Alice Wang",
+                source_platform: "github_repositories",
+                source_url: "https://github.com/alicewang/robot-vla",
+                evidence_summary: "Maintains robot-vla with diffusion policy examples.",
+                confidence: 0.86,
+                matched_job: "VLA / 具身智能算法工程师",
+                compliance_status: "clear",
+                ingestion_action: "insert",
+              },
+            ],
+          },
+          draft: {
+            "触达话术": "技术切磋",
+          },
+        },
+      },
+      status: "awaiting_human",
+    };
+
+    const request = humanGateRequestFromEvent(event, "task_B");
+
+    expect(request?.requiresLeadPreview).toBe(true);
+    expect(request?.leadPreview?.totalCount).toBe(1);
+    expect(request?.leadPreview?.leads[0]).toMatchObject({
+      name: "Alice Wang",
+      sourcePlatform: "github_repositories",
+      evidenceSummary: "Maintains robot-vla with diffusion policy examples.",
+      ingestionAction: "insert",
+    });
+  });
 });

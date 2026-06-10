@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import queue
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
@@ -23,15 +25,16 @@ from app.schemas.candidate_search_schedule import (
 )
 from app.schemas.candidate import CandidateComplianceReviewRequest, CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
-from app.schemas.project import ProjectBpInitializeRequest, ProjectBpInitializeResponse, ProjectResponse
+from app.schemas.project import ProjectBpInitializeRequest, ProjectBpInitializeResponse, ProjectCreate, ProjectResponse
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 PENDING_COMPLIANCE_REVIEW_STATUS = "pending_compliance_review"
 PIPELINE_STATUS_PRIORITY = (PENDING_COMPLIANCE_REVIEW_STATUS, "awaiting_human", "processing", "pending_outreach", "sourced", "done")
 BP_DECONSTRUCTOR_PROMPT_NAME = "bp_deconstructor_v2"
-BP_DECONSTRUCTOR_MAX_TOKENS = 16000
+BP_DECONSTRUCTOR_MAX_TOKENS = 6000
 BP_DECONSTRUCTOR_MAX_ATTEMPTS = 3
+BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS = 25.0
 BP_DECONSTRUCTOR_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["industry_reading", "technical_assumptions", "roles", "coverage_gaps"],
@@ -67,6 +70,36 @@ class JobStats(TypedDict):
     pipeline_status: str | None
 
 
+@router.get("", response_model=list[ProjectResponse])
+def list_projects(session: Session = Depends(get_project_session)) -> list[ProjectResponse]:
+    projects = session.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.asc())).all()
+    return [_project_response(project, _project_stats(session, project.id)) for project in projects]
+
+
+@router.post("", response_model=ProjectResponse, status_code=201)
+def create_project(request: ProjectCreate, session: Session = Depends(get_project_session)) -> ProjectResponse:
+    if session.get(Project, request.id) is not None:
+        raise HTTPException(status_code=409, detail=f"Project already exists: {request.id}")
+    project = Project(id=request.id, name=request.name, status=request.status)
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return _project_response(project, _project_stats(session, project.id))
+
+
+@router.post(
+    "/{project_id}/preview-from-bp",
+    response_model=ProjectBpInitializeResponse,
+    response_model_exclude_none=True,
+)
+def preview_project_from_bp(
+    project_id: str,
+    request: ProjectBpInitializeRequest,
+) -> ProjectBpInitializeResponse:
+    matrix, jobs = _deconstruct_jobs_from_bp(project_id, request)
+    return _bp_initialize_response(project_id, request.project_name, matrix, jobs)
+
+
 @router.post(
     "/{project_id}/initialize-from-bp",
     response_model=ProjectBpInitializeResponse,
@@ -76,26 +109,7 @@ def initialize_project_from_bp(
     project_id: str,
     request: ProjectBpInitializeRequest,
 ) -> ProjectBpInitializeResponse:
-    bp_path = Path(request.bp_file_path)
-    if not bp_path.is_file():
-        raise HTTPException(status_code=404, detail=f"BP file not found: {request.bp_file_path}")
-    bp_text = bp_path.read_text(encoding="utf-8")
-    if not bp_text.strip():
-        raise HTTPException(status_code=422, detail="BP file is empty")
-
-    prompt = _build_bp_deconstructor_prompt(bp_text)
-    try:
-        llm = get_router().llm(request.llm_service)
-        matrix = _deconstruct_bp_matrix(llm, prompt, minimum_role_count=request.minimum_role_count)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"BP deconstructor LLM failed: {exc}") from exc
-    roles = matrix.get("roles")
-    if not isinstance(roles, list) or not roles:
-        raise HTTPException(status_code=502, detail="BP deconstructor returned no roles")
-
-    jobs = [_job_from_role(project_id, role, index) for index, role in enumerate(roles)]
+    matrix, jobs = _deconstruct_jobs_from_bp(project_id, request)
     factory = project_session_factory()
     with factory() as session:
         existing_job_ids = set(session.scalars(select(Job.id).where(Job.project_id == project_id)).all())
@@ -112,37 +126,14 @@ def initialize_project_from_bp(
         session.flush()
         session.add_all(jobs)
         session.commit()
-        response_jobs = [
-            _job_response(job, {"candidate_count": 0, "average_match_score": 0, "pipeline_status": None})
-            for job in jobs
-        ]
 
-    return ProjectBpInitializeResponse(
-        project_id=project_id,
-        project_name=request.project_name,
-        prompt_name=BP_DECONSTRUCTOR_PROMPT_NAME,
-        job_count=len(response_jobs),
-        jobs=response_jobs,
-        industry_reading=_clean_text(matrix.get("industry_reading")),
-        technical_assumptions=_string_list(matrix.get("technical_assumptions")),
-        coverage_gaps=_string_list(matrix.get("coverage_gaps")),
-    )
+    return _bp_initialize_response(project_id, request.project_name, matrix, jobs)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: str, session: Session = Depends(get_project_session)) -> ProjectResponse:
     project = _require_project(session, project_id)
-    stats = _project_stats(session, project_id)
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        status=project.status,
-        created_at=_utc_datetime(project.created_at),
-        open_jobs=stats["open_jobs"],
-        total_candidates=stats["total_candidates"],
-        awaiting_human=stats["awaiting_human"],
-        average_match_score=stats["average_match_score"],
-    )
+    return _project_response(project, _project_stats(session, project_id))
 
 
 @router.get("/{project_id}/jobs", response_model=list[JobResponse], response_model_exclude_none=True)
@@ -209,9 +200,12 @@ def confirm_candidate_contact_compliance(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Project candidate not found: {job_candidate_id}")
     job_candidate, candidate, job = row
-    if request.decision != "approve":
-        raise HTTPException(status_code=409, detail="Compliance review currently supports approve decisions only")
-    if job_candidate.pipeline_status == PENDING_COMPLIANCE_REVIEW_STATUS:
+    if request.decision == "reject":
+        job_candidate.pipeline_status = "rejected"
+        session.commit()
+        session.refresh(job_candidate)
+        return _candidate_response(job_candidate, candidate, job)
+    if request.decision == "approve":
         job_candidate.pipeline_status = "pending_outreach" if candidate.email else "sourced"
         session.commit()
         session.refresh(job_candidate)
@@ -329,6 +323,66 @@ def _require_project(session: Session, project_id: str) -> Project:
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return project
+
+
+def _project_response(project: Project, stats: dict[str, int]) -> ProjectResponse:
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        status=project.status,
+        created_at=_utc_datetime(project.created_at),
+        open_jobs=stats["open_jobs"],
+        total_candidates=stats["total_candidates"],
+        awaiting_human=stats["awaiting_human"],
+        average_match_score=stats["average_match_score"],
+    )
+
+
+def _deconstruct_jobs_from_bp(
+    project_id: str,
+    request: ProjectBpInitializeRequest,
+) -> tuple[dict[str, Any], list[Job]]:
+    bp_path = Path(request.bp_file_path)
+    if not bp_path.is_file():
+        raise HTTPException(status_code=404, detail=f"BP file not found: {request.bp_file_path}")
+    bp_text = bp_path.read_text(encoding="utf-8")
+    if not bp_text.strip():
+        raise HTTPException(status_code=422, detail="BP file is empty")
+
+    prompt = _build_bp_deconstructor_prompt(bp_text)
+    try:
+        llm = get_router().llm(request.llm_service)
+        matrix = _deconstruct_bp_matrix(llm, prompt, minimum_role_count=request.minimum_role_count)
+    except HTTPException:
+        raise
+    except TimeoutError as exc:
+        matrix = _fallback_bp_matrix(bp_text, minimum_role_count=request.minimum_role_count, reason=str(exc))
+    except Exception as exc:
+        matrix = _fallback_bp_matrix(bp_text, minimum_role_count=request.minimum_role_count, reason=f"LLM failed: {exc}")
+    roles = matrix.get("roles")
+    if not isinstance(roles, list) or not roles:
+        raise HTTPException(status_code=502, detail="BP deconstructor returned no roles")
+    return matrix, [_job_from_role(project_id, role, index) for index, role in enumerate(roles)]
+
+
+def _bp_initialize_response(
+    project_id: str,
+    project_name: str,
+    matrix: dict[str, Any],
+    jobs: list[Job],
+) -> ProjectBpInitializeResponse:
+    empty_stats: JobStats = {"candidate_count": 0, "average_match_score": 0, "pipeline_status": None}
+    response_jobs = [_job_response(job, empty_stats) for job in jobs]
+    return ProjectBpInitializeResponse(
+        project_id=project_id,
+        project_name=project_name,
+        prompt_name=BP_DECONSTRUCTOR_PROMPT_NAME,
+        job_count=len(response_jobs),
+        jobs=response_jobs,
+        industry_reading=_clean_text(matrix.get("industry_reading")),
+        technical_assumptions=_string_list(matrix.get("technical_assumptions")),
+        coverage_gaps=_string_list(matrix.get("coverage_gaps")),
+    )
 
 
 def _candidate_search_schedule_response(
@@ -549,7 +603,11 @@ def _deconstruct_bp_matrix(
     prompt = initial_prompt
     last_error = "unknown structured output error"
     for _attempt in range(BP_DECONSTRUCTOR_MAX_ATTEMPTS):
-        output = llm.text(prompt, max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS)
+        output = _run_with_timeout(
+            lambda: _bp_deconstructor_text(llm, prompt),
+            timeout_seconds=BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS,
+            label="BP deconstructor LLM",
+        )
         try:
             matrix = _parse_bp_deconstructor_output(output)
             _validate_minimum_role_count(matrix, minimum_role_count=minimum_role_count)
@@ -558,6 +616,60 @@ def _deconstruct_bp_matrix(
             last_error = str(exc.detail)
             prompt = _bp_repair_prompt(output, last_error, minimum_role_count)
     raise HTTPException(status_code=502, detail=f"BP deconstructor structured output failed: {last_error}")
+
+
+def _run_with_timeout(fn, *, timeout_seconds: float, label: str) -> Any:  # noqa: ANN001
+    result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+
+    def target() -> None:
+        try:
+            result_queue.put(("ok", fn()))
+        except BaseException as exc:  # noqa: BLE001
+            result_queue.put(("error", exc))
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        raise TimeoutError(f"{label} timed out after {timeout_seconds:g}s")
+    status, payload = result_queue.get()
+    if status == "error":
+        raise payload
+    return payload
+
+
+def _bp_deconstructor_text(llm: Any, prompt: str) -> str:
+    messages = getattr(llm, "messages", None)
+    if callable(messages):
+        response = messages(
+            [{"role": "user", "content": prompt}],
+            max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        content = _message_response_content(response)
+        if content:
+            return content
+    return llm.text(prompt, max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS)
+
+
+def _message_response_content(response: Any) -> str | None:
+    if isinstance(response, str):
+        return response
+    if not isinstance(response, dict):
+        return None
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        return None
+    message = first_choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        return str(content).strip() if content else None
+    text = first_choice.get("text")
+    return str(text).strip() if text else None
 
 
 def _validate_minimum_role_count(matrix: dict[str, Any], *, minimum_role_count: int) -> None:
@@ -582,6 +694,68 @@ def _bp_repair_prompt(last_output: str, validation_error: str, minimum_role_coun
         "scoring_rubric 保留 3-5 个维度。\n"
         f"数量硬约束：至少输出 {minimum_role_count} 个 roles；不要用重复岗位凑数。"
     )
+
+
+def _fallback_bp_matrix(bp_text: str, *, minimum_role_count: int, reason: str) -> dict[str, Any]:
+    role_specs = [
+        ("industry_solution_lead", "行业研究与解决方案负责人", "Lead", ["拆解 BP 的目标行业、客户场景和交付边界", "把行业痛点转成岗位矩阵、解决方案包和售前验证清单"], ["行业研究", "解决方案架构", "B2B 交付"], ["咨询公司 AI/IoT 团队", "政企数字化服务商"]),
+        ("edge_ai_architect", "边缘 AI 架构师", "Senior", ["设计边缘计算、模型推理、设备接入和云端管理的总体架构", "定义边缘盒子、工控机、GPU/NPU 和现场网络的技术选型"], ["Edge AI", "边缘计算", "系统架构"], ["边缘计算平台公司", "智能硬件厂商"]),
+        ("cloud_edge_platform", "云边协同平台工程师", "Senior", ["建设设备注册、远程配置、任务下发和状态回传链路", "维护边缘节点与云端控制面的可靠同步"], ["Kubernetes", "MQTT", "API Gateway"], ["物联网平台团队", "工业互联网公司"]),
+        ("data_governance_engineer", "数据治理与实时数据工程师", "Senior", ["设计多源数据采集、清洗、质量检查和权限分层", "支撑模型训练、RAG 检索和现场运营分析"], ["PostgreSQL", "ETL", "Data Quality"], ["数据中台团队", "工业数据公司"]),
+        ("rag_application_engineer", "RAG 与知识库应用工程师", "Senior", ["建设文档解析、向量检索、召回评估和答案证据链", "把行业知识、设备手册和项目文档接入应用工作流"], ["RAG", "向量数据库", "文档解析"], ["企业知识库团队", "AI 应用公司"]),
+        ("ocr_multimodal_engineer", "OCR 与多模态识别工程师", "Senior", ["处理票据、表单、现场图片和传感器上下文的结构化识别", "设计 OCR、多模态模型和人工复核闭环"], ["OCR", "多模态模型", "CV"], ["OCR 厂商", "视觉 AI 团队"]),
+        ("agent_workflow_engineer", "AI Agent 工作流工程师", "Senior", ["设计任务编排、人工确认、工具调用和失败恢复流程", "把岗位分析、候选人搜索、评估和周报纳入可观测工作流"], ["FastAPI", "Agent Workflow", "SSE"], ["AI Agent 初创公司", "自动化平台团队"]),
+        ("hardware_delivery_engineer", "智能硬件交付工程师", "Senior", ["负责边缘盒子、传感器、网关和现场设备联调", "形成安装、验收、故障排查和备件策略"], ["IoT", "工控机", "现场部署"], ["智能硬件厂商", "系统集成商"]),
+        ("devops_private_deployment", "DevOps 与私有化部署工程师", "Senior", ["建设私有化部署、环境初始化、监控告警和升级回滚链路", "保障客户现场网络、容器、数据库和服务稳定运行"], ["Docker", "Linux", "Observability"], ["SaaS 私有化团队", "政企交付团队"]),
+        ("fullstack_product_engineer", "全栈产品工程师", "Senior", ["实现客户工作台、配置后台、数据看板和权限入口", "把复杂 AI 能力包装成可操作的业务流程"], ["React", "TypeScript", "FastAPI"], ["B2B SaaS 团队", "AI 产品团队"]),
+        ("qa_evaluation_engineer", "测试质量与模型评估工程师", "Senior", ["建立端到端测试、模型评估、回归集和现场验收指标", "覆盖 API、前端、任务流、模型输出和数据质量"], ["E2E Testing", "Model Evaluation", "pytest"], ["测试平台团队", "AI 评测团队"]),
+        ("security_compliance_engineer", "数据安全与合规工程师", "Senior", ["设计隐私、权限、审计、数据留存和合规检查机制", "支撑医疗、教育、政企等高约束场景落地"], ["数据安全", "权限审计", "隐私合规"], ["安全合规团队", "政企解决方案团队"]),
+        ("product_delivery_manager", "AI 产品交付经理", "Lead", ["把 BP 路线图拆成项目计划、里程碑、风险和验收标准", "协调研发、硬件、客户和供应商完成交付闭环"], ["项目管理", "AI 产品交付", "客户沟通"], ["AI 解决方案公司", "系统集成团队"]),
+        ("customer_success_engineer", "客户成功与运维工程师", "Senior", ["运营上线后的客户问题、使用反馈和价值复盘", "沉淀常见问题、培训材料和续费扩展线索"], ["客户成功", "运维支持", "业务复盘"], ["企业服务团队", "政企客户成功团队"]),
+    ]
+    while len(role_specs) < minimum_role_count:
+        index = len(role_specs) + 1
+        role_specs.append(
+            (
+                f"bp_specialist_{index}",
+                f"BP 专项交付工程师 {index}",
+                "Senior",
+                ["补齐 BP 中未完全展开的专项交付链路", "形成可验证的技术方案和交付清单"],
+                ["系统交付", "问题定位", "技术文档"],
+                ["AI 解决方案团队", "企业服务团队"],
+            )
+        )
+    roles = []
+    for role_id, title, seniority, responsibilities, skills, target_companies in role_specs[:minimum_role_count]:
+        roles.append(
+            {
+                "role_id": role_id,
+                "title": title,
+                "seniority": seniority,
+                "responsibilities": responsibilities,
+                "must_have_skills": skills,
+                "nice_to_have_skills": ["边缘计算", "AI 工程化", "客户现场经验"],
+                "target_companies": target_companies,
+                "exclusion_signals": ["只做概念 Demo，缺少生产交付或现场问题闭环"],
+                "interview_questions": [f"请拆解一个与「{title}」相关的复杂交付问题，并说明排查路径。"],
+                "scoring_rubric": {"domain_fit": 35, "engineering_depth": 35, "delivery_risk_control": 30},
+                "search_strategy": {
+                    "community": f'"{skills[0]}" AND "{skills[-1]}" AND production',
+                    "academic": f'"{skills[0]}" AND evaluation AND deployment',
+                    "industry": f'"{title}" OR "{target_companies[0]}"',
+                },
+            }
+        )
+    bp_excerpt = " ".join(bp_text.split())[:180]
+    return {
+        "industry_reading": f"基于 BP 摘要生成保守岗位矩阵：{bp_excerpt}",
+        "technical_assumptions": [
+            "BP 涉及边缘计算、AI 应用、智能硬件和私有化交付，需要按产品、工程、硬件、交付和合规分层招聘。",
+            "当前矩阵为 LLM 超时或不可用时的保守 fallback，适合先启动项目空间，后续可再次用 LLM 精修。",
+        ],
+        "roles": roles,
+        "coverage_gaps": [reason, "fallback 未读取外部行业资料；建议在 LLM 可用时重新预览岗位矩阵。"],
+    }
 
 
 def _job_from_role(project_id: str, role: Any, index: int) -> Job:

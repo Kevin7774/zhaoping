@@ -7,11 +7,13 @@ import {
   MetricStrip,
   PageHeader,
   SectionPanel,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
 export function IntegrationsPage() {
-  const data = useWorkspaceData({ includeIntegrations: true });
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId, includeIntegrations: true });
 
   if (data.loading) return <DataLoading />;
   if (data.error) return <DataError message={data.error} onRetry={data.reload} />;

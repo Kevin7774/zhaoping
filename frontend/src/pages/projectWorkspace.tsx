@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useParams } from "react-router-dom";
 
 import type { Candidate } from "../features/candidates/types";
 import type { JobProfile } from "../features/jobs/types";
@@ -20,6 +21,7 @@ import {
 } from "../features/projects/api";
 
 export const DEFAULT_PROJECT_ID = "project_2026_ai_team";
+export const ACTIVE_PROJECT_ID_KEY = "zhaoping_active_project_id";
 export const RECENT_TASK_IDS_KEY = "zhaoping_recent_task_ids";
 
 const DEFAULT_CANDIDATE_LIMIT = 80;
@@ -81,6 +83,40 @@ async function optional<T>(enabled: boolean, loader: () => Promise<T>): Promise<
   } catch (error) {
     return { value: null, error: errorMessage(error) };
   }
+}
+
+export function readActiveProjectId() {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(ACTIVE_PROJECT_ID_KEY)?.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberActiveProjectId(projectId: string) {
+  const normalized = projectId.trim();
+  if (!normalized || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ACTIVE_PROJECT_ID_KEY, normalized);
+  } catch {
+    // localStorage can be unavailable in private browsing or tests. The URL project still drives the page.
+  }
+}
+
+export function useActiveProjectId(fallback = DEFAULT_PROJECT_ID) {
+  const { projectId: routeProjectId } = useParams();
+  const [storedProjectId, setStoredProjectId] = useState(() => readActiveProjectId() || fallback);
+  const activeProjectId = routeProjectId?.trim() || storedProjectId || fallback;
+
+  useEffect(() => {
+    if (!routeProjectId?.trim()) return;
+    rememberActiveProjectId(routeProjectId);
+    setStoredProjectId(routeProjectId);
+  }, [routeProjectId]);
+
+  return activeProjectId;
 }
 
 export function useWorkspaceData({

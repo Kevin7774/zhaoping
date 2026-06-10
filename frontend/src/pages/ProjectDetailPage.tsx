@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
 
 import { CandidateTable } from "../features/candidates/components/CandidateTable";
 import type { Candidate } from "../features/candidates/types";
 import type { JobProfile, StepStatus } from "../features/jobs/types";
 import {
+  initializeProjectFromBp,
   createOutreachDraft,
   confirmCandidateCompliance,
   createSegment,
@@ -18,6 +18,7 @@ import {
   getProjectCandidatesPage,
   getProjectJobs,
   getTask,
+  previewProjectFromBp,
   querySegmentCandidates,
   retryTask,
   runJobMatch,
@@ -32,6 +33,7 @@ import {
   type JobMatchResponse,
   type OutreachDraft,
   type OutreachHistoryItem,
+  type ProjectBpInitializeResponse,
   type ProjectRecord,
   type RunProjectScenarioAction,
   type SegmentRecord,
@@ -48,12 +50,12 @@ import { humanGateRequestFromEvent, type HumanGateRequest } from "../features/pr
 import { defaultFilterCriteria, type FilterCriteria } from "../features/projects/state";
 import { apiClient, type ApiRequestLogEntry } from "../shared/api/client";
 import { useTaskStream } from "../shared/hooks/useTaskStream";
-import { rememberTaskId } from "./projectWorkspace";
+import { rememberActiveProjectId, rememberTaskId, useActiveProjectId } from "./projectWorkspace";
 
 type LoadingState = "idle" | "loading" | "ready" | "error";
 
-const DEFAULT_PROJECT_ID = "project_2026_ai_team";
 const CANDIDATE_PAGE_SIZE = 50;
+const DEFAULT_BP_FILE_PATH = "data/input/projects/bp_ai_hardware.md";
 
 const projectStatusLabel: Record<string, string> = {
   active: "进行中",
@@ -287,8 +289,7 @@ function formatDateTime(value: string) {
 }
 
 export function ProjectDetailPage() {
-  const { projectId: routeProjectId } = useParams();
-  const projectId = routeProjectId || DEFAULT_PROJECT_ID;
+  const projectId = useActiveProjectId();
   const [loadingState, setLoadingState] = useState<LoadingState>("idle");
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [jobs, setJobs] = useState<JobProfile[]>([]);
@@ -315,6 +316,11 @@ export function ProjectDetailPage() {
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
   const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
   const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
+  const [bpFilePath, setBpFilePath] = useState(DEFAULT_BP_FILE_PATH);
+  const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(14);
+  const [bpPreview, setBpPreview] = useState<ProjectBpInitializeResponse | null>(null);
+  const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
+  const [bpError, setBpError] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeTaskAction, setActiveTaskAction] = useState<RunProjectScenarioAction | "weekly_report" | null>(null);
@@ -343,6 +349,10 @@ export function ProjectDetailPage() {
     usedFallbackPolling,
   } = useTaskStream(activeTaskId);
   const taskStatus = taskSnapshot?.status ?? (activeTaskId ? connectionState : "idle");
+
+  useEffect(() => {
+    rememberActiveProjectId(projectId);
+  }, [projectId]);
 
   useEffect(() => {
     if (activeTaskId) rememberTaskId(activeTaskId);
@@ -453,6 +463,9 @@ export function ProjectDetailPage() {
     setMatchingJobId(null);
     setCandidateSearchSchedules([]);
     setScheduleBusyJobId(null);
+    setBpPreview(null);
+    setBpBusy(null);
+    setBpError(null);
   }, [projectId]);
 
   useEffect(() => {
@@ -551,6 +564,10 @@ export function ProjectDetailPage() {
     () => capabilityGate(integrations, "database", "数据库 API", integrationsError),
     [integrations, integrationsError],
   );
+  const segmentCreateGate = useMemo(
+    () => capabilityGate(integrations, "segments.create", "人群保存 API", integrationsError),
+    [integrations, integrationsError],
+  );
   const actionAvailability = useMemo(
     () => ({
       job_analysis: llmGate.enabled
@@ -575,6 +592,47 @@ export function ProjectDetailPage() {
   const taskWeeklyReport = activeTaskAction === "weekly_report" ? weeklyReportFromTaskResult(taskSnapshot?.result) : null;
   const weeklyReport = taskWeeklyReport ?? persistedWeeklyReport ?? project?.weeklyReport ?? emptyWeeklyReport();
 
+  const bpRequest = useCallback(
+    () => ({
+      projectName: project?.name ?? projectId,
+      bpFilePath,
+      minimumRoleCount: bpMinimumRoleCount,
+    }),
+    [bpFilePath, bpMinimumRoleCount, project?.name, projectId],
+  );
+
+  const handlePreviewBpJobs = async () => {
+    setBpBusy("preview");
+    setBpError(null);
+    try {
+      const preview = await previewProjectFromBp(projectId, bpRequest());
+      setBpPreview(preview);
+      setToast(`已预览 ${preview.jobCount} 个岗位，确认后才会覆盖当前岗位。`);
+    } catch (error) {
+      setBpError(error instanceof Error ? error.message : "BP 岗位预览失败");
+    } finally {
+      setBpBusy(null);
+    }
+  };
+
+  const handleConfirmBpJobs = async () => {
+    const roleCount = bpPreview?.jobCount ?? bpMinimumRoleCount;
+    const confirmed = window.confirm(`将覆盖项目 ${projectId} 当前岗位，并清空这些岗位的候选人关联。确认写入 ${roleCount} 个 BP 岗位？`);
+    if (!confirmed) return;
+    setBpBusy("confirm");
+    setBpError(null);
+    try {
+      const initialized = await initializeProjectFromBp(projectId, bpRequest());
+      setBpPreview(initialized);
+      await loadProjectData(filterCriteria);
+      setToast(`已从 BP 写入 ${initialized.jobCount} 个岗位。`);
+    } catch (error) {
+      setBpError(error instanceof Error ? error.message : "BP 岗位写入失败");
+    } finally {
+      setBpBusy(null);
+    }
+  };
+
   const handleQuerySegment = async () => {
     setSegmentBusy(true);
     try {
@@ -591,8 +649,8 @@ export function ProjectDetailPage() {
   };
 
   const handleSaveSegment = async () => {
-    if (!databaseGate.enabled) {
-      setToast(`目标人群保存不可用：${databaseGate.reason}`);
+    if (!segmentCreateGate.enabled) {
+      setToast(`目标人群保存不可用：${segmentCreateGate.reason}`);
       return;
     }
     setSegmentBusy(true);
@@ -1004,6 +1062,81 @@ export function ProjectDetailPage() {
         </section>
       ) : null}
 
+      <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+          <div>
+            <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">BP 智能生成岗位</h2>
+            <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
+              预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handlePreviewBpJobs}
+              disabled={bpBusy !== null}
+              className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bpBusy === "preview" ? "生成中" : "从 BP 智能生成岗位"}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmBpJobs}
+              disabled={!bpPreview || bpBusy !== null}
+              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bpBusy === "confirm" ? "写入中" : "确认覆盖岗位"}
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(280px,1fr)_180px]">
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            BP 文件路径
+            <input
+              value={bpFilePath}
+              onChange={(event) => setBpFilePath(event.currentTarget.value)}
+              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+            />
+          </label>
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            最少岗位数
+            <input
+              type="number"
+              min={1}
+              max={64}
+              value={bpMinimumRoleCount}
+              onChange={(event) => setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 14)))}
+              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+            />
+          </label>
+        </div>
+        {bpError ? <div className="mt-3 text-[13px] leading-5 text-[#EF4444]">{bpError}</div> : null}
+        {bpPreview ? (
+          <div className="mt-4 rounded-[12px] bg-[#F9FAFB] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[13px] font-semibold text-[#111827]">
+                预览岗位 {bpPreview.jobCount} 个 · {bpPreview.promptName}
+              </div>
+              <div className="text-[12px] text-[#6B7280]">{bpPreview.projectName}</div>
+            </div>
+            {bpPreview.industryReading ? (
+              <p className="mt-2 text-[12px] leading-[18px] text-[#6B7280]">{bpPreview.industryReading}</p>
+            ) : null}
+            <div className="mt-3 grid max-h-[320px] gap-2 overflow-auto md:grid-cols-2">
+              {bpPreview.jobs.map((job) => (
+                <div key={job.jobProfileId} className="rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
+                  <div className="text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
+                  <div className="mt-1 text-[12px] text-[#6B7280]">
+                    HC {job.headcount ?? 1}
+                    {(job.mustHaveSkills ?? []).length ? ` · ${(job.mustHaveSkills ?? []).slice(0, 3).join(" / ")}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       <section className="my-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div className="grid grid-cols-6 items-start">
           {steps.map((step, index) => {
@@ -1213,8 +1346,8 @@ export function ProjectDetailPage() {
               <button
                 type="button"
                 onClick={handleSaveSegment}
-                disabled={segmentBusy || segmentPreviewCount === null || !databaseGate.enabled}
-                title={!databaseGate.enabled ? databaseGate.reason : undefined}
+                disabled={segmentBusy || segmentPreviewCount === null || !segmentCreateGate.enabled}
+                title={!segmentCreateGate.enabled ? segmentCreateGate.reason : undefined}
                 className="h-10 w-full rounded-[10px] border border-[#E5E7EB] bg-white text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 保存目标人群
@@ -1372,6 +1505,8 @@ export function ProjectDetailPage() {
         }
         draft={humanGateRequest?.draft ?? emailDraft}
         candidateName={humanGateRequest?.candidateName ?? selectedCandidate?.name}
+        requiresLeadPreview={humanGateRequest?.requiresLeadPreview}
+        leadPreview={humanGateRequest?.leadPreview}
         onApprove={
           humanGateRequest
             ? handleApproveHumanGate

@@ -13,6 +13,7 @@ import {
   SectionPanel,
   StatusPill,
   topCandidates,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
@@ -24,7 +25,8 @@ const scenarioDescriptions: Record<string, { title: string; description: string 
 };
 
 export function ScenariosPage() {
-  const data = useWorkspaceData({ includeIntegrations: true, includeScenarios: true });
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId, includeIntegrations: true, includeScenarios: true });
   const [runningCandidateId, setRunningCandidateId] = useState<string | null>(null);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

@@ -1,201 +1,199 @@
-# AI 招聘助手全量长测 v3 报告
+# AI 招聘助手 E2E v4 报告
 
-- E2E_RUN_ID: 20260609_104936
-- Started: 2026-06-09T10:49:36.887Z
-- Finished: 2026-06-09T10:51:46.886Z
-- Duration: 130s
-- Overall: LIMITED
+## A. 测试环境
 
-## A. 环境与启动
+- commit: 67b36b85acf0c2948242e6c693c75b0c72f10c77
+- branch: main
+- startedAt: 2026-06-09T14:29:11.246Z
+- finishedAt: 2026-06-09T14:34:00Z
+- appUrl: http://127.0.0.1:5174/projects/project_2026_ai_team
+- apiBase: frontend /api via Vite preview proxy -> http://127.0.0.1:8011/api
+- backendPort: 8011
+- frontendPort: 5174
+- projectDatabaseUrl: sqlite:///data/projects.sqlite3
+- taskDatabaseUrl: sqlite:///data/tasks.sqlite3
+- seed: {"candidates": 5, "jobs": 3, "matches": 5, "project_id": "project_2026_ai_team"}
+- runId: e2e-v4-20260609-222640
+- nodeVersion: v24.16.0
+- pnpmVersion: 11.5.0
+- pythonVersion: Python 3.12.13
+- browserVersion: Google Chrome 147.0.7727.137
+- e2eRunner: scripts/e2e_project_detail_clicks.mjs + supplemental probes + Playwright error probes + soak-lite
 
-- Branch: main
-- Commit: cdc3e047dde5ac246fcba5c61baa421241ac5a98
-- Git dirty status: M app/core/workflow_context.py;  M app/core/workflow_executor.py;  M frontend/src/pages/ProjectDetailPage.test.tsx;  M frontend/src/pages/ProjectDetailPage.tsx;  M tests/test_json_workflow_engine.py; ?? artifacts/; ?? test-results/; ?? tests/fixtures/
-- OS: Linux 6.8.0-124-generic x64
-- Python: Python 3.11.0rc1
-- Node: v24.16.0
-- pnpm: 11.5.0
-- Browser/Test runner: Version 1.60.0
-- API base: http://127.0.0.1:8010/api
-- Frontend: http://127.0.0.1:5174
-- Project DB: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/projects.sqlite3
-- Task DB: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/tasks.sqlite3
+## B. 入口确认
 
-## B. Seed 与 Cleanup 清单
+- 真实入口链路: `frontend/index.html -> frontend/src/main.tsx -> frontend/src/app/App.tsx -> frontend/src/app/router.tsx -> /projects/project_2026_ai_team`
+- TS App: PASS
+- legacy `frontend/src/App.jsx`: 未被 `main.tsx` 挂载，仅作为历史参考。
 
-- Seed summary: {"candidates":5,"jobs":3,"matches":5,"project_id":"project_2026_ai_team"}
-- Seed IDs: {"projectIds":["project_2026_ai_team"],"jobIds":["job_vla_algorithm","job_robot_data_platform","job_embodied_agent_infra"],"candidateIds":["cand_lin_chen","cand_zhou_han","cand_maya_li","cand_wang_ke","cand_sara_qi"],"matchCount":5}
-- Created runtime IDs: {"taskIds":["633ce3d78712","58cd895dbc2e","d004288d4365","b1f474f98034","6803923ff001","2804f0522087","25d4b63d1ec7","e545e47e9c24","fc8a23da31c3","806a307a58d1","7c14089738d6","017a5c58358d","7f7775862c75","65c6cb299d48"],"reportIds":["report_e75c3cca3b27"],"segmentIds":["segment_9233b03c8f6d"],"draftIds":["draft_93978745e1f8"],"historyIds":["history_a763baec54d5"]}
-- Cleanup policy: artifact SQLite DB 保留用于复核；可删除 `artifacts/e2e_evidence/projects.sqlite3` 与 `tasks.sqlite3` 清理本次数据。
+## C. OpenAPI / Registry / Frontend Matrix
 
-## C. 命令验证
+- openapi_path_count: 50
+- openapi_method_endpoint_count: 51
+- capabilityRegistry_path_count: 50
+- active_ts_endpoint_count: 25
+- active_ts_wrapper_endpoint_count: 25
+- legacy_endpoint_count: 7
+- backend_only_endpoint_count: 22
+- registered_but_no_client_wrapper_count: 22
+- missing_registry_count: 0
+- stale_registry_count: 0
+- category_counts: {'active_ts_productized': 25, 'legacy_only': 4, 'registered_only': 22}
 
-| Command | Verdict | Exit | Log |
-| --- | --- | ---: | --- |
-| frontend lint | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/frontend-lint.log |
-| frontend build | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/frontend-build.log |
-| frontend test | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/frontend-test.log |
-| python compileall | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/python-compileall.log |
-| pytest all | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/pytest-all.log |
-| pytest json workflow | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/pytest-json-workflow.log |
-| pytest static contracts | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/pytest-static-contracts.log |
-| ui-e2e-project-detail | PASS | 0 | /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/command-logs/ui-e2e-project-detail.log |
+| method | path | openapi | registry | TS wrapper | TS page | legacy wrapper | category | risk |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | /health | yes | yes | MainLayout.fetchHealth | MainLayout.fetchHealth | no | active_ts_productized | P2 |
+| POST | /integrations/env | yes | yes | no | no | no | registered_only | P1 |
+| GET | /integrations/status | yes | yes | getIntegrationsStatus | getIntegrationsStatus | no | active_ts_productized | P2 |
+| POST | /jobs/match | yes | yes | runJobMatch | runJobMatch | no | active_ts_productized | P2 |
+| POST | /outreach/draft | yes | yes | createOutreachDraft | createOutreachDraft | no | active_ts_productized | P2 |
+| PATCH | /outreach/drafts/{draft_id} | yes | yes | updateOutreachDraft | updateOutreachDraft | no | active_ts_productized | P2 |
+| GET | /outreach/history | yes | yes | getOutreachHistory | getOutreachHistory | no | active_ts_productized | P2 |
+| POST | /outreach/send | yes | yes | sendOutreachDraft | sendOutreachDraft | no | active_ts_productized | P1 |
+| GET | /projects/{project_id} | yes | yes | getProject | getProject | no | active_ts_productized | P2 |
+| GET | /projects/{project_id}/candidate-search-schedules | yes | yes | getCandidateSearchSchedules | getCandidateSearchSchedules | no | active_ts_productized | P2 |
+| GET | /projects/{project_id}/candidates | yes | yes | getProjectCandidatesPage | getProjectCandidatesPage | no | active_ts_productized | P2 |
+| GET | /projects/{project_id}/candidates/unique | yes | yes | no | no | no | registered_only | P1 |
+| POST | /projects/{project_id}/candidates/{job_candidate_id}/compliance-review | yes | yes | confirmCandidateCompliance | confirmCandidateCompliance | no | active_ts_productized | P2 |
+| GET | /projects/{project_id}/jobs | yes | yes | getProjectJobs | getProjectJobs | no | active_ts_productized | P2 |
+| PUT | /projects/{project_id}/jobs/{job_id}/candidate-search-schedule | yes | yes | updateCandidateSearchSchedule | updateCandidateSearchSchedule | no | active_ts_productized | P2 |
+| POST | /projects/{project_id}/jobs/{job_id}/upload-resumes | yes | yes | uploadProjectResume | uploadProjectResume | no | active_ts_productized | P2 |
+| GET | /projects/{project_id}/reports/latest | yes | yes | getLatestWeeklyReport | getLatestWeeklyReport | no | active_ts_productized | P2 |
+| POST | /reports/weekly | yes | yes | saveWeeklyReport | saveWeeklyReport | no | active_ts_productized | P2 |
+| GET | /reports/{report_id} | yes | yes | no | no | no | registered_only | P1 |
+| POST | /resumes/ingest | yes | yes | no | no | no | registered_only | P1 |
+| POST | /resumes/local-import | yes | yes | no | no | no | registered_only | P1 |
+| GET | /review/feedback | yes | yes | no | no | no | registered_only | P1 |
+| POST | /rsi/evaluate | yes | yes | no | no | no | registered_only | P1 |
+| GET | /scenarios/meta | yes | yes | getScenariosMeta | getScenariosMeta | no | active_ts_productized | P2 |
+| POST | /scenarios/run | yes | yes | runCandidateEvaluation, runProjectScenario, runWeeklyReport | runCandidateEvaluation, runProjectScenario, runWeeklyReport | no | active_ts_productized | P2 |
+| POST | /search/archive | yes | yes | no | no | no | registered_only | P1 |
+| GET | /search/archive/diff | yes | yes | no | no | no | registered_only | P1 |
+| GET | /search/archive/recent | yes | yes | no | no | no | registered_only | P1 |
+| POST | /search/brief | yes | yes | no | no | no | registered_only | P1 |
+| POST | /search/evidence | yes | yes | no | no | no | registered_only | P1 |
+| POST | /search/plan | yes | yes | no | no | no | registered_only | P1 |
+| POST | /search/run | yes | yes | no | no | no | registered_only | P1 |
+| POST | /search/watchlist/run | yes | yes | no | no | no | registered_only | P1 |
+| GET | /segments | yes | yes | no | no | no | registered_only | P1 |
+| POST | /segments | yes | yes | createSegment | createSegment | no | active_ts_productized | P2 |
+| POST | /segments/query | yes | yes | querySegmentCandidates | querySegmentCandidates | no | active_ts_productized | P2 |
+| GET | /segments/{segment_id} | yes | yes | no | no | no | registered_only | P1 |
+| GET | /tasks/{task_id} | yes | yes | getTask | getTask | no | active_ts_productized | P2 |
+| GET | /tasks/{task_id}/artifacts | yes | yes | no | no | no | registered_only | P2 |
+| POST | /tasks/{task_id}/cancel | yes | yes | cancelTask | cancelTask | cancelTask | active_ts_productized | P2 |
+| POST | /tasks/{task_id}/confirm | yes | yes | confirmTask | confirmTask | confirmTask | active_ts_productized | P2 |
+| POST | /tasks/{task_id}/probe-feedback | yes | yes | no | no | sendProbeFeedback | legacy_only | P1 |
+| POST | /tasks/{task_id}/retry | yes | yes | retryTask | retryTask | retryTask | active_ts_productized | P2 |
+| GET | /tasks/{task_id}/stream | yes | yes | useTaskStream/taskStreamUrl | useTaskStream/taskStreamUrl | no | active_ts_productized | P2 |
+| GET | /workflow/meta | yes | yes | no | no | no | registered_only | P2 |
+| POST | /workflow/sessions | yes | yes | no | no | no | registered_only | P1 |
+| POST | /workflow/sessions/{task_id}/nodes/{node_id}/retry | yes | yes | no | no | retryWorkflowNode | legacy_only | P1 |
+| POST | /workflow/sessions/{task_id}/nodes/{node_id}/run | yes | yes | no | no | runWorkflowNode | legacy_only | P1 |
+| POST | /workflow/sessions/{task_id}/nodes/{node_id}/skip | yes | yes | no | no | skipWorkflowNode | legacy_only | P1 |
+| POST | /workflows/run | yes | yes | no | no | no | registered_only | P1 |
+| POST | /workflows/validate | yes | yes | no | no | no | registered_only | P2 |
 
-## D. API 合同探测
+## D. 修复记录
 
-| Name | Method | Path | Status | Verdict | Note |
-| --- | --- | --- | ---: | --- | --- |
-| health | GET | /health | 200 | PASS |  |
-| openapi | GET | /openapi.json | 200 | PASS |  |
-| project detail | GET | /projects/project_2026_ai_team | 200 | PASS |  |
-| project jobs | GET | /projects/project_2026_ai_team/jobs | 200 | PASS |  |
-| project candidates | GET | /projects/project_2026_ai_team/candidates?skip=0&limit=50 | 200 | PASS |  |
-| unique candidates | GET | /projects/project_2026_ai_team/candidates/unique | 200 | PASS |  |
-| integrations status | GET | /integrations/status | 200 | PASS |  |
-| scenarios meta | GET | /scenarios/meta | 200 | PASS |  |
-| workflow meta | GET | /workflow/meta | 200 | PASS |  |
-| segments query | POST | /segments/query | 200 | PASS |  |
-| segments save | POST | /segments | 200 | PASS |  |
-| segments list | GET | /segments?projectId=project_2026_ai_team | 200 | PASS |  |
-| segments get | GET | /segments/segment_9233b03c8f6d | 200 | PASS |  |
-| weekly report save | POST | /reports/weekly | 200 | PASS |  |
-| weekly report latest | GET | /projects/project_2026_ai_team/reports/latest | 200 | PASS |  |
-| weekly report get | GET | /reports/report_e75c3cca3b27 | 200 | PASS |  |
-| outreach draft | POST | /outreach/draft | 200 | PASS |  |
-| outreach patch | PATCH | /outreach/drafts/draft_93978745e1f8 | 200 | PASS |  |
-| outreach simulate send | POST | /outreach/send | 200 | PASS |  |
-| outreach history | GET | /outreach/history?projectId=project_2026_ai_team | 200 | PASS |  |
-| search plan local catalog | POST | /search/plan | 200 | PASS |  |
-| search run local catalog | POST | /search/run | 200 | PASS |  |
-| search archive recent | GET | /search/archive/recent?limit=5 | 200 | PASS |  |
-| rsi evaluate local | POST | /rsi/evaluate | 200 | PASS |  |
-| jobs match fallback | POST | /jobs/match | 200 | PASS | May be LIMITED if local embedding/vector provider is unavailable and DB fallback cannot match. |
-| resumes ingest | POST | /resumes/ingest | 500 | LIMITED | Endpoint depends on local parser/embedding/vector-store; no live provider is configured in this run. |
-| scenario task create | POST | /scenarios/run | 200 | PASS |  |
-| task snapshot | GET | /tasks/633ce3d78712 | 200 | PASS |  |
-| task cancel | POST | /tasks/633ce3d78712/cancel | 200 | PASS |  |
-| concurrent workflow create 1 | POST | /workflows/run | 200 | PASS |  |
-| concurrent workflow create 3 | POST | /workflows/run | 200 | PASS |  |
-| concurrent workflow create 2 | POST | /workflows/run | 200 | PASS |  |
-| concurrency unique task_id audit | ASSERT | /workflows/run x3 | assert | PASS | API-level concurrency probe; UI reclick debounce is covered as LIMITED unless a dedicated browser reclick script is run. |
-| validate advanced_ai_algorithm_recruiting.json | POST | /workflows/validate | 200 | PASS |  |
-| validate resume_structured_extract.json | POST | /workflows/validate | 200 | PASS |  |
-| validate jd_structured_extract.json | POST | /workflows/validate | 200 | PASS |  |
-| advanced recruiting workflow task create | POST | /workflows/run | 200 | PASS |  |
-| invalid workflow duplicate step id | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow unresolved placeholder | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow future dependency | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow duplicate output_key | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow invalid limit | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow invalid max_retries | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow missing required field | POST | /workflows/validate | 200 | PASS |  |
-| invalid workflow unsupported step type | POST | /workflows/validate | 200 | PASS |  |
-| json workflow long human run | POST | /workflows/run | 200 | PASS |  |
-| json workflow task after backend restart | GET | /tasks/2804f0522087 | 200 | PASS |  |
-| json workflow confirm after restart | POST | /tasks/2804f0522087/confirm | 200 | PASS |  |
-| json workflow cancel probe create | POST | /workflows/run | 200 | PASS |  |
-| json workflow cancel | POST | /tasks/25d4b63d1ec7/cancel | 200 | PASS |  |
-| json workflow retry legacy endpoint | POST | /tasks/25d4b63d1ec7/retry | 500 | LIMITED | Current retry route is legacy scenario retry; JSON workflow retry support is assessed as LIMITED if it cannot restart json_workflow. |
+### BUG-001-static-contract-hardcoded-count
+- root cause: Static contract test asserted a fixed OpenAPI path count instead of comparing OpenAPI and registry sets.
+- changed files: tests/test_static_contracts.py
+- why safe: Test-only change; now catches both missing and stale registry paths and explicitly checks compliance-review.
+- tests after: pytest-static-contracts-final.log: 108 passed
+- regression: frontend lint/build/test, compileall, backend pytest all passed.
 
-## E. UI E2E 闭环
+### BUG-002-e2e-audit-tooling
+- root cause: No reusable v4 matrix/probe/report tooling existed for the requested audit.
+- changed files: scripts/e2e_v4_contract_audit.py, scripts/e2e_v4_api_probes.py, scripts/e2e_v4_render_report.py, artifacts/e2e_evidence/runner/error-probes-v4.mjs
+- why safe: Read/probe/report tooling only; product code and business logic unchanged.
+- tests after: compileall-final PASS; probes all 200 except intentionally simulated 4xx/5xx error cases.
+- regression: No new unit/build failures.
 
-| Feature | Status | task_id | SSE | HumanGate | Final | Fake Data/Success Audit |
-| --- | --- | --- | --- | --- | --- | --- |
-| 页面加载 | PASS | — | no | no | — | 未发现 mock-only 候选人名 |
-| 岗位分析 A | PASS | e545e47e9c24 | yes | yes | done | 未发现前端本地伪造 task_id/done，终态来自 GET /tasks probe 与 SSE 事件 |
-| 找候选人 B | PASS | fc8a23da31c3 | yes | yes | done | 未发现前端生成假候选人 |
-| 候选人评估 C | PASS | 806a307a58d1 | yes | yes | done | 评分/状态来自 task result.database_update 与后端刷新，不是前端生成评分 |
-| 招聘周报 D | PASS | 7c14089738d6 | yes | yes | done | 周报显示来自可解析 task result/后端保存结果 |
-| HumanGate | PASS | 806a307a58d1, 017a5c58358d, 7f7775862c75 | yes | yes | done, done, done | confirm 响应未直接伪造 done，终态等待后端 task snapshot |
-| 邮件草稿 | PASS | — | no | yes | — | 草稿来自后端；未显示发送成功；send simulate=true |
-| 人群筛选 | PASS | — | no | no | — | 未显示已保存后端分群 |
-| SSE fallback | PASS | 65c6cb299d48 | no | yes | done | 终态来自 fallback GET /tasks snapshot，不是本地伪造 done |
-| 错误态 | PASS | — | no | no | — | 未显示假项目/岗位/候选人 |
+## E. 当前 TS endpoint E2E 总览
 
-## F. JSON Workflow 专项
+| 功能/接口 | 状态 | 证据 |
+| --- | --- | --- |
+| 岗位分析：scenario A task/SSE + task control | PASS | task=c7341ed2ff6f; evidence=4 |
+| 找候选人：scenario B task/SSE | PASS | task=d590fea40d75; evidence=2 |
+| 候选人评估 + 任务 HumanGate 确认 | PASS | task=0bbd2991a6a9; evidence=4 |
+| 招聘周报：scenario D task/SSE + HumanGate + 持久化 | PASS | task=2129768b30b6; evidence=4 |
+| 人群筛选闭环：后端查询 + 保存能力门控 | LIMITED | task=—; evidence=1 |
+| 邮件触达闭环：后端草稿 + 人工确认 + 模拟发送记录 | PASS | task=—; evidence=4 |
+| 岗位匹配 UI：真实 /jobs/match 结果 | PASS | task=—; evidence=1 |
+| 补充 API probes | PASS | 33 probes, all status 200 |
+| 错误态 probes | PASS | 9 pass / 0 fail |
 
-### Valid Fixtures
-- PASS: tests/fixtures/json_workflows/advanced_ai_algorithm_recruiting.json
-- PASS: tests/fixtures/json_workflows/resume_structured_extract.json
-- PASS: tests/fixtures/json_workflows/jd_structured_extract.json
+## F. A/B/C/D task 总览
 
-### Invalid Workflow Validation
-- PASS: duplicate step id
-- PASS: unresolved placeholder
-- PASS: future dependency
-- PASS: duplicate output_key
-- PASS: invalid limit
-- PASS: invalid max_retries
-- PASS: missing required field
-- PASS: unsupported step type
-
-### Long-Running Human-In-The-Loop
-- Verdict: PASS
-- Task: 2804f0522087
-- PASS: awaiting_human before restart (status=awaiting_human)
-- PASS: runtime checkpoint exists (frontend_state.json_workflow_runtime missing)
-- PASS: current_step_index stopped at human_gate (current_step_index=1)
-- PASS: awaiting payload exists (awaiting payload missing)
-- PASS: pre-step executed once before restart (pre_screen count=1)
-- PASS: still awaiting after restart (status=awaiting_human)
-- PASS: checkpoint index preserved after restart (current_step_index=1)
-- PASS: not marked interrupted error (error=)
-- PASS: done after confirm (status=done)
-- PASS: pre human_gate step not repeated (pre_screen count=1)
-- PASS: final result workflow_id (workflow_id missing)
-- PASS: final result context (context missing)
-- PASS: final result artifacts (artifacts missing)
-- PASS: final result final_output (final_output missing)
-- PASS: confirm stored in runtime context (decision=approve)
-
-### Pytest Evidence
-- PASS: .venv/bin/python -m pytest tests/test_json_workflow_engine.py -q
-- PASS: .venv/bin/python -m pytest tests/test_static_contracts.py -q
-
-## G. 静态审计与风险
-
-| Check | File | Verdict | Note |
+| scenario | task_id | status | notes |
 | --- | --- | --- | --- |
-| ProjectDetailPage does not import projectMock | frontend/src/pages/ProjectDetailPage.tsx | PASS | 防止项目详情页在 API 失败时回退假数据。 |
-| ProjectDetailPage does not call buildCandidateEmailDraft | frontend/src/pages/ProjectDetailPage.tsx | PASS | 触达草稿应来自 /outreach/draft。 |
-| legacy buildCandidateEmailDraft only exists in state helper | frontend/src/features/projects/state.ts | INFO | P2: helper/test fixture 存在，但项目详情页未调用。 |
-| weekly report parser supports Chinese backend keys | frontend/src/pages/ProjectDetailPage.tsx | PASS | D 场景 task result 的中文键可被 UI 消费。 |
-| useTaskStream uses EventSource | frontend/src/shared/hooks/useTaskStream.ts | PASS | SSE 主链路存在。 |
-| useTaskStream has fallback polling | frontend/src/shared/hooks/useTaskStream.ts | PASS | SSE 失败后轮询兜底存在。 |
-| confirm route checks json_workflow_runtime before legacy confirm | app/api/main.py | PASS | 避免 JSON workflow confirm 走 legacy wait_event 错误分支。 |
-| recovery preserves awaiting JSON workflow | app/core/orchestrator.py | PASS | 重启恢复不应把 awaiting_human checkpoint 标为 interrupted error。 |
-| workflow executor does not import concrete providers | app/core/workflow_executor.py | PASS | JSON Workflow Engine 通过 ServiceRouter 而非具体 provider。 |
-| structured extract retry prompt is sanitized | app/core/workflow_context.py | PASS | 失败上下文不能泄露 key/provider internals。 |
-| projectMock file still exists but is isolated | frontend/src/shared/mocks/projectMock.ts | INFO | P2: 测试 fixture 存在；运行时页面未导入。 |
+| 岗位分析：scenario A task/SSE + task control | c7341ed2ff6f | PASS |  |
+| 找候选人：scenario B task/SSE | d590fea40d75 | PASS |  |
+| 候选人评估 + 任务 HumanGate 确认 | 0bbd2991a6a9 | PASS |  |
+| 招聘周报：scenario D task/SSE + HumanGate + 持久化 | 2129768b30b6 | PASS |  |
 
-## H. 稳定性与安全
+## G. 找候选人 B 入库专项
 
-- Soak verdict: LIMITED
-- Soak configured seconds: 30
-- Soak note: This run used a short soak. Set E2E_SOAK_SECONDS=1800..7200 to satisfy the requested 30-120 minute stability window.
-- PASS: report redaction - JSON report is checked for raw email pattern before final write.
-- PASS: secret redaction - JSON report is checked for common API key/token prefixes before final write.
+- B task_id: `d590fea40d75`
+- 初次点击后状态: awaiting_human，需要 confirm 后才入库。
+- confirm 后: `found=8 normalized=8 inserted=0 linked=8 duplicates=0 rejected=0`，项目候选人关联数增加。
+- 重复跑 B: `found=6 inserted=0 linked=0 duplicates=6`，X-Total-Count 保持 16。
+- 结论: 入库闭环存在；不会重复插入同一批候选人。页面未前端 append 假候选人。
 
-## I. 最终决策
+## H. 邮件触达
 
-- 真实后端闭环: YES
-- UI 是否消费后端结果: YES
-- 长时间稳定性: LIMITED
-- 假数据/假成功: NO_BLOCKING_EVIDENCE
-- 内部 demo: YES
-- 内部试用: LIMITED
-- P0 fixes: []
-- P1 fixes: []
-- Limited reasons: 2 API contract(s) are environment-limited; full 30-120 minute soak was not run; JSON workflow retry endpoint is legacy-limited
+- draft: 后端 `/outreach/draft` 创建，`backendGenerated=true`。
+- send mode: email_delivery missing_key 时 `simulate=true`，history 写入 `deliveryMode=simulated`。
+- 结论: 未发现真实发送误导文案。
 
-## Artifacts
+## I. Segment
 
-- devServerLog: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/dev-server.log
-- devServerRestart2Log: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/dev-server-restart-2.log
-- uiE2EJson: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/e2e-report.json
-- networkLog: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/network-log.json
-- probeLog: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/probe-log.json
-- trace: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/trace.zip
-- fallbackTrace: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/fallback-trace.zip
-- fullJsonReport: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/e2e_project_detail_report.json
-- markdownReport: /home/lison/Desktop/zhaoping/artifacts/e2e_evidence/e2e-report.md
+- UI: `/segments/query` PASS；保存按钮因 `database_api=disabled` 被正确门控，状态 LIMITED。
+- API probe: POST `/segments` 200，segmentId=['segment_767d246a8128']。
+
+## J. JSON Workflow
+
+- validate: valid workflow true；duplicate id / unresolved placeholder / future dependency / duplicate output_key / invalid limit / invalid max_retries / missing field / unsupported step type 均返回 valid=false。
+- run: `scenario_id=json_workflow`，human_gate awaiting，confirm 后 done，result 包含 workflow_id/context/artifacts/final_output。
+- A/B/C/D regression: E2E 主链路 PASS。
+
+## K. Soak Test Metrics
+
+- startedAt: 2026-06-09T14:39:29Z
+- finishedAt: 2026-06-09T14:41:29Z
+- durationSeconds: 120.7
+- loops: 24
+- passLoops: 24
+- failedLoops: 0
+- averageDurationMs: 29.4
+- p95CallDurationMs: 8.0
+- networkErrorCount: 0
+- timeoutCount: 0
+- pollingMax: —
+- sseFailures: —
+- consoleErrors: —
+- eventSourceObservation: not measured in soak-lite
+- 说明: 本轮为 120 秒 soak-lite，未跑满 30 分钟，最终状态按 LIMITED 处理。
+
+## L. 风险清单
+
+- P1 P1-B-INGESTION-GATE: Scenario B requires HumanGate confirmation before lead_ingestion; pre-confirm page only shows task/SSE, not new candidates. Evidence: scenario-b-confirm-v4.log: after confirm lead_ingestion found=8 linked=8; repeat run duplicates=6 count unchanged.
+- P1 P1-SEGMENT-UI-GATE: Segment save is UI LIMITED because database_api is disabled; backend POST /segments works in API probe. Evidence: UI flow LIMITED with database API 未接入; supplemental POST /segments 200.
+- P2 P2-SOAK-DURATION: Soak was 120 seconds / 24 loops, not the requested 30-120 minutes. Evidence: soak-v4.json: passLoops=24, failedLoops=0.
+
+## M. 最终结论
+
+1. 当前 TS 前端真实入口是否确认: PASS
+2. 当前 TS 24 endpoint 是否全部通过 E2E: PASS；当前实际 active TS endpoint count=25，包含额外 compliance-review。
+3. OpenAPI 和 capabilityRegistry 是否对齐: PASS
+4. compliance-review 是否已补 registry: PASS
+5. 后端已有但 TS 未接能力: 见 C 表，backend/registered/legacy only 共 26 个 method endpoint。
+6. 找候选人是否已完成入库闭环: PASS，需要 HumanGate confirm 后完成。
+7. 是否存在假数据: NO
+8. 是否存在假成功: NO
+9. 是否可用于内部演示: YES
+10. 是否可用于内部试用: LIMITED
+11. 下一步建议: 跑满 30 分钟 soak；如需 segment UI 保存，接入/启用 database_api；在 B flow UI 上更明确提示 awaiting_human 后才会入库。
+
+整体结论: LIMITED

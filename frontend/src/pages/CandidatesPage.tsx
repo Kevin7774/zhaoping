@@ -10,6 +10,7 @@ import {
   SectionPanel,
   StatusPill,
   uniqueValues,
+  useActiveProjectId,
   useWorkspaceData,
   rememberTaskId,
 } from "./projectWorkspace";
@@ -23,7 +24,8 @@ function updateCriteria<K extends keyof FilterCriteria>(
 }
 
 export function CandidatesPage() {
-  const data = useWorkspaceData();
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId });
   const [criteria, setCriteria] = useState<FilterCriteria>(defaultFilterCriteria);
   const [importJobId, setImportJobId] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);

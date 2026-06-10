@@ -57,4 +57,67 @@ describe("HumanConfirmModal", () => {
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onApprove).not.toHaveBeenCalled();
   });
+
+  it("shows Scenario B lead preview before allowing ingestion approval", () => {
+    const onApprove = vi.fn();
+
+    render(
+      <HumanConfirmModal
+        open
+        busy={false}
+        context="请确认目标公司与触达策略，可通过或填写调整意见。"
+        draft="{}"
+        requiresLeadPreview
+        leadPreview={{
+          totalCount: 2,
+          omittedCount: 1,
+          leads: [
+            {
+              name: "Alice Wang",
+              sourcePlatform: "github_repositories",
+              sourceUrl: "https://github.com/alicewang/robot-vla",
+              evidenceSummary: "Maintains robot-vla with diffusion policy examples.",
+              confidence: 0.86,
+              matchedJob: "VLA / 具身智能算法工程师",
+              complianceStatus: "clear",
+              ingestionAction: "insert",
+            },
+          ],
+        }}
+        onApprove={onApprove}
+        onReject={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("即将入库的候选线索")).toBeTruthy();
+    expect(screen.getByText("Alice Wang")).toBeTruthy();
+    expect(screen.getByText("github_repositories")).toBeTruthy();
+    expect(screen.getByText("Maintains robot-vla with diffusion policy examples.")).toBeTruthy();
+    expect(screen.getByText("确认后将把这些线索写入项目候选人库。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "通过" }));
+
+    expect(onApprove).toHaveBeenCalledWith("{}", "approve");
+  });
+
+  it("disables approve actions when Scenario B lead preview is missing", () => {
+    const onApprove = vi.fn();
+
+    render(
+      <HumanConfirmModal
+        open
+        busy={false}
+        context="请确认待入库线索。"
+        draft="{}"
+        requiresLeadPreview
+        onApprove={onApprove}
+        onReject={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("缺少候选线索预览，无法确认入库。")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "通过" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "编辑后通过" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

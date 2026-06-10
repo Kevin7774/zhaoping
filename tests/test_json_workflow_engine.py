@@ -1,5 +1,7 @@
 import asyncio
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -59,6 +61,23 @@ def test_workflow_definition_accepts_valid_minimal_workflow() -> None:
     assert workflow.steps[1].output_type == "context"
     assert workflow.dependency_summary()["declared_inputs"] == ["user_input"]
     assert workflow.dependency_summary()["produced_outputs"] == ["search_results", "summary"]
+
+
+def test_workflow_dsl_import_does_not_emit_pydantic_field_shadow_warning() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "error::UserWarning",
+            "-c",
+            "from app.core.workflow_dsl import StepDefinition; print(sorted(StepDefinition.model_fields))",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_workflow_definition_rejects_duplicate_step_ids() -> None:

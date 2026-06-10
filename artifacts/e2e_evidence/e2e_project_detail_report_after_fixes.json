@@ -1,0 +1,1393 @@
+{
+  "generatedAt": "2026-06-10T02:37:23.936Z",
+  "appUrl": "http://127.0.0.1:5174/projects/project_2026_ai_team",
+  "apiBase": "http://127.0.0.1:8010",
+  "projectId": "project_2026_ai_team",
+  "projectTitle": "2026 AI 团队招聘",
+  "status": "PASS",
+  "flows": [
+    {
+      "name": "岗位分析：scenario A task/SSE + task control",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:24.349Z",
+      "ui": {
+        "button": "岗位分析",
+        "sectionTitle": "岗位进展",
+        "occurrence": 0,
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "岗位分析",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario A",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "A",
+            "input": "请对「VLA / 具身智能算法工程师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_2026_ai_team",
+              "job_profile_id": "job_vla_algorithm",
+              "job_title": "VLA / 具身智能算法工程师",
+              "jobTitle": "VLA / 具身智能算法工程师",
+              "action": "job_analysis"
+            }
+          },
+          "response": {
+            "task_id": "5f4921f0dfa2",
+            "scenario": "A",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/5f4921f0dfa2/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task cancel",
+          "method": "POST",
+          "path": "/api/tasks/5f4921f0dfa2/cancel",
+          "status": 200,
+          "response": {
+            "task_id": "5f4921f0dfa2",
+            "scenario": "A",
+            "scenario_id": "A",
+            "input": "请对「VLA / 具身智能算法工程师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_2026_ai_team",
+              "job_profile_id": "job_vla_algorithm",
+              "job_title": "VLA / 具身智能算法工程师",
+              "jobTitle": "VLA / 具身智能算法工程师",
+              "action": "job_analysis"
+            },
+            "status": "cancelled",
+            "current_agent": null,
+            "current_step": 0,
+            "total_steps": 7,
+            "logs": {
+              "type": "array",
+              "length": 4,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 0,
+              "sample": []
+            },
+            "awaiting": null,
+            "result": null,
+            "error": "用户取消任务",
+            "created_at": "2026-06-10T02:37:24.365620+00:00",
+            "updated_at": "2026-06-10T02:37:24.470880+00:00"
+          }
+        },
+        {
+          "label": "POST task retry",
+          "method": "POST",
+          "path": "/api/tasks/5f4921f0dfa2/retry",
+          "status": 200,
+          "response": {
+            "task_id": "e9135fd2fb06",
+            "scenario": "A",
+            "status": "processing"
+          }
+        }
+      ],
+      "notes": [],
+      "taskId": "5f4921f0dfa2",
+      "taskControls": {
+        "status": "PASS",
+        "evidence": [
+          {
+            "label": "POST task cancel",
+            "method": "POST",
+            "path": "/api/tasks/5f4921f0dfa2/cancel",
+            "status": 200,
+            "response": {
+              "task_id": "5f4921f0dfa2",
+              "scenario": "A",
+              "scenario_id": "A",
+              "input": "请对「VLA / 具身智能算法工程师」岗位进行岗位画像、能力约束、搜索策略和风险点分析。",
+              "team_constraint": "真机泛化",
+              "aperture_weight": 0.7,
+              "frontend_state": {
+                "source": "ProjectDetailPage",
+                "project_id": "project_2026_ai_team",
+                "job_profile_id": "job_vla_algorithm",
+                "job_title": "VLA / 具身智能算法工程师",
+                "jobTitle": "VLA / 具身智能算法工程师",
+                "action": "job_analysis"
+              },
+              "status": "cancelled",
+              "current_agent": null,
+              "current_step": 0,
+              "total_steps": 7,
+              "logs": {
+                "type": "array",
+                "length": 4,
+                "sample": [
+                  {
+                    "type": "object",
+                    "keys": [
+                      "ts",
+                      "agent",
+                      "message",
+                      "level",
+                      "event_type"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "keys": [
+                      "ts",
+                      "agent",
+                      "message",
+                      "level",
+                      "event_type"
+                    ]
+                  }
+                ]
+              },
+              "steps_done": {
+                "type": "array",
+                "length": 0,
+                "sample": []
+              },
+              "awaiting": null,
+              "result": null,
+              "error": "用户取消任务",
+              "created_at": "2026-06-10T02:37:24.365620+00:00",
+              "updated_at": "2026-06-10T02:37:24.470880+00:00"
+            }
+          },
+          {
+            "label": "POST task retry",
+            "method": "POST",
+            "path": "/api/tasks/5f4921f0dfa2/retry",
+            "status": 200,
+            "response": {
+              "task_id": "e9135fd2fb06",
+              "scenario": "A",
+              "status": "processing"
+            }
+          }
+        ],
+        "notes": [],
+        "createdRetryTaskId": "e9135fd2fb06"
+      },
+      "finishedAt": "2026-06-10T02:37:25.025Z"
+    },
+    {
+      "name": "找候选人：scenario B task/SSE",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:25.028Z",
+      "ui": {
+        "button": "找候选人",
+        "sectionTitle": "岗位进展",
+        "occurrence": 0,
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "找候选人",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario B",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "B",
+            "input": "请围绕「VLA / 具身智能算法工程师」生成人才地图、候选人来源、搜索关键词和触达策略。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_2026_ai_team",
+              "job_profile_id": "job_vla_algorithm",
+              "job_title": "VLA / 具身智能算法工程师",
+              "jobTitle": "VLA / 具身智能算法工程师",
+              "action": "find_candidates"
+            }
+          },
+          "response": {
+            "task_id": "70ddf3437127",
+            "scenario": "B",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/70ddf3437127/stream",
+          "status": 200
+        }
+      ],
+      "notes": [],
+      "taskId": "70ddf3437127",
+      "finishedAt": "2026-06-10T02:37:25.132Z"
+    },
+    {
+      "name": "候选人评估 + 任务 HumanGate 确认",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:25.146Z",
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario C candidate",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "C",
+            "input": "请评估候选人「Alex Chen」与「VLA / 具身智能算法工程师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_2026_ai_team",
+              "candidate_id": "cand_lin_chen",
+              "candidateId": "cand_lin_chen",
+              "job_id": "job_vla_algorithm",
+              "jobId": "job_vla_algorithm",
+              "action": "candidate_evaluation"
+            }
+          },
+          "response": {
+            "task_id": "93fbe7ab4965",
+            "scenario": "C",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/93fbe7ab4965/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task confirm",
+          "method": "POST",
+          "path": "/api/tasks/93fbe7ab4965/confirm",
+          "status": 200,
+          "request": {
+            "decision": "approve",
+            "edits": "该候选人匹配度 92 分，具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？",
+            "data": {
+              "draft": "该候选人匹配度 92 分，具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？",
+              "candidateName": "Alex Chen"
+            }
+          },
+          "response": {
+            "task_id": "93fbe7ab4965",
+            "scenario": "C",
+            "scenario_id": "C",
+            "input": "请评估候选人「Alex Chen」与「VLA / 具身智能算法工程师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_2026_ai_team",
+              "candidate_id": "cand_lin_chen",
+              "candidateId": "cand_lin_chen",
+              "job_id": "job_vla_algorithm",
+              "jobId": "job_vla_algorithm",
+              "action": "candidate_evaluation",
+              "project_candidate_evaluation_runtime": {
+                "type": "object",
+                "keys": [
+                  "type",
+                  "candidate_id",
+                  "job_id",
+                  "context",
+                  "report",
+                  "awaiting_step_index"
+                ]
+              }
+            },
+            "status": "processing",
+            "current_agent": "human_expert",
+            "current_step": 2,
+            "total_steps": 3,
+            "logs": {
+              "type": "array",
+              "length": 7,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 2,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                }
+              ]
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-10T02:37:25.161151+00:00",
+            "updated_at": "2026-06-10T02:37:26.693814+00:00"
+          }
+        },
+        {
+          "label": "GET task snapshot",
+          "method": "GET",
+          "path": "/api/tasks/93fbe7ab4965",
+          "status": 200,
+          "response": {
+            "task_id": "93fbe7ab4965",
+            "scenario": "C",
+            "scenario_id": "C",
+            "input": "请评估候选人「Alex Chen」与「VLA / 具身智能算法工程师」岗位的匹配度，并在需要时触发人工确认。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "CandidateTable",
+              "project_id": "project_2026_ai_team",
+              "candidate_id": "cand_lin_chen",
+              "candidateId": "cand_lin_chen",
+              "job_id": "job_vla_algorithm",
+              "jobId": "job_vla_algorithm",
+              "action": "candidate_evaluation"
+            },
+            "status": "processing",
+            "current_agent": "candidate_eval",
+            "current_step": 0,
+            "total_steps": 3,
+            "logs": {
+              "type": "array",
+              "length": 2,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 0,
+              "sample": []
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-10T02:37:25.161151+00:00",
+            "updated_at": "2026-06-10T02:37:25.185433+00:00"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "候选人评估",
+          "sectionTitle": "候选人名单"
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "taskId": "93fbe7ab4965",
+      "humanGateModal": "opened",
+      "finishedAt": "2026-06-10T02:37:26.790Z"
+    },
+    {
+      "name": "招聘周报：scenario D task/SSE + HumanGate + 持久化",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:26.792Z",
+      "evidence": [
+        {
+          "label": "POST /api/scenarios/run scenario D",
+          "method": "POST",
+          "path": "/api/scenarios/run",
+          "status": 200,
+          "request": {
+            "scenario": "D",
+            "input": "请基于「2026 AI 团队招聘」当前真实项目、岗位和候选人数据生成本周招聘周报。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_2026_ai_team",
+              "action": "weekly_report"
+            }
+          },
+          "response": {
+            "task_id": "8fbff6b022fd",
+            "scenario": "D",
+            "status": "processing"
+          }
+        },
+        {
+          "label": "GET task stream",
+          "method": "GET",
+          "path": "/api/tasks/8fbff6b022fd/stream",
+          "status": 200
+        },
+        {
+          "label": "POST task confirm",
+          "method": "POST",
+          "path": "/api/tasks/8fbff6b022fd/confirm",
+          "status": 200,
+          "request": {
+            "decision": "approve",
+            "edits": "{\n  \"下周行动建议\": [\n    \"更新岗位画像和目标公司列表。\",\n    \"校准候选人评分卡并补齐面试追问。\",\n    \"把人工修改、面试反馈和 offer / reject 结果回流到知识库、画像库和评分体系。\"\n  ]\n}",
+            "data": {
+              "draft": "{\n  \"下周行动建议\": [\n    \"更新岗位画像和目标公司列表。\",\n    \"校准候选人评分卡并补齐面试追问。\",\n    \"把人工修改、面试反馈和 offer / reject 结果回流到知识库、画像库和评分体系。\"\n  ]\n}"
+            }
+          },
+          "response": {
+            "task_id": "8fbff6b022fd",
+            "scenario": "D",
+            "scenario_id": "D",
+            "input": "请基于「2026 AI 团队招聘」当前真实项目、岗位和候选人数据生成本周招聘周报。",
+            "team_constraint": "真机泛化",
+            "aperture_weight": 0.7,
+            "frontend_state": {
+              "source": "ProjectDetailPage",
+              "project_id": "project_2026_ai_team",
+              "action": "weekly_report",
+              "legacy_scenario_runtime": {
+                "type": "object",
+                "keys": [
+                  "type",
+                  "scenario",
+                  "next_step_index",
+                  "awaiting_step_index",
+                  "context"
+                ]
+              }
+            },
+            "status": "processing",
+            "current_agent": "human_expert",
+            "current_step": 3,
+            "total_steps": 5,
+            "logs": {
+              "type": "array",
+              "length": 16,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "ts",
+                    "agent",
+                    "message",
+                    "level",
+                    "event_type"
+                  ]
+                }
+              ]
+            },
+            "steps_done": {
+              "type": "array",
+              "length": 3,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "agent_id",
+                    "label",
+                    "output"
+                  ]
+                }
+              ]
+            },
+            "awaiting": null,
+            "result": null,
+            "error": null,
+            "created_at": "2026-06-10T02:37:26.796915+00:00",
+            "updated_at": "2026-06-10T02:37:35.569994+00:00"
+          }
+        },
+        {
+          "label": "POST reports weekly",
+          "method": "POST",
+          "path": "/api/reports/weekly",
+          "status": 200,
+          "request": {
+            "projectId": "project_2026_ai_team",
+            "sourceTaskId": "8fbff6b022fd",
+            "report": {
+              "conclusion": "本周围绕机器人系统架构师推进招聘，需同时看岗位进展、候选人质量和市场信号。",
+              "topCandidates": {
+                "type": "array",
+                "length": 1,
+                "sample": [
+                  "从候选人画像库提取本周高分候选人，并附匹配评分、风险点和证据链。"
+                ]
+              },
+              "risks": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "缺少 offer / reject / 入职结果，候选人评分体系无法闭环校准。",
+                  "缺少面试反馈或人工校准记录，需补齐证据链。"
+                ]
+              },
+              "nextActions": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "更新岗位画像和目标公司列表。",
+                  "校准候选人评分卡并补齐面试追问。"
+                ]
+              }
+            }
+          },
+          "response": {
+            "reportId": "report_202257e0f21b",
+            "projectId": "project_2026_ai_team",
+            "sourceTaskId": "8fbff6b022fd",
+            "content": {
+              "conclusion": "本周围绕机器人系统架构师推进招聘，需同时看岗位进展、候选人质量和市场信号。",
+              "topCandidates": {
+                "type": "array",
+                "length": 1,
+                "sample": [
+                  "从候选人画像库提取本周高分候选人，并附匹配评分、风险点和证据链。"
+                ]
+              },
+              "risks": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "缺少 offer / reject / 入职结果，候选人评分体系无法闭环校准。",
+                  "缺少面试反馈或人工校准记录，需补齐证据链。"
+                ]
+              },
+              "nextActions": {
+                "type": "array",
+                "length": 3,
+                "sample": [
+                  "更新岗位画像和目标公司列表。",
+                  "校准候选人评分卡并补齐面试追问。"
+                ]
+              }
+            },
+            "createdAt": "2026-06-10T02:37:36.306348Z"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "生成周报",
+          "sectionTitle": null
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "taskId": "8fbff6b022fd",
+      "finishedAt": "2026-06-10T02:37:36.367Z"
+    },
+    {
+      "name": "人群筛选闭环：后端查询 + 保存能力门控",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:36.368Z",
+      "evidence": [
+        {
+          "label": "POST segments query",
+          "method": "POST",
+          "path": "/api/segments/query",
+          "status": 200,
+          "request": {
+            "projectId": "project_2026_ai_team",
+            "criteria": {
+              "jobProfileId": "all",
+              "minScore": 0,
+              "city": "",
+              "outreachStatus": "all",
+              "hasEmail": "all",
+              "sourcePlatform": "all"
+            }
+          },
+          "response": {
+            "projectId": "project_2026_ai_team",
+            "criteria": {
+              "jobProfileId": "all",
+              "minScore": 0,
+              "city": "",
+              "outreachStatus": "all",
+              "hasEmail": "all",
+              "sourcePlatform": "all"
+            },
+            "total": 5,
+            "candidates": {
+              "type": "array",
+              "length": 5,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "label": "POST segments save",
+          "method": "POST",
+          "path": "/api/segments",
+          "status": 200,
+          "request": {
+            "projectId": "project_2026_ai_team",
+            "name": "当前筛选目标人群",
+            "criteria": {
+              "jobProfileId": "all",
+              "minScore": 0,
+              "city": "",
+              "outreachStatus": "all",
+              "hasEmail": "all",
+              "sourcePlatform": "all"
+            },
+            "candidateIds": {
+              "type": "array",
+              "length": 5,
+              "sample": [
+                "cand_lin_chen",
+                "cand_zhou_han"
+              ]
+            }
+          },
+          "response": {
+            "segmentId": "segment_5b79f98a8860",
+            "projectId": "project_2026_ai_team",
+            "name": "当前筛选目标人群",
+            "criteria": {
+              "city": "",
+              "hasEmail": "all",
+              "jobProfileId": "all",
+              "minScore": 0,
+              "outreachStatus": "all",
+              "sourcePlatform": "all"
+            },
+            "candidateIds": {
+              "type": "array",
+              "length": 5,
+              "sample": [
+                "cand_lin_chen",
+                "cand_zhou_han"
+              ]
+            },
+            "candidateCount": 5,
+            "createdAt": "2026-06-10T02:37:36.500013Z",
+            "candidates": {
+              "type": "array",
+              "length": 5,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "name",
+                    "title",
+                    "currentCompany",
+                    "location",
+                    "city",
+                    "email",
+                    "githubUrl",
+                    "linkedinUrl",
+                    "homepageUrl",
+                    "sourcePlatform",
+                    "sourceUrl",
+                    "evidence"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "query": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "查询目标人群",
+          "sectionTitle": "筛选条件"
+        },
+        "saveButton": {
+          "found": true,
+          "disabled": false,
+          "text": "保存目标人群",
+          "title": null,
+          "occurrence": 0,
+          "sectionTitle": "筛选条件",
+          "availableButtons": [
+            "保存目标人群"
+          ]
+        }
+      },
+      "finishedAt": "2026-06-10T02:37:36.597Z"
+    },
+    {
+      "name": "邮件触达闭环：后端草稿 + 人工确认 + 模拟发送记录",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:36.597Z",
+      "evidence": [
+        {
+          "label": "POST outreach draft",
+          "method": "POST",
+          "path": "/api/outreach/draft",
+          "status": 200,
+          "request": {
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+            "segmentId": "segment_5b79f98a8860"
+          },
+          "response": {
+            "draftId": "draft_6820c5227eb4",
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+            "segmentId": "segment_5b79f98a8860",
+            "subject": "关于 VLA / 具身智能算法工程师 真机部署问题的技术切磋",
+            "body": "看到你材料里写到的「Embodied AI Lab」，这个工程取舍很硬核。\n\nAlex Chen，你好。我这边负责 2026 AI 团队招聘 的核心硬件产品落地，最近卡在端到端策略从仿真/离线数据迁移到真机后的泛化与安全边界：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 VLA / 具身智能算法工程师 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接近。我更想拿一个具体技术问题和...",
+            "status": "draft",
+            "strategyTag": "场景叙事类",
+            "backendGenerated": true,
+            "createdAt": "2026-06-10T02:37:36.605648Z",
+            "updatedAt": "2026-06-10T02:37:36.605648Z"
+          }
+        },
+        {
+          "label": "GET outreach history",
+          "method": "GET",
+          "path": "/api/outreach/history?projectId=project_2026_ai_team&candidateId=cand_lin_chen",
+          "status": 200,
+          "response": {
+            "items": {
+              "type": "array",
+              "length": 0,
+              "sample": []
+            }
+          }
+        },
+        {
+          "label": "PATCH outreach draft",
+          "method": "PATCH",
+          "path": "/api/outreach/drafts/draft_6820c5227eb4",
+          "status": 200,
+          "request": {
+            "subject": "E2E 自动验证主题 1781059074937",
+            "body": "看到你材料里写到的「Embodied AI Lab」，这个工程取舍很硬核。\n\nAlex Chen，你好。我这边负责 2026 AI 团队招聘 的核心硬件产品落地，最近卡在端到端策略从仿真/离线数据迁移到真机后的泛化与安全边界：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 VLA / 具身智能算法工程师 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接近。我更想拿一个具体技术问题和..."
+          },
+          "response": {
+            "draftId": "draft_6820c5227eb4",
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+            "segmentId": "segment_5b79f98a8860",
+            "subject": "E2E 自动验证主题 1781059074937",
+            "body": "看到你材料里写到的「Embodied AI Lab」，这个工程取舍很硬核。\n\nAlex Chen，你好。我这边负责 2026 AI 团队招聘 的核心硬件产品落地，最近卡在端到端策略从仿真/离线数据迁移到真机后的泛化与安全边界：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 VLA / 具身智能算法工程师 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接近。我更想拿一个具体技术问题和...",
+            "status": "draft",
+            "strategyTag": "场景叙事类",
+            "backendGenerated": true,
+            "createdAt": "2026-06-10T02:37:36.605648Z",
+            "updatedAt": "2026-06-10T02:37:54.986819Z"
+          }
+        },
+        {
+          "label": "POST outreach send",
+          "method": "POST",
+          "path": "/api/outreach/send",
+          "status": 200,
+          "request": {
+            "draftId": "draft_6820c5227eb4",
+            "decision": "approve",
+            "simulate": true
+          },
+          "response": {
+            "historyId": "history_17e5ca41635a",
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+            "draftId": "draft_6820c5227eb4",
+            "segmentId": "segment_5b79f98a8860",
+            "email": "alex.chen@example.com",
+            "strategyTag": "场景叙事类",
+            "subject": "E2E 自动验证主题 1781059074937",
+            "body": "看到你材料里写到的「Embodied AI Lab」，这个工程取舍很硬核。\n\nAlex Chen，你好。我这边负责 2026 AI 团队招聘 的核心硬件产品落地，最近卡在端到端策略从仿真/离线数据迁移到真机后的泛化与安全边界：算法在离线指标里能跑通，但一到真机部署，就会被时延、传感器噪声、执行器余量和现场稳定性一起放大。\n\n你在 VLA / 具身智能算法工程师 上的经历，和我们现在要把 AI 建模与复杂决策 从 demo 推到真实商业化的阶段很接近。我更想拿一个具体技术问题和...",
+            "status": "simulated",
+            "deliveryMode": "simulated",
+            "providerStatus": "simulated",
+            "createdAt": "2026-06-10T02:37:55.011842Z"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "生成草稿",
+          "sectionTitle": "候选人名单"
+        },
+        "openConfirm": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "确认草稿",
+          "sectionTitle": "邮件草稿"
+        },
+        "approve": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "通过",
+          "sectionTitle": null
+        }
+      },
+      "deliveryMode": "simulated",
+      "finishedAt": "2026-06-10T02:37:55.085Z"
+    },
+    {
+      "name": "岗位匹配 UI：真实 /jobs/match 结果",
+      "status": "PASS",
+      "startedAt": "2026-06-10T02:37:55.085Z",
+      "evidence": [
+        {
+          "label": "POST jobs match",
+          "method": "POST",
+          "path": "/api/jobs/match",
+          "status": 200,
+          "request": {
+            "query": "VLA / 具身智能算法工程师",
+            "top_k": 5
+          },
+          "response": {
+            "results": {
+              "type": "array",
+              "length": 2,
+              "sample": [
+                {
+                  "type": "object",
+                  "keys": [
+                    "candidate_id",
+                    "candidate_name",
+                    "job_id",
+                    "job_title",
+                    "match_score",
+                    "pipeline_status",
+                    "source"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "keys": [
+                    "candidate_id",
+                    "candidate_name",
+                    "job_id",
+                    "job_title",
+                    "match_score",
+                    "pipeline_status",
+                    "source"
+                  ]
+                }
+              ]
+            },
+            "source": "project_database"
+          }
+        }
+      ],
+      "notes": [],
+      "ui": {
+        "click": {
+          "ok": true,
+          "disabled": false,
+          "title": null,
+          "text": "岗位匹配",
+          "sectionTitle": "岗位进展"
+        }
+      },
+      "resultCount": 2,
+      "finishedAt": "2026-06-10T02:37:55.189Z"
+    }
+  ],
+  "createdTaskIds": [
+    "5f4921f0dfa2",
+    "e9135fd2fb06",
+    "70ddf3437127",
+    "93fbe7ab4965",
+    "8fbff6b022fd"
+  ],
+  "cleanup": {
+    "outreachDraftIds": [
+      "draft_6820c5227eb4"
+    ],
+    "outreachHistoryIds": [
+      "history_17e5ca41635a"
+    ],
+    "segmentIds": [
+      "segment_5b79f98a8860"
+    ],
+    "reportIds": [
+      "report_202257e0f21b"
+    ],
+    "candidateLinks": [
+      {
+        "candidateId": "cand_lin_chen",
+        "jobId": "job_vla_algorithm",
+        "matchScore": 92,
+        "pipelineStatus": "processing"
+      }
+    ]
+  },
+  "initialData": {
+    "project": {
+      "method": "GET",
+      "path": "/api/projects/project_2026_ai_team",
+      "status": 200,
+      "response": {
+        "id": "project_2026_ai_team",
+        "name": "2026 AI 团队招聘",
+        "status": "active",
+        "createdAt": "2026-06-09T00:00:00Z",
+        "openJobs": 3,
+        "totalCandidates": 5,
+        "awaitingHuman": 1,
+        "averageMatchScore": 84
+      }
+    },
+    "jobs": {
+      "method": "GET",
+      "path": "/api/projects/project_2026_ai_team/jobs",
+      "status": 200,
+      "response": {
+        "type": "array",
+        "length": 3,
+        "sample": [
+          {
+            "id": "job_vla_algorithm",
+            "projectId": "project_2026_ai_team",
+            "title": "VLA / 具身智能算法工程师",
+            "headcount": 2,
+            "status": "processing",
+            "pipelineStatus": "awaiting_human",
+            "candidateCount": 2,
+            "averageMatchScore": 90
+          },
+          {
+            "id": "job_robot_data_platform",
+            "projectId": "project_2026_ai_team",
+            "title": "机器人数据平台工程师",
+            "headcount": 1,
+            "status": "offer",
+            "pipelineStatus": "processing",
+            "candidateCount": 2,
+            "averageMatchScore": 82
+          }
+        ]
+      }
+    },
+    "candidates": {
+      "method": "GET",
+      "path": "/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+      "status": 200,
+      "response": {
+        "type": "array",
+        "length": 5,
+        "sample": [
+          {
+            "name": "Alex Chen",
+            "currentCompany": "Embodied AI Lab",
+            "city": "深圳",
+            "email": "alex.chen@example.com",
+            "id": "cand_lin_chen",
+            "jobCandidateId": 11,
+            "jobId": "job_vla_algorithm",
+            "jobTitle": "VLA / 具身智能算法工程师",
+            "matchScore": 92,
+            "pipelineStatus": "processing"
+          },
+          {
+            "name": "Zhou Han",
+            "currentCompany": "Robot Foundation Team",
+            "city": "上海",
+            "email": "zhou.han@example.com",
+            "id": "cand_zhou_han",
+            "jobCandidateId": 12,
+            "jobId": "job_vla_algorithm",
+            "jobTitle": "VLA / 具身智能算法工程师",
+            "matchScore": 88,
+            "pipelineStatus": "awaiting_human"
+          }
+        ]
+      }
+    },
+    "integrations": {
+      "method": "GET",
+      "path": "/api/integrations/status",
+      "status": 200,
+      "response": {
+        "config_path": "config/services.toml",
+        "defaults": {
+          "document_parser": "auto_document_parser",
+          "embedding": "bge_m3_local",
+          "evaluation": "self_rsi_evaluator",
+          "vector_store": "qdrant_local",
+          "ocr": "aliyun_ocr",
+          "search": "due_diligence_federated_search",
+          "mcp": "disabled_mcp",
+          "structured_output": "outlines_structured_output",
+          "database": "disabled_database",
+          "llm": "openrouter_auto_reasoning",
+          "email_discovery": "hunter_email_finder",
+          "email_verification": "zerobounce_email_validation",
+          "email_delivery": "postmark_compliant_email",
+          "scraping": "firecrawl_scrape"
+        },
+        "capabilities": {
+          "type": "array",
+          "length": 18,
+          "sample": [
+            {
+              "type": "object",
+              "keys": [
+                "id",
+                "service_type",
+                "label",
+                "name_zh",
+                "description",
+                "status",
+                "connected",
+                "connected_name_zh",
+                "code_path",
+                "default_service",
+                "credential_status",
+                "credentials"
+              ]
+            },
+            {
+              "type": "object",
+              "keys": [
+                "id",
+                "service_type",
+                "label",
+                "name_zh",
+                "description",
+                "status",
+                "connected",
+                "connected_name_zh",
+                "code_path",
+                "default_service",
+                "credential_status",
+                "credentials"
+              ]
+            }
+          ]
+        },
+        "services": {
+          "type": "array",
+          "length": 79,
+          "sample": [
+            {
+              "type": "object",
+              "keys": [
+                "name",
+                "type",
+                "provider",
+                "name_zh",
+                "description",
+                "is_default",
+                "status",
+                "code_path",
+                "credentials",
+                "runtime_requirements",
+                "settings"
+              ]
+            },
+            {
+              "type": "object",
+              "keys": [
+                "name",
+                "type",
+                "provider",
+                "name_zh",
+                "description",
+                "is_default",
+                "status",
+                "code_path",
+                "credentials",
+                "runtime_requirements",
+                "settings"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "latestReport": {
+      "method": "GET",
+      "path": "/api/projects/project_2026_ai_team/reports/latest",
+      "status": 404,
+      "response": {
+        "detail": "Weekly report not found for project: project_2026_ai_team"
+      }
+    },
+    "projectNameVisible": true
+  },
+  "capabilities": {
+    "search": {
+      "id": "search_api",
+      "status": "active",
+      "connected": true
+    },
+    "code": {
+      "id": "code_api",
+      "status": "not_configured",
+      "connected": false
+    },
+    "embedding": {
+      "id": "embedding_api",
+      "status": "active",
+      "connected": true
+    },
+    "evaluation": {
+      "id": "evaluation_api",
+      "status": "active",
+      "connected": true
+    },
+    "email_discovery": {
+      "id": "email_discovery_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "email_verification": {
+      "id": "email_verification_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "email_delivery": {
+      "id": "email_delivery_api",
+      "status": "missing_key",
+      "connected": false
+    },
+    "scraping": {
+      "id": "scraping_api",
+      "status": "available",
+      "connected": true
+    },
+    "vector_store": {
+      "id": "vector_api",
+      "status": "active",
+      "connected": true
+    },
+    "llm": {
+      "id": "llm_api",
+      "status": "active",
+      "connected": true
+    },
+    "ocr": {
+      "id": "ocr_api",
+      "status": "active",
+      "connected": true
+    },
+    "structured_output": {
+      "id": "structured_output_api",
+      "status": "active",
+      "connected": true
+    },
+    "mcp": {
+      "id": "mcp_api",
+      "status": "disabled",
+      "connected": false
+    },
+    "database": {
+      "id": "database_api",
+      "status": "disabled",
+      "connected": false
+    },
+    "document_parser": {
+      "id": "document_parser_api",
+      "status": "active",
+      "connected": true
+    },
+    "segments.query": {
+      "id": "segments.query",
+      "status": "active",
+      "connected": true
+    },
+    "segments.create": {
+      "id": "segments.create",
+      "status": "active",
+      "connected": true
+    },
+    "segments.read": {
+      "id": "segments.read",
+      "status": "active",
+      "connected": true
+    }
+  },
+  "finishedAt": "2026-06-10T02:37:55.189Z"
+}

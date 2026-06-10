@@ -13,6 +13,7 @@ import {
   rememberTaskId,
   SectionPanel,
   topCandidates,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
@@ -37,7 +38,8 @@ function DistributionList({ entries }: { entries: Array<[string, number]> }) {
 }
 
 export function TalentMapPage() {
-  const data = useWorkspaceData();
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId });
   const [runningJobId, setRunningJobId] = useState<string | null>(null);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

@@ -77,4 +77,4 @@ class CandidateResponse(CandidateRequest):
 
 
 class CandidateComplianceReviewRequest(CamelModel):
-    decision: Literal["approve"] = "approve"
+    decision: Literal["approve", "reject"] = "approve"

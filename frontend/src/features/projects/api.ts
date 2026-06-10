@@ -149,6 +149,19 @@ export type ProjectBpInitializeResponse = {
   coverageGaps: string[];
 };
 
+export type ProjectCreateRequest = {
+  id: string;
+  name: string;
+  status?: string;
+};
+
+export type ProjectBpRequest = {
+  projectName: string;
+  bpFilePath: string;
+  llmService?: string | null;
+  minimumRoleCount?: number;
+};
+
 export type CandidateSearchSchedule = {
   id: number;
   projectId: string;
@@ -226,23 +239,47 @@ export function getProject(projectId: string): Promise<ProjectRecord> {
   return apiClient.get<ProjectBackendResponse>(`/projects/${encodeURIComponent(projectId)}`).then(mapProject);
 }
 
+export function listProjects(): Promise<ProjectRecord[]> {
+  return apiClient.get<ProjectBackendResponse[]>("/projects").then((projects) => projects.map(mapProject));
+}
+
+export function createProject(request: ProjectCreateRequest): Promise<ProjectRecord> {
+  return apiClient.post<ProjectBackendResponse>("/projects", request).then(mapProject);
+}
+
 export function getProjectJobs(projectId: string, options: ListQueryOptions = {}): Promise<JobProfile[]> {
   return apiClient
     .get<JobBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/jobs`, { query: options })
     .then((jobs) => jobs.map(mapJob));
 }
 
-export async function initializeProjectFromBp(
-  projectId: string,
-  request: { projectName: string; bpFilePath: string; llmService?: string | null },
-): Promise<ProjectBpInitializeResponse> {
-  const response = await apiClient.post<
-    Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] }
-  >(`/projects/${encodeURIComponent(projectId)}/initialize-from-bp`, request);
+function mapBpInitializeResponse(
+  response: Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] },
+): ProjectBpInitializeResponse {
   return {
     ...response,
     jobs: response.jobs.map(mapJob),
   };
+}
+
+export async function previewProjectFromBp(
+  projectId: string,
+  request: ProjectBpRequest,
+): Promise<ProjectBpInitializeResponse> {
+  const response = await apiClient.post<
+    Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] }
+  >(`/projects/${encodeURIComponent(projectId)}/preview-from-bp`, request);
+  return mapBpInitializeResponse(response);
+}
+
+export async function initializeProjectFromBp(
+  projectId: string,
+  request: ProjectBpRequest,
+): Promise<ProjectBpInitializeResponse> {
+  const response = await apiClient.post<
+    Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] }
+  >(`/projects/${encodeURIComponent(projectId)}/initialize-from-bp`, request);
+  return mapBpInitializeResponse(response);
 }
 
 export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {

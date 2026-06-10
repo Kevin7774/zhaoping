@@ -77,6 +77,24 @@ function integrationsPayload(overrides: Record<string, string> = {}) {
         connected: statusFor("database_api") === "active",
       },
       {
+        id: "segments.query",
+        service_type: "segments.query",
+        status: statusFor("segments.query"),
+        connected: statusFor("segments.query") === "active",
+      },
+      {
+        id: "segments.create",
+        service_type: "segments.create",
+        status: statusFor("segments.create"),
+        connected: statusFor("segments.create") === "active",
+      },
+      {
+        id: "segments.read",
+        service_type: "segments.read",
+        status: statusFor("segments.read"),
+        connected: statusFor("segments.read") === "active",
+      },
+      {
         id: "email_delivery_api",
         service_type: "email_delivery",
         status: statusFor("email_delivery_api"),
@@ -152,6 +170,52 @@ describe("ProjectDetailPage backend hardening", () => {
       if (url === "/api/integrations/status") return jsonResponse(integrationsPayload(options.integrations));
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload, options.projectStatus ?? 200);
       if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
+      if (url === "/api/projects/project_2026_ai_team/preview-from-bp") {
+        return jsonResponse({
+          projectId: "project_2026_ai_team",
+          projectName: "真实后端项目",
+          promptName: "bp_deconstructor_v2",
+          jobCount: 14,
+          jobs: [
+            {
+              id: "job_edge_ai_architect",
+              projectId: "project_2026_ai_team",
+              title: "边缘 AI 架构师",
+              headcount: 1,
+              status: "sourcing",
+              pipelineStatus: "sourcing",
+              candidateCount: 0,
+              averageMatchScore: 0,
+            },
+          ],
+          industryReading: "边缘 AI 项目",
+          technicalAssumptions: ["需要云边协同"],
+          coverageGaps: [],
+        });
+      }
+      if (url === "/api/projects/project_2026_ai_team/initialize-from-bp") {
+        return jsonResponse({
+          projectId: "project_2026_ai_team",
+          projectName: "真实后端项目",
+          promptName: "bp_deconstructor_v2",
+          jobCount: 14,
+          jobs: [
+            {
+              id: "job_edge_ai_architect",
+              projectId: "project_2026_ai_team",
+              title: "边缘 AI 架构师",
+              headcount: 1,
+              status: "sourcing",
+              pipelineStatus: "sourcing",
+              candidateCount: 0,
+              averageMatchScore: 0,
+            },
+          ],
+          industryReading: "边缘 AI 项目",
+          technicalAssumptions: ["需要云边协同"],
+          coverageGaps: [],
+        });
+      }
       if (url === "/api/projects/project_2026_ai_team/candidate-search-schedules") {
         if (options.scheduleResponse !== undefined) return jsonResponse(options.scheduleResponse);
         return jsonResponse({ items: options.schedules ?? [] });
@@ -289,6 +353,26 @@ describe("ProjectDetailPage backend hardening", () => {
       "/api/projects/project_2026_ai_team/candidates?skip=0&limit=50",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("previews BP generated roles before confirming overwrite", async () => {
+    mockBackend();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderProjectPage();
+
+    expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "从 BP 智能生成岗位" }));
+
+    expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认覆盖岗位" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team/initialize-from-bp",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 
   it("shows the candidate empty state when the backend returns an empty candidate array", async () => {
@@ -581,6 +665,23 @@ describe("ProjectDetailPage backend hardening", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/segments/query", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/segments", expect.objectContaining({ method: "POST" }));
+    });
+    expect(await screen.findByText("已保存目标人群 segment_1，可用于后续触达。")).toBeTruthy();
+  });
+
+  it("allows Segment save when segments.create is active even if database_api is disabled", async () => {
+    mockBackend({ integrations: { database_api: "disabled", "segments.create": "active" } });
+
+    renderProjectPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "查询目标人群" }));
+    expect(await screen.findByText("后端筛选命中 1 人，可保存为目标人群。")).toBeTruthy();
+    const saveButton = screen.getByRole("button", { name: "保存目标人群" });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/segments", expect.objectContaining({ method: "POST" }));
     });
     expect(await screen.findByText("已保存目标人群 segment_1，可用于后续触达。")).toBeTruthy();

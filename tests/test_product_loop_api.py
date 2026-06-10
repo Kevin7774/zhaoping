@@ -201,6 +201,123 @@ def test_outreach_send_requires_real_candidate_email(client: TestClient) -> None
     assert "email" in send_response.json()["detail"].lower()
 
 
+def test_outreach_send_hard_blocks_pending_candidate_direct_api_bypass(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    assert draft_response.status_code == 200
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "pending_compliance_review"
+        session.commit()
+    monkeypatch.setattr("app.api.routers.outreach._email_delivery_active", lambda: True)
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": False},
+    )
+
+    assert send_response.status_code == 403
+    detail = send_response.json()["detail"]
+    assert "compliance" in detail.lower()
+    assert "secret" not in detail.lower()
+    assert "password" not in detail.lower()
+
+
+def test_outreach_send_records_blocked_simulation_for_pending_candidate(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    assert draft_response.status_code == 200
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "pending_compliance_review"
+        session.commit()
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": True},
+    )
+
+    assert send_response.status_code == 200
+    payload = send_response.json()
+    assert payload["status"] == "blocked_simulation"
+    assert payload["deliveryMode"] == "simulated"
+    assert payload["providerStatus"] == "blocked_by_compliance:pending_compliance_review"
+
+
+def test_outreach_send_hard_blocks_rejected_candidate_direct_api_bypass(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    assert draft_response.status_code == 200
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "rejected"
+        session.commit()
+    monkeypatch.setattr("app.api.routers.outreach._email_delivery_active", lambda: True)
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": False},
+    )
+
+    assert send_response.status_code == 403
+    assert "rejected" in send_response.json()["detail"].lower()
+
+    simulated_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": True},
+    )
+    assert simulated_response.status_code == 200
+    assert simulated_response.json()["status"] == "blocked_simulation"
+    assert simulated_response.json()["providerStatus"] == "blocked_by_compliance:rejected"
+
+
 def test_outreach_blocks_compliance_pending_candidate_until_hr_approval(
     client: TestClient,
     session_factory: sessionmaker[Session],
@@ -247,6 +364,57 @@ def test_outreach_blocks_compliance_pending_candidate_until_hr_approval(
         },
     )
     assert draft_after_review.status_code == 200
+
+
+def test_compliance_review_can_reject_candidate_contact_source(client: TestClient, session_factory: sessionmaker[Session]) -> None:
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "pending_compliance_review"
+        session.commit()
+
+    candidates_before = client.get("/projects/project_2026_ai_team/candidates").json()
+    job_candidate_id = candidates_before[0]["jobCandidateId"]
+
+    review_response = client.post(
+        f"/projects/project_2026_ai_team/candidates/{job_candidate_id}/compliance-review",
+        json={"decision": "reject"},
+    )
+
+    assert review_response.status_code == 200
+    assert review_response.json()["pipelineStatus"] == "rejected"
+
+
+def test_compliance_review_can_approve_rejected_candidate_contact_source(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        link = session.scalar(
+            select(JobCandidate).where(
+                JobCandidate.job_id == "job_vla_algorithm",
+                JobCandidate.candidate_id == "cand_lin_chen",
+            )
+        )
+        assert link is not None
+        link.pipeline_status = "rejected"
+        session.commit()
+
+    candidates_before = client.get("/projects/project_2026_ai_team/candidates").json()
+    job_candidate_id = candidates_before[0]["jobCandidateId"]
+
+    review_response = client.post(
+        f"/projects/project_2026_ai_team/candidates/{job_candidate_id}/compliance-review",
+        json={"decision": "approve"},
+    )
+
+    assert review_response.status_code == 200
+    assert review_response.json()["pipelineStatus"] == "pending_outreach"
 
 
 def test_outreach_real_send_is_blocked_when_email_delivery_is_not_active(

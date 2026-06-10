@@ -1,0 +1,10 @@
+$ vitest run
+
+ RUN  v4.1.8 /home/lison/Desktop/zhaoping/frontend
+
+
+ Test Files  9 passed (9)
+      Tests  68 passed (68)
+   Start at  10:16:50
+   Duration  1.46s (transform 295ms, setup 0ms, import 652ms, tests 1.77s, environment 2.12s)
+

@@ -1,0 +1,309 @@
+{
+  "summary": {
+    "startedAt": "2026-06-09T14:39:29Z",
+    "finishedAt": "2026-06-09T14:41:29Z",
+    "durationSeconds": 120.7,
+    "loops": 24,
+    "passLoops": 24,
+    "failedLoops": 0,
+    "averageDurationMs": 29.4,
+    "p95CallDurationMs": 8.0,
+    "networkErrorCount": 0,
+    "timeoutCount": 0,
+    "pollingMax": null,
+    "sseFailures": null,
+    "consoleErrors": null,
+    "eventSourceObservation": "not measured in soak-lite"
+  },
+  "errors": [],
+  "loops": [
+    {
+      "index": 22,
+      "durationMs": 28,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/integrations/status",
+          "status": 200,
+          "durationMs": 8
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/jobs",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/reports/latest",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/segments/query",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/jobs/match",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/c7341ed2ff6f",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/4a1c617a585f",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/d590fea40d75",
+          "status": 200,
+          "durationMs": 3
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/0bbd2991a6a9",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/2129768b30b6",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/84ea2cbeacb1",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/3c69565bd48a",
+          "status": 200,
+          "durationMs": 1
+        }
+      ]
+    },
+    {
+      "index": 23,
+      "durationMs": 29,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/integrations/status",
+          "status": 200,
+          "durationMs": 8
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/jobs",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/reports/latest",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/segments/query",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/jobs/match",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/c7341ed2ff6f",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/4a1c617a585f",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/d590fea40d75",
+          "status": 200,
+          "durationMs": 3
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/0bbd2991a6a9",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/2129768b30b6",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/84ea2cbeacb1",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/3c69565bd48a",
+          "status": 200,
+          "durationMs": 1
+        }
+      ]
+    },
+    {
+      "index": 24,
+      "durationMs": 28,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/integrations/status",
+          "status": 200,
+          "durationMs": 8
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/jobs",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/candidates?skip=0&limit=50",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/projects/project_2026_ai_team/reports/latest",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/segments/query",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "POST",
+          "path": "/jobs/match",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/c7341ed2ff6f",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/4a1c617a585f",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/d590fea40d75",
+          "status": 200,
+          "durationMs": 3
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/0bbd2991a6a9",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/2129768b30b6",
+          "status": 200,
+          "durationMs": 2
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/84ea2cbeacb1",
+          "status": 200,
+          "durationMs": 1
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/3c69565bd48a",
+          "status": 200,
+          "durationMs": 1
+        }
+      ]
+    }
+  ]
+}

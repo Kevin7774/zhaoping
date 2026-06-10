@@ -1,0 +1,16 @@
+{
+  "startedAt": "2026-06-09T14:39:29Z",
+  "finishedAt": "2026-06-09T14:41:29Z",
+  "durationSeconds": 120.7,
+  "loops": 24,
+  "passLoops": 24,
+  "failedLoops": 0,
+  "averageDurationMs": 29.4,
+  "p95CallDurationMs": 8.0,
+  "networkErrorCount": 0,
+  "timeoutCount": 0,
+  "pollingMax": null,
+  "sseFailures": null,
+  "consoleErrors": null,
+  "eventSourceObservation": "not measured in soak-lite"
+}

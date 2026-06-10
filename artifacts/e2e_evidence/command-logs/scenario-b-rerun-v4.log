@@ -1,0 +1,9 @@
+before_count 16
+created {'task_id': 'f78086893da5', 'scenario': 'B', 'status': 'processing'}
+pre_confirm_status awaiting_human
+confirm processing
+final_status done
+lead_ingestion {"found": 6, "normalized": 6, "inserted_candidates": 0, "updated_candidates": 0, "linked_job_candidates": 0, "duplicates": 6, "rejected": 0, "compliance_review_required": 0, "rejected_reasons": {}, "source_task_id": "f78086893da5"}
+event_count 22
+after_count 16
+task_id f78086893da5

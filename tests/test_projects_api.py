@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event
 from sqlalchemy import create_engine
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -147,6 +148,190 @@ class SequenceProjectInitLLM(FakeProjectInitLLM):
     def text(self, prompt: str, max_tokens: int = 1024) -> str:
         self.prompts.append(prompt)
         return self.outputs.pop(0)
+
+
+class MessagesProjectInitLLM(FakeProjectInitLLM):
+    def __init__(self, role_count: int = 14) -> None:
+        super().__init__(role_count=role_count)
+        self.messages_calls: list[dict] = []
+
+    def messages(
+        self,
+        messages: list[dict],
+        max_tokens: int = 1024,
+        temperature: float = 0,
+        response_format: dict | None = None,
+    ) -> dict:
+        self.messages_calls.append(
+            {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "response_format": response_format,
+            }
+        )
+        return {"choices": [{"message": {"content": self.text(messages[0]["content"], max_tokens=max_tokens)}}]}
+
+
+class SlowProjectInitLLM(MessagesProjectInitLLM):
+    def messages(
+        self,
+        messages: list[dict],
+        max_tokens: int = 1024,
+        temperature: float = 0,
+        response_format: dict | None = None,
+    ) -> dict:
+        self.messages_calls.append(
+            {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "response_format": response_format,
+            }
+        )
+        time.sleep(0.2)
+        return {"choices": [{"message": {"content": self.text(messages[0]["content"], max_tokens=max_tokens)}}]}
+
+
+def test_list_projects_returns_project_stats(client: TestClient, session_factory: sessionmaker[Session]) -> None:
+    with session_factory() as session:
+        session.add(
+            Project(
+                id="project_hanno_ai_hardware",
+                name="汉诺云智招聘",
+                status="active",
+                created_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+            )
+        )
+        session.add(
+            Job(
+                id="job_hanno_edge",
+                project_id="project_hanno_ai_hardware",
+                title="边缘 AI 架构师",
+                headcount=1,
+                status="sourcing",
+            )
+        )
+        session.commit()
+
+    response = client.get("/projects")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [project["id"] for project in payload] == ["project_hanno_ai_hardware", "project_2026_ai_team"]
+    assert payload[0]["openJobs"] == 1
+    assert payload[0]["totalCandidates"] == 0
+    assert payload[1]["openJobs"] == 2
+
+
+def test_create_project_creates_empty_isolated_project(client: TestClient) -> None:
+    response = client.post(
+        "/projects",
+        json={"id": "project_new_market", "name": "新市场招聘项目", "status": "active"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == "project_new_market"
+    assert response.json()["openJobs"] == 0
+    assert client.get("/projects/project_new_market/jobs").json() == []
+    assert client.get("/projects/project_new_market/candidates").json() == []
+
+
+def test_create_project_rejects_duplicate_project_id(client: TestClient) -> None:
+    response = client.post(
+        "/projects",
+        json={"id": "project_2026_ai_team", "name": "重复项目", "status": "active"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Project already exists: project_2026_ai_team"
+
+
+def test_preview_project_from_bp_uses_json_mode_and_does_not_persist_jobs(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = MessagesProjectInitLLM(role_count=14)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/preview-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["jobCount"] == 14
+    assert response.json()["jobs"][0]["title"] == "汉诺云智边缘 AI 岗位 0"
+    assert llm.messages_calls[0]["response_format"] == {"type": "json_object"}
+    with session_factory() as session:
+        assert session.get(Project, "project_hanno_ai_hardware") is None
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 0
+
+
+def test_preview_project_from_bp_falls_back_when_llm_times_out(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件、边缘计算、RAG 和私有化交付团队。", encoding="utf-8")
+    llm = SlowProjectInitLLM(role_count=14)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/preview-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobCount"] == 14
+    assert payload["jobs"][0]["title"] == "行业研究与解决方案负责人"
+    assert any("LLM" in item for item in payload["coverageGaps"])
+    with session_factory() as session:
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 0
+
+
+def test_initialize_project_from_bp_falls_back_and_persists_when_llm_times_out(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件、边缘计算、RAG 和私有化交付团队。", encoding="utf-8")
+    llm = SlowProjectInitLLM(role_count=14)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+    monkeypatch.setattr(projects_router, "BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/initialize-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobCount"] == 14
+    assert payload["jobs"][0]["title"] == "行业研究与解决方案负责人"
+    with session_factory() as session:
+        assert session.get(Project, "project_hanno_ai_hardware") is not None
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 14
 
 
 def test_initialize_project_from_bp_retries_once_when_llm_json_is_malformed(

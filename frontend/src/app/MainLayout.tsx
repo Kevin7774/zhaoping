@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { navigationItems } from "./navigation";
+import { navigationItemsForProject } from "./navigation";
+import { listProjects, type ProjectRecord } from "../features/projects/api";
+import { rememberActiveProjectId, useActiveProjectId } from "../pages/projectWorkspace";
 
 function activeSection(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "dashboard";
+  if (/^\/projects\/[^/]+\/jobs(?:\/|$)/.test(pathname)) return "jobs";
+  if (/^\/projects\/[^/]+\/talent-map(?:\/|$)/.test(pathname)) return "talent-map";
+  if (/^\/projects\/[^/]+\/scenarios(?:\/|$)/.test(pathname)) return "evaluation";
+  if (/^\/projects\/[^/]+\/candidates(?:\/|$)/.test(pathname)) return "segments";
+  if (/^\/projects\/[^/]+\/outreach(?:\/|$)/.test(pathname)) return "outreach";
+  if (/^\/projects\/[^/]+\/reports(?:\/|$)/.test(pathname)) return "reports";
   if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/jobs")) return "jobs";
   if (pathname.startsWith("/talent-map")) return "talent-map";
@@ -17,10 +25,18 @@ function activeSection(pathname: string) {
   return "dashboard";
 }
 
+function sectionPath(projectId: string, section: string) {
+  return navigationItemsForProject(projectId).find((item) => item.section === section)?.path ?? `/projects/${encodeURIComponent(projectId)}`;
+}
+
 export function MainLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const activeProjectId = useActiveProjectId();
   const currentSection = activeSection(location.pathname);
+  const navigationItems = navigationItemsForProject(activeProjectId);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +51,22 @@ export function MainLayout() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listProjects()
+      .then((items) => {
+        if (!cancelled) setProjects(items);
+      })
+      .catch(() => {
+        if (!cancelled) setProjects([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeProjectName = projects.find((project) => project.projectId === activeProjectId)?.name ?? activeProjectId;
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] text-[#111827]">
@@ -81,8 +113,29 @@ export function MainLayout() {
         <header className="sticky top-0 z-20 h-16 border-b border-[#E5E7EB] bg-white">
           <div className="flex h-full items-center justify-between gap-4 px-6">
             <div className="hidden min-w-0 text-[13px] leading-5 text-[#6B7280] md:block">
-              招聘项目 <span className="mx-2 text-[#D1D5DB]">/</span> 实时项目
+              招聘项目 <span className="mx-2 text-[#D1D5DB]">/</span> {activeProjectName}
             </div>
+            <label className="hidden min-w-[220px] text-[12px] font-medium text-[#6B7280] md:block">
+              <span className="sr-only">切换项目</span>
+              <select
+                value={activeProjectId}
+                onChange={(event) => {
+                  const nextProjectId = event.currentTarget.value;
+                  rememberActiveProjectId(nextProjectId);
+                  navigate(sectionPath(nextProjectId, currentSection));
+                }}
+                className="h-[38px] w-full rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] text-[#111827] outline-none transition focus:border-[#BFDBFE] focus:bg-white focus:ring-2 focus:ring-[#EFF6FF]"
+              >
+                {projects.some((project) => project.projectId === activeProjectId) ? null : (
+                  <option value={activeProjectId}>{activeProjectName}</option>
+                )}
+                {projects.map((project) => (
+                  <option key={project.projectId} value={project.projectId}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="relative hidden w-[360px] max-w-[38vw] md:block">
               <span className="sr-only">搜索候选人、岗位、项目</span>
               <input
@@ -106,12 +159,12 @@ export function MainLayout() {
               >
                 刷新数据
               </button>
-              <button
-                type="button"
-                className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8]"
+              <Link
+                to="/dashboard"
+                className="inline-flex h-[38px] items-center rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8]"
               >
                 新建项目
-              </button>
+              </Link>
               <div className="grid h-8 w-8 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
                 HR
               </div>

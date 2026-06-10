@@ -224,6 +224,98 @@ def empty_lead_ingestion_result(source_task_id: str, reason: str | None = None) 
     return result
 
 
+def preview_candidate_leads(
+    session: Session,
+    *,
+    project_id: str,
+    job_id: str,
+    raw_leads: list[Mapping[str, Any]],
+    limit: int = 5,
+) -> dict[str, Any]:
+    """Build a read-only ingestion preview for HumanGate approval."""
+
+    safe_limit = max(0, limit)
+    job = session.get(Job, job_id)
+    if job is None or job.project_id != project_id:
+        return {
+            "total_count": 0,
+            "omitted_count": 0,
+            "leads": [],
+            "rejected_reasons": {"job not found for project": len(raw_leads) or 1},
+        }
+
+    preview_items: list[dict[str, Any]] = []
+    rejected_reasons: dict[str, int] = {}
+    seen_keys: set[tuple[str, ...]] = set()
+
+    for raw in raw_leads:
+        normalized = normalize_candidate_lead(raw)
+        if not normalized.accepted or normalized.lead is None:
+            for reason in normalized.reasons:
+                rejected_reasons[reason] = int(rejected_reasons.get(reason, 0)) + 1
+            preview_items.append(
+                {
+                    "name": _clean_string(_first_present(raw, ("name", "candidate_name", "candidateName", "姓名", "owner_login", "author")), "name")
+                    or "Unknown Candidate",
+                    "source_platform": _clean_string(
+                        _first_present(raw, ("source_platform", "sourcePlatform", "source_key", "sourceKey", "platform", "source_name")),
+                        "source_platform",
+                    ),
+                    "source_url": _clean_url(_first_present(raw, URL_FIELDS)),
+                    "evidence_summary": "; ".join(normalized.reasons),
+                    "confidence": 0,
+                    "matched_job": job.title,
+                    "compliance_status": "rejected",
+                    "ingestion_action": "reject_candidate",
+                }
+            )
+            continue
+
+        lead = normalized.lead
+        duplicate_keys = _dedupe_keys(lead)
+        batch_duplicate = bool(duplicate_keys and any(key in seen_keys for key in duplicate_keys))
+        seen_keys.update(duplicate_keys)
+        existing_candidate = _find_existing_candidate(session, lead)
+        existing_link = None
+        if existing_candidate is not None:
+            existing_link = session.scalar(
+                select(JobCandidate).where(
+                    JobCandidate.job_id == job_id,
+                    JobCandidate.candidate_id == existing_candidate.id,
+                )
+            )
+        if batch_duplicate:
+            ingestion_action = "reject_candidate"
+        elif existing_candidate is None:
+            ingestion_action = "insert"
+        elif existing_link is None:
+            ingestion_action = "link"
+        else:
+            ingestion_action = "update"
+
+        item = {
+            "name": lead.name or _display_name_from_url(lead.source_url or lead.github_url or lead.linkedin_url or lead.homepage_url) or "Unknown Candidate",
+            "source_platform": lead.source_platform,
+            "source_url": lead.source_url,
+            "evidence_summary": _evidence_summary(lead.evidence),
+            "confidence": lead.confidence,
+            "matched_job": job.title,
+            "compliance_status": PENDING_COMPLIANCE_REVIEW_STATUS if lead.requires_compliance_review else "clear",
+            "ingestion_action": ingestion_action,
+        }
+        if lead.email:
+            item["email"] = "[redacted]"
+        preview_items.append(item)
+
+    total_count = len(preview_items)
+    return {
+        "total_count": total_count,
+        "omitted_count": max(0, total_count - safe_limit),
+        "leads": preview_items[:safe_limit],
+        "rejected_reasons": rejected_reasons,
+    }
+
+
 def ingest_candidate_leads(
     session: Session,
     *,
@@ -297,6 +389,10 @@ def ingest_candidate_leads(
 
     session.commit()
     return result
+
+
+def _evidence_summary(evidence: list[str]) -> str:
+    return "; ".join(item for item in evidence[:2] if item)[:240]
 
 
 def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ import {
   rememberTaskId,
   SectionPanel,
   StatusPill,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
@@ -26,7 +27,8 @@ type TaskLookupState = {
 type TaskLookupResult = { taskId: string; snapshot: TaskSnapshot } | { taskId: string; error: string };
 
 export function TasksPage() {
-  const data = useWorkspaceData();
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId });
   const [taskIds, setTaskIds] = useState<string[]>([]);
   const [inputTaskId, setInputTaskId] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);

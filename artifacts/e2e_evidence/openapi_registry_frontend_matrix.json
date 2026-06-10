@@ -1,0 +1,996 @@
+{
+  "summary": {
+    "openapi_path_count": 51,
+    "openapi_method_endpoint_count": 52,
+    "capabilityRegistry_path_count": 51,
+    "active_ts_endpoint_count": 25,
+    "active_ts_wrapper_endpoint_count": 26,
+    "legacy_endpoint_count": 7,
+    "backend_only_endpoint_count": 22,
+    "registered_but_no_client_wrapper_count": 22,
+    "missing_registry_count": 0,
+    "stale_registry_count": 0,
+    "category_counts": {
+      "active_ts_productized": 25,
+      "active_ts_wrapper_only": 1,
+      "legacy_only": 4,
+      "registered_only": 22
+    },
+    "compliance_review": {
+      "method": "POST",
+      "path": "/projects/{project_id}/candidates/{job_candidate_id}/compliance-review",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "confirmCandidateCompliance"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "confirmCandidateCompliance"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    }
+  },
+  "matrix": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "MainLayout.fetchHealth"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "MainLayout.fetchHealth"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/env",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/status",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getIntegrationsStatus"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getIntegrationsStatus"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/jobs/match",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "runJobMatch"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "runJobMatch"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/outreach/draft",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "createOutreachDraft"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "createOutreachDraft"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "PATCH",
+      "path": "/outreach/drafts/{draft_id}",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "updateOutreachDraft"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "updateOutreachDraft"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/outreach/history",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getOutreachHistory"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getOutreachHistory"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/outreach/send",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "sendOutreachDraft"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "sendOutreachDraft"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getProject"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getProject"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}/candidate-search-schedules",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getCandidateSearchSchedules"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getCandidateSearchSchedules"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}/candidates",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getProjectCandidatesPage"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getProjectCandidatesPage"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}/candidates/unique",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/projects/{project_id}/candidates/{job_candidate_id}/compliance-review",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "confirmCandidateCompliance"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "confirmCandidateCompliance"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/projects/{project_id}/initialize-from-bp",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "initializeProjectFromBp"
+      ],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_wrapper_only",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}/jobs",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getProjectJobs"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getProjectJobs"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "PUT",
+      "path": "/projects/{project_id}/jobs/{job_id}/candidate-search-schedule",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "updateCandidateSearchSchedule"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "updateCandidateSearchSchedule"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/projects/{project_id}/jobs/{job_id}/upload-resumes",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "uploadProjectResume"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "uploadProjectResume"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/{project_id}/reports/latest",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getLatestWeeklyReport"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getLatestWeeklyReport"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/reports/weekly",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "saveWeeklyReport"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "saveWeeklyReport"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/{report_id}",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/resumes/ingest",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/resumes/local-import",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/review/feedback",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/rsi/evaluate",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/scenarios/meta",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getScenariosMeta"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getScenariosMeta"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/scenarios/run",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "runCandidateEvaluation",
+        "runProjectScenario",
+        "runWeeklyReport"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "runCandidateEvaluation",
+        "runProjectScenario",
+        "runWeeklyReport"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/search/archive",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/search/archive/diff",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/search/archive/recent",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/search/brief",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/search/evidence",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/search/plan",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/search/run",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/search/watchlist/run",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/segments",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/segments",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "createSegment"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "createSegment"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/segments/query",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "querySegmentCandidates"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "querySegmentCandidates"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/segments/{segment_id}",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "GET",
+      "path": "/tasks/{task_id}",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "getTask"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "getTask"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/tasks/{task_id}/artifacts",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/tasks/{task_id}/cancel",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "cancelTask"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "cancelTask"
+      ],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "cancelTask"
+      ],
+      "legacy_page_uses": true,
+      "legacy_page_functions": [
+        "cancelTask"
+      ],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/tasks/{task_id}/confirm",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "confirmTask"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "confirmTask"
+      ],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "confirmTask"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/tasks/{task_id}/probe-feedback",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "sendProbeFeedback"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "legacy_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/tasks/{task_id}/retry",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "retryTask"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "retryTask"
+      ],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "retryTask"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/tasks/{task_id}/stream",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": true,
+      "active_ts_wrappers": [
+        "useTaskStream/taskStreamUrl"
+      ],
+      "active_ts_page_uses": true,
+      "active_ts_page_functions": [
+        "useTaskStream/taskStreamUrl"
+      ],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "active_ts_productized",
+      "risk": "P2"
+    },
+    {
+      "method": "GET",
+      "path": "/workflow/meta",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P2"
+    },
+    {
+      "method": "POST",
+      "path": "/workflow/sessions",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/workflow/sessions/{task_id}/nodes/{node_id}/retry",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "retryWorkflowNode"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "legacy_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/workflow/sessions/{task_id}/nodes/{node_id}/run",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "runWorkflowNode"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "legacy_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/workflow/sessions/{task_id}/nodes/{node_id}/skip",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": true,
+      "legacy_api_wrappers": [
+        "skipWorkflowNode"
+      ],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "legacy_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/workflows/run",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P1"
+    },
+    {
+      "method": "POST",
+      "path": "/workflows/validate",
+      "openapi_exists": true,
+      "capabilityRegistry_exists": true,
+      "active_ts_wrapper_exists": false,
+      "active_ts_wrappers": [],
+      "active_ts_page_uses": false,
+      "active_ts_page_functions": [],
+      "legacy_api_wrapper_exists": false,
+      "legacy_api_wrappers": [],
+      "legacy_page_uses": false,
+      "legacy_page_functions": [],
+      "category": "registered_only",
+      "risk": "P2"
+    }
+  ]
+}

@@ -6,7 +6,6 @@ import { WeeklyReportCard } from "../features/projects/components/WeeklyReportCa
 import {
   DataError,
   DataLoading,
-  DEFAULT_PROJECT_ID,
   emptyWeeklyReport,
   formatDateTime,
   hasWeeklyReport,
@@ -14,11 +13,13 @@ import {
   PageHeader,
   rememberTaskId,
   SectionPanel,
+  useActiveProjectId,
   useWorkspaceData,
 } from "./projectWorkspace";
 
 export function ReportsPage() {
-  const data = useWorkspaceData({ includeLatestReport: true });
+  const projectId = useActiveProjectId();
+  const data = useWorkspaceData({ projectId, includeLatestReport: true });
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export function ReportsPage() {
         subtitle="读取当前项目最新持久化周报，也可以启动后端周报任务；任务完成后项目页会保存报告。"
         action={
           <Link
-            to={`/projects/${DEFAULT_PROJECT_ID}`}
+            to={`/projects/${encodeURIComponent(data.projectId)}`}
             className="inline-flex h-9 items-center rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
           >
             回到项目页保存结果
