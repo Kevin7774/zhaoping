@@ -10,6 +10,7 @@ __pycache__/
 !.env.example
 
 artifacts/
+web-articles/
 
 qdrant_mvp_store/
 data/uploads/

@@ -5656,6 +5656,60 @@ def test_opencli_crawl_provider_runs_configured_command(monkeypatch: pytest.Monk
     assert result["raw"]["url"] == "https://example.com/team"
 
 
+def test_opencli_crawl_provider_reads_saved_markdown_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    saved_path = tmp_path / "web-articles" / "Example_Domain" / "Example_Domain.md"
+    saved_path.parent.mkdir(parents=True)
+    saved_path.write_text("# Example Domain\n\nThis domain is for examples.", encoding="utf-8")
+    original_which = shutil.which
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else original_which(command)
+
+    def fake_run(
+        args: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                [
+                    {
+                        "title": "Example Domain",
+                        "author": "-",
+                        "publish_time": "-",
+                        "status": "success",
+                        "size": "226.0 B",
+                        "saved": "web-articles/Example_Domain/Example_Domain.md",
+                    }
+                ]
+            ),
+            stderr="",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = ServiceRouter(load_app_config(Path(__file__).resolve().parents[1] / "config" / "services.toml")).scraping(
+        "opencli_crawl_scrape"
+    ).scrape(
+        "https://example.com",
+        formats=["markdown"],
+    )
+
+    assert result["provider"] == "opencli_crawl"
+    assert result["url"] == "https://example.com"
+    assert result["markdown"] == "# Example Domain\n\nThis domain is for examples."
+    assert result["metadata"]["title"] == "Example Domain"
+    assert result["metadata"]["saved"] == "web-articles/Example_Domain/Example_Domain.md"
+    assert result["raw"][0]["saved"] == "web-articles/Example_Domain/Example_Domain.md"
+
+
 def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
     original_which = shutil.which
@@ -5674,8 +5728,11 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
         calls.append(args)
         assert capture_output is True
         assert text is True
-        assert timeout == 60
         assert check is False
+        if args == ["opencli", "doctor"]:
+            assert timeout == 10
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="[OK] Connectivity: ready", stderr="")
+        assert timeout == 60
         return subprocess.CompletedProcess(
             args=args,
             returncode=0,
@@ -5702,7 +5759,8 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
         limit=2,
     )
 
-    assert calls[0] == ["opencli", "bilibili", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert calls[0] == ["opencli", "doctor"]
+    assert calls[1] == ["opencli", "bilibili", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
     assert results[0]["source_key"] == "opencli_platform_search"
     assert results[0]["name_zh"] == "OpenCLI 平台搜索"
     assert results[0]["source_type"] == "browser_platform_search"
@@ -5711,6 +5769,64 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
     assert results[0]["url"] == "https://www.bilibili.com/video/BV1robot"
     assert results[0]["snippet"] == "A public robot manipulation demo."
     assert results[0]["retrieval_status"] == "retrieved"
+
+
+def test_opencli_platform_search_skips_commands_when_browser_bridge_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    original_which = shutil.which
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else original_which(command)
+
+    def fake_run(
+        args: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert capture_output is True
+        assert text is True
+        assert timeout == 10
+        assert check is False
+        assert args == ["opencli", "doctor"]
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="[MISSING] Extension: not connected\n[FAIL] Connectivity: failed (Browser Bridge extension not connected)",
+            stderr="",
+        )
+
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    results = ServiceRouter(load_app_config()).search("opencli_platform_search").search(
+        "robotics diffusion policy",
+        limit=2,
+    )
+
+    assert calls == [["opencli", "doctor"]]
+    assert results == [
+        {
+            "source_key": "opencli_platform_search",
+            "name_zh": "OpenCLI 平台搜索",
+            "source_type": "browser_platform_search",
+            "query": "robotics diffusion policy",
+            "rank": 1,
+            "platform": "bilibili",
+            "platform_name_zh": "B站",
+            "title": "B站 manual_setup",
+            "url": "https://github.com/jackwener/OpenCLI",
+            "snippet": "OpenCLI Browser Bridge: Browser Bridge extension not connected",
+            "published_at": None,
+            "retrieval_status": "manual_setup",
+            "error": "OpenCLI Browser Bridge: Browser Bridge extension not connected",
+            "risk_level": "high",
+            "freshness": "daily",
+        }
+    ]
 
 
 def test_opencli_web_read_search_requires_absolute_url_without_launching(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -5749,6 +5865,66 @@ def test_opencli_web_read_search_requires_absolute_url_without_launching(monkeyp
             "freshness": "on_demand",
         }
     ]
+
+
+def test_opencli_web_read_search_uses_saved_markdown_as_snippet(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    saved_path = tmp_path / "web-articles" / "Example_Domain" / "Example_Domain.md"
+    saved_path.parent.mkdir(parents=True)
+    saved_path.write_text("# Example Domain\n\nThis domain is for examples.", encoding="utf-8")
+    calls: list[list[str]] = []
+    original_which = shutil.which
+
+    def fake_which(command: str) -> str | None:
+        return f"/usr/bin/{command}" if command == "opencli" else original_which(command)
+
+    def fake_run(
+        args: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args == ["opencli", "doctor"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="[OK] Connectivity: ready", stderr="")
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                [
+                    {
+                        "title": "Example Domain",
+                        "author": "-",
+                        "publish_time": "-",
+                        "status": "success",
+                        "size": "226.0 B",
+                        "saved": "web-articles/Example_Domain/Example_Domain.md",
+                    }
+                ]
+            ),
+            stderr="",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    results = ServiceRouter(load_app_config(Path(__file__).resolve().parents[1] / "config" / "services.toml")).search(
+        "opencli_web_read_search"
+    ).search(
+        "https://example.com",
+        limit=1,
+    )
+
+    assert calls == [
+        ["opencli", "doctor"],
+        ["opencli", "web", "read", "--url", "https://example.com", "-f", "json"],
+    ]
+    assert results[0]["source_key"] == "opencli_web_read_search"
+    assert results[0]["title"] == "Example Domain"
+    assert results[0]["snippet"] == "# Example Domain\n\nThis domain is for examples."
+    assert results[0]["raw"]["saved"] == "web-articles/Example_Domain/Example_Domain.md"
 
 
 def test_education_competition_monitor_returns_curated_targets() -> None:

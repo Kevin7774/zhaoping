@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime, timezone
 from html import unescape
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 from urllib.parse import urljoin
@@ -573,6 +574,7 @@ class OpenCLICommandSearchProvider:
         risk_level: str = "high",
         freshness: str = "daily",
         requires_absolute_url: bool = False,
+        requires_browser_bridge: bool = False,
     ) -> None:
         self.service_name = service_name
         self.display_name_zh = display_name_zh
@@ -585,6 +587,7 @@ class OpenCLICommandSearchProvider:
         self.risk_level = risk_level
         self.freshness = freshness
         self.requires_absolute_url = requires_absolute_url
+        self.requires_browser_bridge = requires_browser_bridge
 
     def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         normalized_limit = max(1, min(int(limit), 20))
@@ -615,6 +618,22 @@ class OpenCLICommandSearchProvider:
                     message=f"Missing command: {self.required_command}",
                 )
             ]
+
+        if self.requires_browser_bridge:
+            bridge_issue = self._browser_bridge_issue()
+            if bridge_issue:
+                first_platform, first_settings = next(iter(self.platform_commands.items()))
+                name_zh = str(first_settings.get("name_zh") or first_platform)
+                return [
+                    self._status_result(
+                        query=query,
+                        rank=1,
+                        platform=first_platform,
+                        name_zh=name_zh,
+                        status="manual_setup",
+                        message=f"OpenCLI Browser Bridge: {bridge_issue}",
+                    )
+                ]
 
         results: list[dict[str, Any]] = []
         rank = 1
@@ -705,7 +724,18 @@ class OpenCLICommandSearchProvider:
                     "name": self.required_command,
                     "present": bool(shutil.which(self.required_command)),
                 }
-            ],
+            ]
+            + (
+                [
+                    {
+                        "type": "browser_bridge",
+                        "name": "OpenCLI Browser Bridge",
+                        "present": self._browser_bridge_issue() is None,
+                    }
+                ]
+                if self.requires_browser_bridge and shutil.which(self.required_command)
+                else []
+            ),
             "command_previews": {
                 platform: [
                     self.required_command,
@@ -749,7 +779,8 @@ class OpenCLICommandSearchProvider:
             or f"{name_zh} result"
         )
         url = item.get("url") or item.get("link") or item.get("href") or item.get("share_url") or ""
-        snippet = item.get("snippet") or item.get("description") or item.get("text") or item.get("content") or ""
+        saved_markdown = self._read_saved_markdown(item.get("saved"))
+        snippet = item.get("snippet") or item.get("description") or item.get("text") or item.get("content") or saved_markdown or ""
         return {
             "source_key": self.service_name,
             "name_zh": self.display_name_zh,
@@ -768,6 +799,18 @@ class OpenCLICommandSearchProvider:
             "raw": item,
         }
 
+    @staticmethod
+    def _read_saved_markdown(saved: Any) -> str | None:
+        if not isinstance(saved, str) or not saved:
+            return None
+        saved_path = Path(saved)
+        if saved_path.is_absolute() or ".." in saved_path.parts:
+            return None
+        path = Path.cwd() / saved_path
+        if not path.is_file():
+            return None
+        return path.read_text(encoding="utf-8")
+
     def _status_result(self, *, query: str, rank: int, platform: str, name_zh: str, status: str, message: str) -> dict[str, Any]:
         return {
             "source_key": self.service_name,
@@ -782,10 +825,41 @@ class OpenCLICommandSearchProvider:
             "snippet": message,
             "published_at": None,
             "retrieval_status": status,
-            "error": message if status in {"setup_required", "config_error", "error", "requires_url"} else None,
+            "error": message if status in {"setup_required", "config_error", "error", "requires_url", "manual_setup"} else None,
             "risk_level": self.risk_level,
             "freshness": self.freshness,
         }
+
+    def _browser_bridge_issue(self) -> str | None:
+        try:
+            completed = subprocess.run(
+                [self.required_command, "doctor"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            return "opencli doctor timed out"
+        output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+        if completed.returncode == 0 and not self._doctor_output_has_failure(output):
+            return None
+        return self._doctor_failure_reason(output, completed.returncode)
+
+    @staticmethod
+    def _doctor_output_has_failure(output: str) -> bool:
+        normalized = output.lower()
+        return any(marker in normalized for marker in ("[fail]", "[missing]", "not connected", "connectivity: failed"))
+
+    @staticmethod
+    def _doctor_failure_reason(output: str, returncode: int) -> str:
+        if "Browser Bridge extension not connected" in output:
+            return "Browser Bridge extension not connected"
+        for raw_line in output.splitlines():
+            line = raw_line.strip()
+            if "[FAIL]" in line or "[MISSING]" in line or "not connected" in line.lower():
+                return line
+        return f"opencli doctor exited {returncode}"
 
     @staticmethod
     def _is_absolute_http_url(value: str) -> bool:

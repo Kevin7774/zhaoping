@@ -130,6 +130,8 @@ class OpenCLICrawlProvider:
             }
 
         data = (payload.get("data") or payload) if isinstance(payload, dict) else payload
+        if isinstance(data, list):
+            data = next((item for item in data if isinstance(item, dict)), {})
         if not isinstance(data, dict):
             return {
                 "provider": "opencli_crawl",
@@ -140,14 +142,32 @@ class OpenCLICrawlProvider:
                 "raw": payload,
             }
 
+        saved_markdown = OpenCLICrawlProvider._read_saved_markdown(data.get("saved"))
         return {
             "provider": "opencli_crawl",
             "url": data.get("url") or url,
-            "markdown": data.get("markdown") or data.get("content") or data.get("text"),
+            "markdown": data.get("markdown") or data.get("content") or data.get("text") or saved_markdown,
             "html": data.get("html"),
-            "metadata": data.get("metadata") or data.get("meta") or {},
+            "metadata": data.get("metadata") or data.get("meta") or OpenCLICrawlProvider._metadata_from_saved_result(data),
             "raw": payload,
         }
+
+    @staticmethod
+    def _read_saved_markdown(saved: Any) -> str | None:
+        if not isinstance(saved, str) or not saved:
+            return None
+        saved_path = Path(saved)
+        if saved_path.is_absolute() or ".." in saved_path.parts:
+            return None
+        path = Path.cwd() / saved_path
+        if not path.is_file():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _metadata_from_saved_result(data: dict[str, Any]) -> dict[str, Any]:
+        keys = ("title", "author", "publish_time", "status", "size", "saved")
+        return {key: data[key] for key in keys if data.get(key) is not None}
 
 
 class ApifyActorRunProvider:
