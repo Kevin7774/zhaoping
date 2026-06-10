@@ -25,6 +25,7 @@ export type ProjectRecord = {
   status: string;
   owner?: string;
   updatedAt: string;
+  bpFilePath?: string;
   openJobs: number;
   totalCandidates: number;
   awaitingHuman: number;
@@ -246,6 +247,8 @@ type ProjectBackendResponse = {
   name?: string;
   status?: string;
   createdAt?: string;
+  bpFilePath?: string;
+  bp_file_path?: string;
   openJobs?: number;
   totalCandidates?: number;
   awaitingHuman?: number;
@@ -288,6 +291,14 @@ type CandidateBackendResponse = {
   pipelineStatus?: string | null;
   outreachStatus?: "not_sent" | "drafted" | "sent" | null;
   evidence?: Array<
+    | string
+    | {
+        label?: string;
+        source?: string;
+        summary?: string;
+      }
+  > | null;
+  jobEvidence?: Array<
     | string
     | {
         label?: string;
@@ -568,7 +579,6 @@ export function runProjectScenario(
   return apiClient.post<RunScenarioResponse>("/scenarios/run", {
     scenario,
     input: inputForAction(action, job),
-    team_constraint: "真机泛化",
     aperture_weight: 0.7,
     frontend_state: {
       source: "ProjectDetailPage",
@@ -592,7 +602,6 @@ export function runCandidateEvaluation(projectId: string, candidate: Candidate) 
   return apiClient.post<RunScenarioResponse>("/scenarios/run", {
     scenario: "C",
     input: `请评估候选人「${candidate.name}」与「${candidate.title}」岗位的匹配度，并在需要时触发人工确认。`,
-    team_constraint: "真机泛化",
     aperture_weight: 0.7,
     frontend_state: {
       source: "CandidateTable",
@@ -610,7 +619,6 @@ export function runWeeklyReport(projectId: string, projectName: string) {
   return apiClient.post<RunScenarioResponse>("/scenarios/run", {
     scenario: "D",
     input: `请基于「${projectName}」当前真实项目、岗位和候选人数据生成本周招聘周报。`,
-    team_constraint: "真机泛化",
     aperture_weight: 0.7,
     frontend_state: {
       source: "ProjectDetailPage",
@@ -627,6 +635,7 @@ function mapProject(project: ProjectBackendResponse): ProjectRecord {
     status: project.status || "—",
     owner: undefined,
     updatedAt: project.createdAt || "",
+    bpFilePath: project.bpFilePath ?? project.bp_file_path,
     openJobs: project.openJobs ?? 0,
     totalCandidates: project.totalCandidates ?? 0,
     awaitingHuman: project.awaitingHuman ?? 0,
@@ -730,16 +739,35 @@ function mapCandidate(candidate: CandidateBackendResponse): Candidate {
     // Frontend UI projection only. This is not a real email-delivery status unless backend returns it.
     outreachStatus: candidate.outreachStatus ?? "not_sent",
     riskAlerts: [],
-    evidence: Array.isArray(candidate.evidence)
-      ? candidate.evidence
-          .map((item) => ({
-            label: typeof item === "string" ? "搜索证据" : item.label || "后端证据",
-            source: typeof item === "string" ? normalizeEvidenceSource(candidate.sourcePlatform ?? undefined) : normalizeEvidenceSource(item.source),
-            summary: typeof item === "string" ? item : item.summary || "",
-          }))
-          .filter((item) => item.summary)
-      : [],
+    evidence: mergeCandidateEvidence(candidate),
   };
+}
+
+function mergeCandidateEvidence(candidate: CandidateBackendResponse): Candidate["evidence"] {
+  const items = (Array.isArray(candidate.evidence) ? candidate.evidence : [])
+    .map((item) => ({
+      label: typeof item === "string" ? "搜索证据" : item.label || "后端证据",
+      source:
+        typeof item === "string"
+          ? normalizeEvidenceSource(candidate.sourcePlatform ?? undefined)
+          : normalizeEvidenceSource(item.source),
+      summary: typeof item === "string" ? item : item.summary || "",
+    }))
+    .filter((item) => item.summary);
+  const seen = new Set(items.map((item) => item.summary));
+  for (const raw of Array.isArray(candidate.jobEvidence) ? candidate.jobEvidence : []) {
+    const summary = typeof raw === "string" ? raw : raw.summary || "";
+    if (!summary || seen.has(summary)) {
+      continue;
+    }
+    seen.add(summary);
+    items.push({
+      label: summary.startsWith("初筛依据｜") ? "岗位初筛" : "岗位证据",
+      source: "manual" as const,
+      summary,
+    });
+  }
+  return items;
 }
 
 function readStringValue(value: unknown) {

@@ -1,4 +1,7 @@
 [defaults]
+email_delivery = "resend_email_delivery"
+email_discovery = "hunter_email_discovery"
+email_verification = "zerobounce_email_verification"
 document_parser = "auto_document_parser"
 embedding = "bge_m3_local"
 evaluation = "self_rsi_evaluator"
@@ -548,6 +551,72 @@ access_pattern = "Run opencli only against public or explicitly authorized URLs;
 risk_level = "high"
 freshness = "on_demand"
 description = "OpenCLI local web read provider for converting public or authorized URLs into Markdown/HTML/metadata through a local command."
+
+[services.resend_email_delivery]
+type = "email_delivery"
+provider = "resend_email"
+endpoint = "https://api.resend.com/emails"
+token_env = "RESEND_API_KEY"
+from_email_env = "OUTREACH_FROM_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/runtime/outreach_suppression.jsonl"
+audit_log_path = "data/runtime/outreach_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+timeout_seconds = 20
+description = "Resend compliant email delivery with human approval, unsubscribe link, suppression list, daily limit, and audit log."
+
+[services.sendgrid_email_delivery]
+type = "email_delivery"
+provider = "sendgrid_email"
+endpoint = "https://api.sendgrid.com/v3/mail/send"
+token_env = "SENDGRID_API_KEY"
+from_email_env = "OUTREACH_FROM_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/runtime/outreach_suppression.jsonl"
+audit_log_path = "data/runtime/outreach_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+timeout_seconds = 20
+description = "SendGrid compliant email delivery alternative with the same approval, suppression, limit, and audit guardrails."
+
+[services.postmark_email_delivery]
+type = "email_delivery"
+provider = "postmark_email"
+endpoint = "https://api.postmarkapp.com/email"
+token_env = "POSTMARK_SERVER_TOKEN"
+from_email_env = "OUTREACH_FROM_EMAIL"
+unsubscribe_base_url_env = "UNSUBSCRIBE_BASE_URL"
+suppression_list_path = "data/runtime/outreach_suppression.jsonl"
+audit_log_path = "data/runtime/outreach_audit.jsonl"
+daily_send_limit = 50
+manual_approval_required = true
+timeout_seconds = 20
+description = "Postmark compliant email delivery alternative with the same approval, suppression, limit, and audit guardrails."
+
+[services.hunter_email_discovery]
+type = "email_discovery"
+provider = "hunter_email_finder"
+endpoint = "https://api.hunter.io/v2/email-finder"
+api_key_env = "HUNTER_API_KEY"
+timeout_seconds = 20
+description = "Hunter work-email discovery by name and company domain for recruiting outreach."
+
+[services.zerobounce_email_verification]
+type = "email_verification"
+provider = "zerobounce_email_validation"
+endpoint = "https://api.zerobounce.net/v2/validate"
+api_key_env = "ZEROBOUNCE_API_KEY"
+timeout_seconds = 30
+description = "ZeroBounce email deliverability verification before outreach."
+
+[services.neverbounce_email_verification]
+type = "email_verification"
+provider = "neverbounce_email_validation"
+endpoint = "https://api.neverbounce.com/v4.2/single/check"
+api_key_env = "NEVERBOUNCE_API_KEY"
+timeout_seconds = 30
+description = "NeverBounce email deliverability verification alternative."
 
 [services.disabled_mcp]
 type = "mcp"

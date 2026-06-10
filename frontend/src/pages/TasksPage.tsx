@@ -167,7 +167,7 @@ export function TasksPage() {
                           ) : null}
                         </td>
                         <td className="px-4 py-4 text-[#374151]">
-                          {error || snapshot?.error || (snapshot?.awaiting ? "等待人工确认" : "—")}
+                          {error || snapshot?.error || (snapshot?.awaiting ? "等待确认" : "—")}
                         </td>
                       </tr>
                     );

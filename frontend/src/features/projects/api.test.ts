@@ -259,6 +259,35 @@ describe("projects api", () => {
     });
   });
 
+  it("merges job-level screening evidence into candidate evidence without duplicates", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "cand_fde",
+          jobCandidateId: 2,
+          jobId: "job_fde",
+          jobTitle: "AI Native FDE / Agentic Builder",
+          name: "Builder Han",
+          matchScore: 81,
+          pipelineStatus: "sourced",
+          evidence: ["主导全栈开发项目上线"],
+          jobEvidence: [
+            "主导全栈开发项目上线",
+            "初筛依据｜初筛评分 81（强推）；必备技能命中：全栈开发, Agentic workflow",
+          ],
+        },
+      ]),
+    );
+
+    const candidates = await getProjectCandidates("project_2026_ai_team");
+
+    const summaries = candidates[0].evidence.map((item) => item.summary);
+    expect(summaries).toHaveLength(2);
+    expect(summaries.filter((item) => item === "主导全栈开发项目上线")).toHaveLength(1);
+    const screening = candidates[0].evidence.find((item) => item.label === "岗位初筛");
+    expect(screening?.summary).toContain("初筛评分 81");
+  });
+
   it("requests candidate pages with skip and limit query parameters", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
 

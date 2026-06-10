@@ -72,7 +72,7 @@ import { rememberActiveProjectId, rememberTaskId, useActiveProjectId } from "./p
 type LoadingState = "idle" | "loading" | "ready" | "error";
 
 const CANDIDATE_PAGE_SIZE = 50;
-const DEFAULT_BP_FILE_PATH = "data/input/projects/bp_ai_hardware.md";
+const DEFAULT_BP_FILE_PATH = "";
 
 const generationModeLabel: Record<ProjectGenerationMode, string> = {
   bp_file: "仅 BP",
@@ -413,6 +413,7 @@ export function ProjectDetailPage() {
         const candidatesData = candidatesPage.candidates;
 
         setProject(projectData);
+        setBpFilePath((current) => current.trim() || projectData.bpFilePath || DEFAULT_BP_FILE_PATH);
         setJobs(jobsData);
         setCandidates(candidatesData);
         setVisibleCandidates(candidatesData);
@@ -513,7 +514,7 @@ export function ProjectDetailPage() {
     setBpMaterialParseSummary(null);
     setBpProjectPrompt("");
     setBpIndustryResearchPrompt("");
-    setBpMinimumRoleCount(14);
+    setBpMinimumRoleCount(1);
     setBpPreview(null);
     setBpBusy(null);
     setBpError(null);
@@ -584,7 +585,7 @@ export function ProjectDetailPage() {
               id: `snapshot-${taskSnapshot.task_id}`,
               task_id: taskSnapshot.task_id,
               type: "human_gate",
-              message: "任务等待人工确认",
+              message: "任务等待确认",
               data: { awaiting: taskSnapshot.awaiting },
               status: "awaiting_human",
             },
@@ -596,7 +597,7 @@ export function ProjectDetailPage() {
     if (!humanGate || handledHumanGateKeysRef.current.has(humanGate.eventKey)) return;
     setHumanGateRequest(humanGate);
     setTaskPanelOpen(false);
-    setToast("AI Agent 等待人工确认");
+    setToast("需要确认");
   }, [activeTaskId, events, taskSnapshot]);
 
   const projectSummary = useMemo(() => summaryFrom(jobs, candidates), [jobs, candidates]);
@@ -1031,9 +1032,9 @@ export function ProjectDetailPage() {
       );
       handledHumanGateKeysRef.current.add(humanGateRequest.eventKey);
       setHumanGateRequest(null);
-      setToast("已提交人工确认，等待后端继续任务");
+      setToast("已继续");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "人工确认失败");
+      setToast(error instanceof Error ? error.message : "确认失败");
     } finally {
       setHumanGateBusy(false);
     }
@@ -1054,9 +1055,9 @@ export function ProjectDetailPage() {
       );
       handledHumanGateKeysRef.current.add(humanGateRequest.eventKey);
       setHumanGateRequest(null);
-      setToast("已拒绝，任务继续处理人工反馈");
+      setToast("已暂不推进");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "人工拒绝失败");
+      setToast(error instanceof Error ? error.message : "操作失败");
     } finally {
       setHumanGateBusy(false);
     }
@@ -1169,7 +1170,7 @@ export function ProjectDetailPage() {
     : bpPreview
       ? "已生成预览，请先检查岗位、HC 和证据；确认覆盖会重建当前项目岗位。"
       : "如需重建岗位，先预览岗位矩阵；确认后才会覆盖现有岗位。";
-  const roleGenerationActionLabel = !recommendedJob ? "当前建议：" : bpPreview ? "预览状态：" : "岗位生成：";
+  const roleGenerationActionLabel = !recommendedJob ? "下一步：" : bpPreview ? "预览状态：" : "岗位生成：";
   const searchProviderSummaryText = `当前选中搜索源 ${searchProviderSummary.ready}/${searchProviderSummary.total} 项已就绪${
     searchProviderSummary.blocked ? `，${searchProviderSummary.blocked} 项需处理` : "，无明确阻断"
   }`;
@@ -1484,7 +1485,7 @@ export function ProjectDetailPage() {
         <section className="my-4 min-w-0 rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-5 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">当前建议动作</h2>
+              <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">下一步</h2>
               <p className="mt-1 text-[13px] leading-5 text-[#1E40AF]">{recommendedAction.description}</p>
             </div>
             <button

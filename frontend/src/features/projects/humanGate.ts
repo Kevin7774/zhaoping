@@ -96,7 +96,7 @@ export function humanGateRequestFromEvent(event: TaskStreamEvent, taskId: string
   const request: HumanGateRequest = {
     eventKey: String(event.id ?? `${event.created_at ?? ""}:${event.message ?? ""}`),
     taskId,
-    context: awaiting.prompt || event.message || "AI Agent 请求人工确认",
+    context: awaiting.prompt || event.message || "请确认后继续。",
     draft: draftToText(draft),
     candidateName,
   };

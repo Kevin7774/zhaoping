@@ -58,6 +58,14 @@ from app.providers.search import (
     SemanticScholarPaperSearchProvider,
     USASpendingAwardSearchProvider,
 )
+from app.providers.outreach import (
+    HunterEmailFinderProvider,
+    NeverBounceEmailValidationProvider,
+    PostmarkCompliantEmailProvider,
+    ResendCompliantEmailProvider,
+    SendGridCompliantEmailProvider,
+    ZeroBounceEmailValidationProvider,
+)
 from app.providers.structured_output import OutlinesStructuredOutputProvider
 from app.providers.vector_store import QdrantLocalVectorStore
 from app.core.skill_registry import SkillRegistry
@@ -568,6 +576,46 @@ class ServiceRouter:
                 command_args=[str(item) for item in settings.get("command_args", [])],
                 timeout_seconds=int(settings.get("timeout_seconds", 60)),
             )
+
+        if service.type == "email_delivery":
+            email_delivery_classes = {
+                "resend_email": ResendCompliantEmailProvider,
+                "postmark_email": PostmarkCompliantEmailProvider,
+                "sendgrid_email": SendGridCompliantEmailProvider,
+            }
+            if provider in email_delivery_classes:
+                return email_delivery_classes[provider](
+                    provider=provider,
+                    endpoint=str(settings["endpoint"]),
+                    token_env=str(settings["token_env"]),
+                    from_email_env=str(settings.get("from_email_env", "OUTREACH_FROM_EMAIL")),
+                    unsubscribe_base_url_env=str(settings.get("unsubscribe_base_url_env", "UNSUBSCRIBE_BASE_URL")),
+                    suppression_list_path=str(settings.get("suppression_list_path", "data/runtime/outreach_suppression.jsonl")),
+                    audit_log_path=str(settings.get("audit_log_path", "data/runtime/outreach_audit.jsonl")),
+                    daily_send_limit=int(settings.get("daily_send_limit", 50)),
+                    manual_approval_required=bool(settings.get("manual_approval_required", True)),
+                    timeout_seconds=int(settings.get("timeout_seconds", 20)),
+                )
+
+        if service.type == "email_discovery" and provider == "hunter_email_finder":
+            return HunterEmailFinderProvider(
+                endpoint=str(settings.get("endpoint", "https://api.hunter.io/v2/email-finder")),
+                api_key_env=str(settings.get("api_key_env", "HUNTER_API_KEY")),
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "email_verification":
+            if provider == "zerobounce_email_validation":
+                return ZeroBounceEmailValidationProvider(
+                    endpoint=str(settings.get("endpoint", "https://api.zerobounce.net/v2/validate")),
+                    api_key_env=str(settings.get("api_key_env", "ZEROBOUNCE_API_KEY")),
+                    timeout_seconds=int(settings.get("timeout_seconds", 30)),
+                )
+            if provider == "neverbounce_email_validation":
+                return NeverBounceEmailValidationProvider(
+                    api_key_env=str(settings.get("api_key_env", "NEVERBOUNCE_API_KEY")),
+                    timeout_seconds=int(settings.get("timeout_seconds", 30)),
+                )
 
         if provider == "disabled":
             return DisabledProvider(service.type, service.name)

@@ -120,7 +120,7 @@ export function DashboardPage() {
           { label: "项目数", value: projects.length, helper: "GET /projects", tone: "text-[#2563EB]" },
           { label: "开放岗位", value: totals.jobs, helper: "按项目汇总" },
           { label: "候选人", value: totals.candidates, helper: "按项目去重统计", tone: "text-[#16A34A]" },
-          { label: "待人工确认", value: totals.awaiting, helper: "awaiting_human / compliance", tone: "text-[#F59E0B]" },
+          { label: "待确认", value: totals.awaiting, helper: "需要处理的事项", tone: "text-[#F59E0B]" },
         ]}
       />
 

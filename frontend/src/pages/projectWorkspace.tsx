@@ -315,7 +315,7 @@ export function statusLabel(status?: string | null) {
   if (status === "active") return "进行中";
   if (status === "done" || status === "completed") return "已完成";
   if (status === "processing") return "进行中";
-  if (status === "awaiting_human") return "等待人工确认";
+  if (status === "awaiting_human") return "等待确认";
   if (status === "error") return "失败";
   if (status === "cancelled") return "已取消";
   if (status === "pending") return "等待中";

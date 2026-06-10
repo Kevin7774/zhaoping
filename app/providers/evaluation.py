@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.skills.recruiting_scenarios import evaluate_candidate
+from app.skills.recruiting_effect_cases import DEFAULT_RECRUITING_EFFECT_CASES
+from app.skills.recruiting_scenarios import evaluate_candidate, score_candidate_against_job
 
 
 DEFAULT_RSI_CASES: tuple[dict[str, Any], ...] = (
@@ -77,7 +78,7 @@ class SelfRSIEvaluator:
         llm_service: str | None = "openrouter_evidence_judge",
     ) -> dict[str, Any]:
         suite_id = (suite or self.suite_id).strip() or self.suite_id
-        normalized_cases = self._normalize_cases(cases)
+        normalized_cases = self._normalize_cases(cases, suite_id=suite_id)
         active_threshold = self.baseline_threshold if threshold is None else max(0.0, min(float(threshold), 1.0))
         case_results = [self._run_case(case) for case in normalized_cases]
         check_count = sum(len(case["checks"]) for case in case_results)
@@ -86,6 +87,7 @@ class SelfRSIEvaluator:
         feedback = self._build_feedback(case_results)
         iteration = self._build_iteration(feedback)
         status = "passed" if suite_score >= active_threshold and not feedback["gaps"] else "needs_iteration"
+        operator_summary = self._build_operator_summary(suite_id, case_results)
         normalized_mode = "full" if mode == "full" else "local"
         full_mode_artifacts: dict[str, Any] = {}
         capability_trace = [
@@ -130,6 +132,7 @@ class SelfRSIEvaluator:
             "case_results": case_results,
             "feedback": feedback,
             "iteration": iteration,
+            "operator_summary": operator_summary,
             "capability_trace": capability_trace,
             "full_mode_artifacts": full_mode_artifacts,
             "guardrails": [
@@ -404,15 +407,20 @@ class SelfRSIEvaluator:
             f"\ncase_results={compact_cases}\nfeedback_gaps={compact_gaps}"
         )
 
-    def _normalize_cases(self, cases: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-        source_cases = cases if cases is not None else list(DEFAULT_RSI_CASES)
+    def _normalize_cases(self, cases: list[dict[str, Any]] | None, *, suite_id: str) -> list[dict[str, Any]]:
+        source_cases = cases if cases is not None else self._default_cases_for_suite(suite_id)
         normalized = []
         for index, case in enumerate(source_cases, start=1):
+            case_type = str(case.get("case_type") or case.get("type") or "").strip()
+            if case_type == "job_candidate_ranking" or ("job_profile" in case and "candidates" in case):
+                normalized.append(self._normalize_ranking_case(case, index))
+                continue
             candidate_material = str(case.get("candidate_material") or "").strip()
             if not candidate_material:
                 candidate_material = "空候选人材料"
             normalized.append(
                 {
+                    "case_type": "single_candidate",
                     "case_id": str(case.get("case_id") or f"case_{index}"),
                     "name": str(case.get("name") or f"RSI case {index}"),
                     "candidate_material": candidate_material,
@@ -423,7 +431,114 @@ class SelfRSIEvaluator:
             )
         return normalized
 
+    def _default_cases_for_suite(self, suite_id: str) -> list[dict[str, Any]]:
+        if suite_id == "recruiting_effect_v1":
+            return list(DEFAULT_RECRUITING_EFFECT_CASES)
+        return list(DEFAULT_RSI_CASES)
+
+    def _build_operator_summary(self, suite_id: str, case_results: list[dict[str, Any]]) -> dict[str, Any]:
+        review_cases = [case for case in case_results if not case.get("passed")]
+        visible_source = review_cases if review_cases else case_results[:5]
+        visible_cards = [self._operator_case_card(case) for case in visible_source[:5]]
+        return {
+            "suite_id": suite_id,
+            "manual_labeling_required": False,
+            "human_role": "decision_maker",
+            "human_touch_level": "light",
+            "automation_default": "ai_runs_full_pipeline",
+            "human_decisions": ["approve", "reject", "adjust"],
+            "ai_automation_scope": [
+                "generate_search_plan",
+                "collect_evidence",
+                "deduplicate_candidates",
+                "score_and_rank",
+                "explain_risks",
+                "prepare_recommendation",
+                "queue_only_exceptions_for_review",
+            ],
+            "review_policy": "默认只看失败或边界 case；通过 case 保留在 details，不要求人工逐个打标签。",
+            "review_count": len(review_cases),
+            "visible_case_count": len(visible_cards),
+            "hidden_case_count": max(0, len(case_results) - len(visible_cards)),
+            "coverage_domains": self._coverage_domains(case_results)[:8],
+            "review_queue": [self._operator_case_card(case) for case in review_cases[:10]],
+            "visible_case_cards": visible_cards,
+            "next_action": (
+                "优先处理 review_queue 中的失败 case。"
+                if review_cases
+                else "当前离线效果集通过；下一步只需补真实岗位样本或校准分数分布。"
+            ),
+        }
+
+    def _operator_case_card(self, case: dict[str, Any]) -> dict[str, Any]:
+        summary = dict(case.get("result_summary") or {})
+        ranked = list(summary.get("ranked_candidates") or [])
+        top = ranked[0] if ranked else {}
+        second = ranked[1] if len(ranked) > 1 else {}
+        top_score = int(top.get("score") or 0)
+        second_score = int(second.get("score") or 0) if second else None
+        failed_checks = [check["check_id"] for check in case.get("checks", []) if not check.get("passed")]
+        card = {
+            "case_id": case.get("case_id"),
+            "target": case.get("target"),
+            "passed": bool(case.get("passed")),
+            "top_candidate_id": top.get("candidate_id"),
+            "top_score": top_score,
+            "top_level": top.get("recommendation_level"),
+            "score_gap": top_score - second_score if second_score is not None else None,
+            "failed_checks": failed_checks,
+        }
+        if ranked:
+            card["risk_count"] = sum(int(item.get("risk_count") or 0) for item in ranked)
+        return card
+
+    def _coverage_domains(self, case_results: list[dict[str, Any]]) -> list[str]:
+        domain_keywords = [
+            ("AI Native FDE", ["AI Native FDE", "Agentic Builder"]),
+            ("VLA", ["VLA", "具身 MLLM"]),
+            ("数据平台", ["数据平台", "云端平台"]),
+            ("运动控制", ["运动控制", "Sim2Real"]),
+            ("嵌入式", ["嵌入式"]),
+            ("SLAM", ["SLAM", "导航"]),
+            ("评测", ["评测", "QA", "安全合规"]),
+            ("现场", ["现场", "NPI", "制造"]),
+            ("3D 感知", ["3D", "三维感知"]),
+            ("硬件可靠性", ["硬件可靠性"]),
+            ("产品", ["产品经理", "场景定义"]),
+            ("招聘运营", ["招聘运营", "Talent Sourcer"]),
+        ]
+        targets = " ".join(str(case.get("target") or "") for case in case_results)
+        return [domain for domain, keywords in domain_keywords if any(keyword in targets for keyword in keywords)]
+
+    def _normalize_ranking_case(self, case: dict[str, Any], index: int) -> dict[str, Any]:
+        raw_candidates = case.get("candidates") if isinstance(case.get("candidates"), list) else []
+        candidates = []
+        for candidate_index, candidate in enumerate(raw_candidates, start=1):
+            if not isinstance(candidate, dict):
+                continue
+            candidate_material = str(candidate.get("candidate_material") or candidate.get("material") or "").strip()
+            candidates.append(
+                {
+                    "candidate_id": str(candidate.get("candidate_id") or candidate.get("id") or f"candidate_{candidate_index}"),
+                    "name": str(candidate.get("name") or f"Candidate {candidate_index}"),
+                    "candidate_material": candidate_material or "空候选人材料",
+                }
+            )
+        return {
+            "case_type": "job_candidate_ranking",
+            "case_id": str(case.get("case_id") or f"ranking_case_{index}"),
+            "name": str(case.get("name") or f"Recruiting effect case {index}"),
+            "job_profile": dict(case.get("job_profile") or {}),
+            "candidates": candidates,
+            "expectations": dict(case.get("expectations") or {}),
+        }
+
     def _run_case(self, case: dict[str, Any]) -> dict[str, Any]:
+        if case.get("case_type") == "job_candidate_ranking":
+            return self._run_ranking_case(case)
+        return self._run_single_candidate_case(case)
+
+    def _run_single_candidate_case(self, case: dict[str, Any]) -> dict[str, Any]:
         result = evaluate_candidate(
             case["candidate_material"],
             target=case["target"],
@@ -453,6 +568,166 @@ class SelfRSIEvaluator:
                 else [self._feedback_message(case["case_id"], check) for check in failed_checks]
             ),
         }
+
+    def _run_ranking_case(self, case: dict[str, Any]) -> dict[str, Any]:
+        ranked_candidates = []
+        for candidate in case["candidates"]:
+            scoring = score_candidate_against_job(case["job_profile"], candidate["candidate_material"])
+            ranked_candidates.append(
+                {
+                    "candidate_id": candidate["candidate_id"],
+                    "name": candidate["name"],
+                    "score": int(scoring["匹配评分"]),
+                    "recommendation_level": scoring["推荐等级"],
+                    "matched_skills": scoring["必备技能命中"],
+                    "missing_skills": scoring["必备技能缺口"],
+                    "bonus_hits": scoring["加分信号命中"],
+                    "risk_hits": scoring["风险信号命中"],
+                    "risk_count": len(scoring["风险点"]),
+                }
+            )
+        ranked_candidates.sort(key=lambda item: (-int(item["score"]), str(item["candidate_id"])))
+        checks = self._checks_from_ranking_expectations(case, ranked_candidates)
+        passed = all(check["passed"] for check in checks)
+        failed_checks = [check for check in checks if not check["passed"]]
+        top_candidate = ranked_candidates[0] if ranked_candidates else {}
+        return {
+            "case_type": "job_candidate_ranking",
+            "case_id": case["case_id"],
+            "name": case["name"],
+            "target": str(case["job_profile"].get("title") or ""),
+            "team_constraint": "job_rubric_ranking",
+            "passed": passed,
+            "score": top_candidate.get("score", 0),
+            "recommendation_level": top_candidate.get("recommendation_level", ""),
+            "result_summary": {
+                "job_title": str(case["job_profile"].get("title") or ""),
+                "candidate_count": len(ranked_candidates),
+                "top_candidate_id": top_candidate.get("candidate_id"),
+                "ranked_candidates": ranked_candidates,
+            },
+            "checks": checks,
+            "feedback": (
+                ["检查通过，保留该招聘效果 case 作为排序回归基线。"]
+                if passed
+                else [self._feedback_message(case["case_id"], check) for check in failed_checks]
+            ),
+        }
+
+    def _checks_from_ranking_expectations(
+        self,
+        case: dict[str, Any],
+        ranked_candidates: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        expectations = case["expectations"]
+        checks: list[dict[str, Any]] = []
+        by_id = {candidate["candidate_id"]: candidate for candidate in ranked_candidates}
+        observed_order = [candidate["candidate_id"] for candidate in ranked_candidates]
+        top_candidate_id = observed_order[0] if observed_order else None
+
+        if expectations.get("top_candidate_id"):
+            expected = str(expectations["top_candidate_id"])
+            checks.append(
+                self._check(
+                    "top_candidate_id",
+                    top_candidate_id == expected,
+                    top_candidate_id,
+                    expected,
+                    "岗位排序第一名不符合期望。",
+                )
+            )
+
+        expected_order = [str(item) for item in expectations.get("ranking_order", [])]
+        if expected_order:
+            checks.append(
+                self._check(
+                    "ranking_order",
+                    observed_order[: len(expected_order)] == expected_order,
+                    observed_order,
+                    expected_order,
+                    "候选人排序不符合招聘效果基线。",
+                )
+            )
+
+        if "min_top_score" in expectations:
+            expected = int(expectations["min_top_score"])
+            observed = int(ranked_candidates[0]["score"]) if ranked_candidates else 0
+            checks.append(
+                self._check("min_top_score", observed >= expected, observed, f">= {expected}", "第一名分数低于期望。")
+            )
+
+        if "score_gap_min" in expectations and len(ranked_candidates) >= 2:
+            expected = int(expectations["score_gap_min"])
+            observed = int(ranked_candidates[0]["score"]) - int(ranked_candidates[1]["score"])
+            checks.append(
+                self._check(
+                    "score_gap_min",
+                    observed >= expected,
+                    observed,
+                    f">= {expected}",
+                    "第一名和第二名的分差不够，排序区分度不足。",
+                )
+            )
+
+        for candidate_id, expected in dict(expectations.get("min_scores") or {}).items():
+            candidate = by_id.get(str(candidate_id))
+            observed = int(candidate["score"]) if candidate else None
+            expected_score = int(expected)
+            checks.append(
+                self._check(
+                    f"candidate_min_score:{candidate_id}",
+                    observed is not None and observed >= expected_score,
+                    observed,
+                    f">= {expected_score}",
+                    "指定候选人分数低于最低期望。",
+                )
+            )
+
+        for candidate_id, expected in dict(expectations.get("max_scores") or {}).items():
+            candidate = by_id.get(str(candidate_id))
+            observed = int(candidate["score"]) if candidate else None
+            expected_score = int(expected)
+            checks.append(
+                self._check(
+                    f"candidate_max_score:{candidate_id}",
+                    observed is not None and observed <= expected_score,
+                    observed,
+                    f"<= {expected_score}",
+                    "指定风险候选人分数高于上限。",
+                )
+            )
+
+        for candidate_id, allowed_levels in dict(expectations.get("allowed_levels") or {}).items():
+            candidate = by_id.get(str(candidate_id))
+            observed = candidate.get("recommendation_level") if candidate else None
+            expected = [str(item) for item in allowed_levels]
+            checks.append(
+                self._check(
+                    f"candidate_allowed_level:{candidate_id}",
+                    observed in expected,
+                    observed,
+                    expected,
+                    "指定候选人推荐等级不符合期望。",
+                )
+            )
+
+        for candidate_id, required_terms in dict(expectations.get("required_risk_terms") or {}).items():
+            candidate = by_id.get(str(candidate_id))
+            risk_hits = [str(item) for item in candidate.get("risk_hits", [])] if candidate else []
+            for term in required_terms:
+                checks.append(
+                    self._check(
+                        f"candidate_required_risk:{candidate_id}:{term}",
+                        any(str(term) in risk for risk in risk_hits),
+                        risk_hits,
+                        f"包含 {term}",
+                        "指定候选人缺少必须暴露的岗位风险信号。",
+                    )
+                )
+
+        if not checks:
+            checks.append(self._check("case_executable", True, "executed", "executed", "排序用例可执行。"))
+        return checks
 
     def _checks_from_expectations(self, case: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
         expectations = case["expectations"]
@@ -611,14 +886,22 @@ class SelfRSIEvaluator:
 
     def _gap_priority(self, check: dict[str, Any]) -> str:
         check_id = str(check["check_id"])
+        if check_id in {"top_candidate_id", "ranking_order"}:
+            return "high"
         if "evidence_dependency_contract" in check_id or check_id.startswith("required_path"):
             return "high"
-        if check_id.startswith(("min_score", "max_score", "allowed_levels")):
+        if check_id.startswith(("min_score", "max_score", "allowed_levels", "candidate_", "score_gap")):
             return "medium"
         return "low"
 
     def _suggested_fix(self, check: dict[str, Any]) -> str:
         check_id = str(check["check_id"])
+        if check_id in {"top_candidate_id", "ranking_order"}:
+            return "校准岗位评分 rubric、技能命中和风险扣分，让真实强候选人在离线效果集里稳定排到前面。"
+        if check_id.startswith("candidate_required_risk"):
+            return "补强岗位风险信号匹配，避免风险候选人缺少明确扣分和解释。"
+        if check_id.startswith(("candidate_", "score_gap")):
+            return "校准候选人分数阈值和排序区分度，并把该 case 保留为效果回归。"
         if "evidence_dependency_contract" in check_id:
             return "把证据增强后的评估结果纳入 RSI 被测路径，并要求输出 evidence_dependency_contract。"
         if check_id.startswith("required_path"):

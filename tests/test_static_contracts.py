@@ -50,6 +50,7 @@ from app.skills.recruiting_scenarios import (
     build_talent_map,
     build_talent_map_from_job,
     evaluate_candidate,
+    score_candidate_against_job,
     generate_job_profile_and_jd,
     generate_weekly_report,
     infer_role_key,
@@ -965,6 +966,115 @@ def test_self_rsi_evaluate_api_accepts_custom_cases_and_returns_iteration_plan()
     assert any(gap["case_id"] == "deliberate_gap_for_iteration" for gap in payload["feedback"]["gaps"])
     assert any(item["source_case_id"] == "deliberate_gap_for_iteration" for item in payload["iteration"]["generated_tests"])
     assert all("candidate_material" not in gap for gap in payload["feedback"]["gaps"])
+
+
+def test_self_rsi_recruiting_effect_case_ranks_candidates_against_job_rubric() -> None:
+    report = ServiceRouter(load_app_config()).evaluation("self_rsi_evaluator").evaluate(
+        suite="recruiting_effect_v1",
+        threshold=1.0,
+        cases=[
+            {
+                "case_type": "job_candidate_ranking",
+                "case_id": "fde_business_builder_ranking",
+                "name": "AI Native FDE 岗位应把业务闭环 builder 排在 prompt operator 前面",
+                "job_profile": {
+                    "title": "AI Native FDE / Agentic Builder",
+                    "must_have_skills": ["全栈开发", "Agentic workflow"],
+                    "scoring_rubric": {
+                        "完整业务工程闭环（问题定义/上线/指标复盘）": 3,
+                        "业务抽象能力（订单/支付/风控）": 2,
+                    },
+                    "rationale": {
+                        "must_have_signals": ["AI coding"],
+                        "risk_signals": ["只会写 prompt"],
+                    },
+                },
+                "candidates": [
+                    {
+                        "candidate_id": "cand_prompt_operator",
+                        "name": "Prompt Operator",
+                        "candidate_material": "使用 AI coding 编写 prompt demo，了解 Agentic workflow，只会写 prompt。",
+                    },
+                    {
+                        "candidate_id": "cand_fde_builder",
+                        "name": "FDE Builder",
+                        "candidate_material": (
+                            "主导订单支付风控系统上线，问题定义到指标复盘，全栈开发 "
+                            "Agentic workflow AI coding。"
+                        ),
+                    },
+                    {
+                        "candidate_id": "cand_general_fullstack",
+                        "name": "General Fullstack",
+                        "candidate_material": "负责后台 CRUD 和报表，全栈开发，交付过内部工具。",
+                    },
+                ],
+                "expectations": {
+                    "top_candidate_id": "cand_fde_builder",
+                    "ranking_order": ["cand_fde_builder", "cand_general_fullstack", "cand_prompt_operator"],
+                    "min_top_score": 80,
+                    "score_gap_min": 20,
+                    "max_scores": {"cand_prompt_operator": 60},
+                    "allowed_levels": {"cand_fde_builder": ["强推"], "cand_prompt_operator": ["不推荐", "备选"]},
+                    "required_risk_terms": {"cand_prompt_operator": ["只会写 prompt"]},
+                },
+            }
+        ],
+    )
+
+    assert report["status"] == "passed"
+    assert report["summary"]["case_count"] == 1
+    case = report["case_results"][0]
+    assert case["case_type"] == "job_candidate_ranking"
+    summary = case["result_summary"]
+    assert summary["top_candidate_id"] == "cand_fde_builder"
+    assert [item["candidate_id"] for item in summary["ranked_candidates"]] == [
+        "cand_fde_builder",
+        "cand_general_fullstack",
+        "cand_prompt_operator",
+    ]
+    assert summary["ranked_candidates"][0]["score"] >= 80
+    assert "candidate_material" not in json.dumps(report, ensure_ascii=False)
+    assert "订单支付风控系统上线" not in json.dumps(report, ensure_ascii=False)
+
+
+def test_self_rsi_recruiting_effect_suite_has_default_offline_cases() -> None:
+    response = TestClient(app).post(
+        "/rsi/evaluate",
+        json={"suite": "recruiting_effect_v1", "threshold": 1.0},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["suite_id"] == "recruiting_effect_v1"
+    assert payload["status"] == "passed"
+    assert payload["summary"]["case_count"] >= 15
+    assert all(case["case_type"] == "job_candidate_ranking" for case in payload["case_results"])
+    case_ids = [case["case_id"] for case in payload["case_results"]]
+    assert len(case_ids) == len(set(case_ids))
+    targets = " ".join(str(case["target"]) for case in payload["case_results"])
+    for expected_domain in [
+        "AI Native FDE",
+        "VLA",
+        "数据平台",
+        "运动控制",
+        "嵌入式",
+        "SLAM",
+        "评测",
+        "现场",
+    ]:
+        assert expected_domain in targets
+    assert payload["operator_summary"]["manual_labeling_required"] is False
+    assert payload["operator_summary"]["human_role"] == "decision_maker"
+    assert payload["operator_summary"]["human_touch_level"] == "light"
+    assert payload["operator_summary"]["automation_default"] == "ai_runs_full_pipeline"
+    assert payload["operator_summary"]["human_decisions"] == ["approve", "reject", "adjust"]
+    assert "manual_tagging" not in payload["operator_summary"]["ai_automation_scope"]
+    assert payload["operator_summary"]["review_count"] == 0
+    assert payload["operator_summary"]["visible_case_count"] <= 5
+    assert len(payload["operator_summary"]["coverage_domains"]) <= 8
+    assert all("matched_skills" not in card for card in payload["operator_summary"]["visible_case_cards"])
+    assert "candidate_material" not in json.dumps(payload, ensure_ascii=False)
 
 
 def test_self_rsi_full_mode_api_uses_router_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1941,6 +2051,37 @@ def test_job_profile_match_reports_job_specific_coverage() -> None:
     assert match["加分信号命中"] == ["AI coding 实战"]
     assert match["风险信号命中"] == ["只会写 prompt"]
     assert match["技能覆盖率"] == 0.67
+
+
+def test_score_candidate_against_job_uses_job_rubric() -> None:
+    job_profile = {
+        "title": "AI Native FDE / Agentic Builder",
+        "must_have_skills": ["全栈开发", "Agentic workflow"],
+        "scoring_rubric": {
+            "完整业务工程闭环（问题定义/上线/指标复盘）": 3,
+            "业务抽象能力（订单/支付/风控）": 2,
+        },
+        "rationale": {
+            "must_have_signals": ["AI coding"],
+            "risk_signals": ["只会写 prompt"],
+        },
+    }
+    material = "主导订单支付风控系统上线，问题定义到指标复盘，全栈开发 Agentic workflow AI coding"
+
+    scoring = score_candidate_against_job(job_profile, material)
+
+    # 55×0.75(rubric) + 30×1.0(技能) + 5(主导) + 5(上线) + 5(AI coding) = 86.25 → 86
+    assert scoring["匹配评分"] == 86
+    assert scoring["推荐等级"] == "强推"
+    assert scoring["必备技能命中"] == ["全栈开发", "Agentic workflow"]
+    assert scoring["必备技能缺口"] == []
+    assert len(scoring["评分维度"]) == 2
+    assert all(dim["覆盖率"] == 0.75 for dim in scoring["评分维度"])
+    assert scoring["风险点"] == []
+
+    risky = score_candidate_against_job(job_profile, material + " 但部分模块只会写 prompt")
+    assert risky["匹配评分"] == 76
+    assert any("只会写 prompt" in item for item in risky["风险点"])
 
 
 def test_evaluate_candidate_distinguishes_real_robot_from_sim_only() -> None:

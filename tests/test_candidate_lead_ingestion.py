@@ -157,6 +157,52 @@ def test_ingestion_inserts_candidate_and_job_link(session_factory: sessionmaker[
         assert link.source_task_id == "task_B_1"
 
 
+def test_ingestion_screens_leads_against_job_profile(session_factory: sessionmaker[Session]) -> None:
+    from app.core.candidate_lead_ingestion import ingest_candidate_leads
+
+    with session_factory() as session:
+        session.add(
+            Job(
+                id="job_fde_ingest",
+                project_id="project_2026_ai_team",
+                title="AI Native FDE / Agentic Builder",
+                headcount=1,
+                status="sourcing",
+                must_have_skills=["全栈开发", "Agentic workflow"],
+                scoring_rubric={"完整业务工程闭环（问题定义/上线/指标复盘）": 3},
+                rationale={"risk_signals": ["只会写 prompt"]},
+            )
+        )
+        session.commit()
+
+    lead = {
+        "name": "Builder Han",
+        "title": "全栈工程师",
+        "source_platform": "github_repositories",
+        "source_url": "https://github.com/builderhan",
+        "evidence": ["主导全栈开发与 Agentic workflow 项目上线，完成问题定义和指标复盘"],
+        "skills": ["全栈开发", "Agentic workflow"],
+        "confidence": 0.5,
+    }
+    with session_factory() as session:
+        result = ingest_candidate_leads(
+            session,
+            project_id="project_2026_ai_team",
+            job_id="job_fde_ingest",
+            source_task_id="task_B_2",
+            raw_leads=[lead],
+        )
+
+    assert result["linked_job_candidates"] == 1
+    with session_factory() as session:
+        link = session.scalar(select(JobCandidate).where(JobCandidate.job_id == "job_fde_ingest"))
+        assert link is not None
+        # rubric: 问题定义/上线/指标复盘 命中 3/4 → 55×0.75；技能 2/2 → 30；主导+上线 → +10
+        assert link.match_score == 81
+        assert any(item.startswith("初筛依据｜初筛评分 81") for item in link.evidence or [])
+        assert any("必备技能命中：全栈开发, Agentic workflow" in item for item in link.evidence or [])
+
+
 def test_ingestion_marks_obfuscated_contact_for_compliance_review(session_factory: sessionmaker[Session]) -> None:
     from app.core.candidate_lead_ingestion import ingest_candidate_leads
 

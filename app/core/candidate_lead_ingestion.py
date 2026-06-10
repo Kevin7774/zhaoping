@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Job, JobCandidate
+from app.skills.recruiting_scenarios import score_candidate_against_job
 
 
 @dataclass(frozen=True)
@@ -334,6 +335,8 @@ def ingest_candidate_leads(
         result["rejected_reasons"] = {"job not found for project": result["rejected"]}
         return result
 
+    job_profile = _screening_job_profile(job)
+
     seen_keys: set[tuple[str, ...]] = set()
     for raw in raw_leads:
         normalized = normalize_candidate_lead(raw)
@@ -371,14 +374,18 @@ def ingest_candidate_leads(
             )
         )
         if link is None:
+            match_score, screening_note = _screen_lead_against_job(job_profile, lead)
+            evidence = list(lead.evidence)
+            if screening_note:
+                evidence.append(screening_note)
             session.add(
                 JobCandidate(
                     project_id=project_id,
                     job_id=job_id,
                     candidate_id=candidate.id,
-                    match_score=_match_score(lead.confidence),
+                    match_score=match_score,
                     pipeline_status=_pipeline_status_for_lead(lead),
-                    evidence=list(lead.evidence),
+                    evidence=evidence,
                     source_task_id=source_task_id,
                 )
             )
@@ -390,6 +397,52 @@ def ingest_candidate_leads(
 
     session.commit()
     return result
+
+
+def _screening_job_profile(job: Job) -> dict[str, Any] | None:
+    if not (job.scoring_rubric or job.must_have_skills or job.rationale):
+        return None
+    return {
+        "title": job.title,
+        "must_have_skills": job.must_have_skills or [],
+        "scoring_rubric": job.scoring_rubric or {},
+        "rationale": job.rationale or {},
+    }
+
+
+def _screen_lead_against_job(
+    job_profile: dict[str, Any] | None,
+    lead: CandidateLead,
+) -> tuple[int, str | None]:
+    """Initial screening score for a new job-candidate link.
+
+    Jobs with a profile get a deterministic rubric-driven score plus a readable
+    screening note; legacy jobs keep the search-confidence conversion."""
+
+    if job_profile is None:
+        return _match_score(lead.confidence), None
+    material = " ".join(
+        part
+        for part in [
+            lead.name or "",
+            lead.title or "",
+            lead.current_company or "",
+            " ".join(lead.skills),
+            " ".join(lead.matched_keywords),
+            " ".join(lead.evidence),
+        ]
+        if part
+    )
+    scoring = score_candidate_against_job(job_profile, material)
+    note_bits = [f"初筛评分 {scoring['匹配评分']}（{scoring['推荐等级']}）"]
+    if scoring["必备技能命中"]:
+        note_bits.append(f"必备技能命中：{', '.join(scoring['必备技能命中'][:6])}")
+    if scoring["必备技能缺口"]:
+        note_bits.append(f"待确认缺口：{', '.join(scoring['必备技能缺口'][:6])}")
+    if scoring["风险信号命中"]:
+        note_bits.append(f"风险信号：{', '.join(scoring['风险信号命中'][:4])}")
+    note = "初筛依据｜" + "；".join(note_bits)
+    return int(scoring["匹配评分"]), note[:480]
 
 
 def _evidence_summary(evidence: list[str]) -> str:

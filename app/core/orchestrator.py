@@ -48,6 +48,7 @@ from app.skills.recruiting_scenarios import (
     build_talent_map,
     build_talent_map_from_job,
     evaluate_candidate,
+    score_candidate_against_job,
     generate_job_profile_and_jd,
     generate_weekly_report,
     infer_role_key,
@@ -1113,6 +1114,8 @@ def _job_profile_for_sourcing(ctx: Dict[str, Any]) -> Dict[str, Any] | None:
                         "exclusion_signals": job.exclusion_signals or [],
                         "search_strategy": job.search_strategy or {},
                         "rationale": job.rationale or {},
+                        "scoring_rubric": job.scoring_rubric or {},
+                        "interview_questions": job.interview_questions or [],
                     }
         except Exception:  # noqa: BLE001 - job context is best-effort enrichment.
             profile = None
@@ -1193,8 +1196,21 @@ def _c_eval(ctx: Dict[str, Any]) -> Any:
     result["能力证据"] = capability_context
     job_profile = _job_profile_for_sourcing(ctx)
     if job_profile is not None:
-        result["岗位匹配"] = _job_profile_match(job_profile, ctx["input"])
+        job_scoring = score_candidate_against_job(job_profile, ctx["input"])
+        result["岗位匹配"] = {
+            **_job_profile_match(job_profile, ctx["input"]),
+            "评分维度": job_scoring["评分维度"],
+            "评分依据": job_scoring["评分依据"],
+        }
         result["适合岗位"] = job_profile["title"]
+        result["匹配评分"] = job_scoring["匹配评分"]
+        result["推荐等级"] = job_scoring["推荐等级"]
+        result["推荐结论"] = job_scoring["推荐结论"]
+        result["结论"] = job_scoring["推荐结论"]
+        result["技术强项"] = job_scoring["技术强项"]
+        result["风险点"] = job_scoring["风险点"]
+        if job_profile.get("interview_questions"):
+            result["面试追问"] = list(job_profile["interview_questions"])
     ctx["data"]["evaluation"] = result
     ctx["data"]["candidate_capability_context"] = capability_context
     dependency = result["decision_sandbox"]["evidence_dependency_contract"]
@@ -3001,7 +3017,7 @@ def get_workflow_meta() -> dict[str, Any]:
 def create_workflow_session(
     scenario: str,
     user_input: str,
-    team_constraint: str = "真机泛化",
+    team_constraint: str | None = None,
     aperture_weight: float = 0.7,
     frontend_state: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
@@ -3012,7 +3028,7 @@ def create_workflow_session(
     task = task_store.create(
         scenario,
         user_input,
-        team_constraint=team_constraint,
+        team_constraint=_resolve_team_constraint(team_constraint, frontend_state),
         aperture_weight=aperture_weight,
         frontend_state=state,
     )
@@ -4033,23 +4049,51 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
             )
             self._delay(0.15)
 
+            job_profile = context.get("job_profile")
+            scoring = (
+                score_candidate_against_job(job_profile, context.get("candidate_material") or "")
+                if job_profile
+                else None
+            )
             team_label = _project_team_label(context["project_name"])
+            match_message = (
+                f"正在按「{context['job_title']}」岗位评分标准（scoring_rubric）进行匹配..."
+                if scoring is not None
+                else f"正在与【{team_label}】岗位要求进行向量匹配..."
+            )
             self._emit_step(
                 1,
-                Step("candidate_eval", "岗位向量匹配", f"正在与【{team_label}】岗位要求进行向量匹配...", "compute"),
+                Step("candidate_eval", "岗位匹配评分", match_message, "compute"),
                 {
                     "candidate_id": self._candidate_id,
                     "job_id": self._job_id,
                     "job_title": context["job_title"],
                     "project_id": context["project_id"],
+                    **({"评分维度": scoring["评分维度"], "评分依据": scoring["评分依据"]} if scoring else {}),
                 },
             )
             self._delay(_candidate_evaluation_delay_seconds())
 
-            report = (
-                f"该候选人匹配度 {CANDIDATE_EVALUATION_APPROVED_SCORE} 分，"
-                "具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？"
-            )
+            if scoring is not None:
+                match_score = int(scoring["匹配评分"])
+                summary_bits = []
+                if scoring["必备技能命中"]:
+                    summary_bits.append(f"必备技能命中：{', '.join(scoring['必备技能命中'][:6])}")
+                if scoring["必备技能缺口"]:
+                    summary_bits.append(f"待确认缺口：{', '.join(scoring['必备技能缺口'][:6])}")
+                if scoring["风险信号命中"]:
+                    summary_bits.append(f"风险信号：{', '.join(scoring['风险信号命中'][:4])}")
+                detail = "；".join(summary_bits) or "命中明细见评分维度"
+                report = (
+                    f"该候选人与「{context['job_title']}」匹配度 {match_score} 分（{scoring['推荐等级']}）。"
+                    f"{detail}。{scoring['推荐结论']}。是否自动生成邀约邮件？"
+                )
+            else:
+                match_score = CANDIDATE_EVALUATION_APPROVED_SCORE
+                report = (
+                    f"该候选人匹配度 {CANDIDATE_EVALUATION_APPROVED_SCORE} 分，"
+                    "具备丰富的大模型工程经验，建议进入下一轮。是否自动生成邀约邮件？"
+                )
             awaiting_step = Step("human_expert", "人工网闸", "等待 HR 确认 AI 候选评估报告", "hitl")
             self._store.set_frontend_runtime(
                 task_id,
@@ -4060,9 +4104,27 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                     "job_id": self._job_id,
                     "context": context,
                     "report": report,
+                    "match_score": match_score,
+                    "scoring": scoring,
                     "awaiting_step_index": 2,
                 },
             )
+            draft = {
+                "candidate_id": self._candidate_id,
+                "candidate_name": context["candidate_name"],
+                "job_id": self._job_id,
+                "job_title": context["job_title"],
+                "body": report,
+                "report": report,
+            }
+            if scoring is not None:
+                draft["岗位匹配"] = {
+                    "评分维度": scoring["评分维度"],
+                    "必备技能命中": scoring["必备技能命中"],
+                    "必备技能缺口": scoring["必备技能缺口"],
+                    "风险点": scoring["风险点"],
+                    "评分依据": scoring["评分依据"],
+                }
             self._store.set_awaiting(
                 task_id,
                 awaiting_step,
@@ -4070,15 +4132,8 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                 {
                     "agent": "candidate_eval",
                     "prompt": f"AI 已为候选人 {context['candidate_name']} 生成评估报告，请确认是否批准推进。",
-                    "draft": {
-                        "candidate_id": self._candidate_id,
-                        "candidate_name": context["candidate_name"],
-                        "job_id": self._job_id,
-                        "job_title": context["job_title"],
-                        "body": report,
-                        "report": report,
-                    },
-                    "match_score": CANDIDATE_EVALUATION_APPROVED_SCORE,
+                    "draft": draft,
+                    "match_score": match_score,
                     "pipeline_status": CANDIDATE_EVALUATION_APPROVED_STATUS,
                 },
             )
@@ -4094,6 +4149,10 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
     def _resume_after_human_gate(self, task_id: str, decision: dict[str, Any]) -> None:
         runtime = self._project_candidate_runtime()
         report = str(runtime.get("report") or "")
+        try:
+            approved_score = int(runtime.get("match_score"))
+        except (TypeError, ValueError):
+            approved_score = CANDIDATE_EVALUATION_APPROVED_SCORE
         awaiting_step = Step("human_expert", "人工网闸", "等待 HR 确认 AI 候选评估报告", "hitl")
         if decision.get("decision") == "reject":
             self._store.complete_step(
@@ -4113,7 +4172,7 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
             self._store.set_frontend_runtime(task_id, PROJECT_CANDIDATE_EVALUATION_RUNTIME_KEY, None)
             return
 
-        database_update = self._apply_approved_result()
+        database_update = self._apply_approved_result(approved_score)
         self._store.complete_step(
             task_id,
             awaiting_step,
@@ -4147,6 +4206,15 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                     f"Candidate/job link not found: candidate_id={self._candidate_id}, job_id={self._job_id}"
                 )
             candidate, job, project, link = row
+            material_parts = [
+                candidate.name or "",
+                candidate.title or "",
+                candidate.current_company or "",
+                " ".join(str(item) for item in candidate.skills or []),
+                " ".join(str(item) for item in candidate.evidence or []),
+                " ".join(str(item) for item in link.evidence or []) if isinstance(link.evidence, list) else "",
+            ]
+            has_job_profile = bool(job.scoring_rubric or job.must_have_skills or job.rationale)
             return {
                 "candidate_id": candidate.id,
                 "candidate_name": candidate.name,
@@ -4158,9 +4226,23 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                 "project_name": project.name,
                 "existing_match_score": link.match_score,
                 "existing_pipeline_status": link.pipeline_status,
+                "candidate_material": " ".join(part for part in material_parts if part),
+                "job_profile": (
+                    {
+                        "id": job.id,
+                        "title": job.title,
+                        "must_have_skills": job.must_have_skills or [],
+                        "nice_to_have_skills": job.nice_to_have_skills or [],
+                        "scoring_rubric": job.scoring_rubric or {},
+                        "rationale": job.rationale or {},
+                        "interview_questions": job.interview_questions or [],
+                    }
+                    if has_job_profile
+                    else None
+                ),
             }
 
-    def _apply_approved_result(self) -> dict[str, Any]:
+    def _apply_approved_result(self, match_score: int) -> dict[str, Any]:
         with project_session_factory()() as session:
             with session.begin():
                 link = session.scalar(
@@ -4173,12 +4255,12 @@ class ProjectCandidateEvaluationRunner(threading.Thread):
                     raise ValueError(
                         f"Candidate/job link not found: candidate_id={self._candidate_id}, job_id={self._job_id}"
                     )
-                link.match_score = CANDIDATE_EVALUATION_APPROVED_SCORE
+                link.match_score = match_score
                 link.pipeline_status = CANDIDATE_EVALUATION_APPROVED_STATUS
         return {
             "candidate_id": self._candidate_id,
             "job_id": self._job_id,
-            "match_score": CANDIDATE_EVALUATION_APPROVED_SCORE,
+            "match_score": match_score,
             "pipeline_status": CANDIDATE_EVALUATION_APPROVED_STATUS,
         }
 
@@ -4396,10 +4478,28 @@ def _should_auto_confirm_human_gate(ctx: Dict[str, Any]) -> bool:
     )
 
 
+def _resolve_team_constraint(
+    team_constraint: str | None,
+    frontend_state: Optional[Dict[str, Any]],
+) -> str:
+    """Anchor the evaluation aperture on the project job when one is in context.
+
+    Explicit user input wins; the home-robot default only applies to legacy
+    free-text runs without a job profile."""
+
+    explicit = str(team_constraint or "").strip()
+    if explicit:
+        return explicit
+    job_profile = _job_profile_for_sourcing({"frontend_state": frontend_state}) if frontend_state else None
+    if job_profile is not None and str(job_profile.get("title") or "").strip():
+        return f"{job_profile['title']} 工程落地"
+    return "真机泛化"
+
+
 def start_task(
     scenario: str,
     user_input: str,
-    team_constraint: str = "真机泛化",
+    team_constraint: str | None = None,
     aperture_weight: float = 0.7,
     frontend_state: Optional[Dict[str, Any]] = None,
 ) -> TaskState:
@@ -4409,7 +4509,7 @@ def start_task(
     task = task_store.create(
         scenario,
         user_input,
-        team_constraint=team_constraint,
+        team_constraint=_resolve_team_constraint(team_constraint, frontend_state),
         aperture_weight=aperture_weight,
         frontend_state=frontend_state,
     )

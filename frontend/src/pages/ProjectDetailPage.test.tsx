@@ -22,6 +22,7 @@ const projectPayload = {
   totalCandidates: 1,
   awaitingHuman: 0,
   averageMatchScore: 81,
+  bpFilePath: "data/input/projects/bp_ai_hardware.md",
 };
 
 const jobsPayload = [
@@ -387,6 +388,9 @@ describe("ProjectDetailPage backend hardening", () => {
     renderProjectPage();
 
     expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("项目材料位置"), {
+      target: { value: "data/input/projects/bp_ai_hardware.md" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
 
     expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
@@ -511,7 +515,7 @@ describe("ProjectDetailPage backend hardening", () => {
 
     renderProjectPage();
 
-    expect(await screen.findByRole("heading", { name: "当前建议动作" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "下一步" })).toBeTruthy();
     expect(screen.getAllByText(/候选人不足/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "开始找候选人" })).toBeTruthy();
     expect(screen.queryByText("招聘需求")).toBeNull();
@@ -540,8 +544,8 @@ describe("ProjectDetailPage backend hardening", () => {
 
     expect(await screen.findByRole("heading", { name: "岗位智能生成" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "预览岗位矩阵" })).toHaveLength(1);
-    expect(screen.queryByRole("heading", { name: "当前建议动作" })).toBeNull();
-    expect(screen.getByText("当前建议：")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "下一步" })).toBeNull();
+    expect(screen.getByText("下一步：")).toBeTruthy();
     expect(screen.getByText(/确认覆盖后才会写入当前项目/)).toBeTruthy();
     expect(screen.getByText(/当前选中搜索源 \d+\/\d+ 项已就绪/)).toBeTruthy();
     expect(screen.queryByText(/搜索服务 .*可用/)).toBeNull();
@@ -861,9 +865,10 @@ describe("ProjectDetailPage backend hardening", () => {
     await openJobMoreActions();
     fireEvent.click(screen.getAllByRole("button", { name: "候选人评估" })[0]);
 
-    expect(await screen.findByRole("heading", { name: "人工确认" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "确认继续" })).toBeTruthy();
+    expect(screen.queryByText(/AI|决策/)).toBeNull();
     expect(screen.getAllByText("Zhou Han").length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "通过" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task_C/confirm", expect.objectContaining({ method: "POST" })),
@@ -879,7 +884,7 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(await screen.findByText("后端生成")).toBeTruthy();
     expect(screen.getByDisplayValue("后端生成主题")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "确认草稿" }));
-    fireEvent.click(screen.getByRole("button", { name: "通过" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/outreach/draft", expect.objectContaining({ method: "POST" }));

@@ -320,6 +320,43 @@ def _normalize_sender_email(value: str | None) -> str | None:
     return sender
 
 
+class ResendCompliantEmailProvider(CompliantEmailDeliveryProvider):
+    def _send_request(
+        self,
+        *,
+        token: str,
+        sender: str,
+        to: str,
+        subject: str,
+        text_body: str,
+        html_body: str | None,
+        unsubscribe_url: str,
+    ) -> dict[str, Any]:
+        import requests
+
+        response = requests.post(
+            self.endpoint,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": sender,
+                "to": [to],
+                "subject": subject,
+                "text": text_body,
+                **({"html": html_body} if html_body else {}),
+                "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>"},
+            },
+            timeout=self.timeout_seconds,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise RuntimeError(f"Resend email send failed: {response.status_code} {response.text[:300]}") from exc
+        return response.json()
+
+
 class PostmarkCompliantEmailProvider(CompliantEmailDeliveryProvider):
     def _send_request(
         self,

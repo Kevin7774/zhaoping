@@ -28,9 +28,13 @@ describe("HumanConfirmModal", () => {
     );
 
     expect(screen.getByText("已为您生成候选人 Alex 的触达邮件草稿")).toBeTruthy();
-    const textarea = screen.getByLabelText("草稿正文");
+    expect(screen.getByRole("heading", { name: "确认继续" })).toBeTruthy();
+    expect(screen.queryByText(/AI|决策/)).toBeNull();
+    expect(screen.queryByLabelText("调整内容")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "调整" }));
+    const textarea = screen.getByLabelText("调整内容");
     fireEvent.change(textarea, { target: { value: "Hi Alex, updated." } });
-    fireEvent.click(screen.getByRole("button", { name: "编辑后通过" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并继续" }));
 
     expect(onApprove).toHaveBeenCalledWith("Hi Alex, updated.", "edit");
     expect(onReject).not.toHaveBeenCalled();
@@ -52,7 +56,7 @@ describe("HumanConfirmModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
+    fireEvent.click(screen.getByRole("button", { name: "暂不推进" }));
 
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onApprove).not.toHaveBeenCalled();
@@ -118,7 +122,7 @@ describe("HumanConfirmModal", () => {
     expect(screen.getByText("createAgenticWorkflow({ mcp, rag, fullstack })")).toBeTruthy();
     expect(screen.getByText("Maintains robot-vla with diffusion policy examples.")).toBeTruthy();
     expect(screen.getByText("确认后将把这些线索写入项目候选人库。")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "通过" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
 
     expect(onApprove).toHaveBeenCalledWith("{}", "approve");
   });
@@ -189,7 +193,24 @@ describe("HumanConfirmModal", () => {
     );
 
     expect(screen.getByText("缺少候选线索预览，无法确认入库。")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "通过" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "编辑后通过" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "继续" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "调整" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("softens internal status language before showing it", () => {
+    render(
+      <HumanConfirmModal
+        open
+        busy={false}
+        context="AI Agent 请求人工确认：AI 已生成候选人评估，请确认是否推进。"
+        draft="候选人评估报告"
+        onApprove={() => undefined}
+        onReject={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("请求确认：已生成候选人评估，请确认是否继续。")).toBeTruthy();
+    expect(screen.queryByText(/AI|人工确认|决策/)).toBeNull();
   });
 });

@@ -428,6 +428,108 @@ def _clean_string_list(value: Any) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def score_candidate_against_job(job_profile: Dict[str, Any], candidate_material: str) -> Dict[str, Any]:
+    """Deterministic candidate scoring driven by the job's own scoring_rubric.
+
+    The methodology (composition formula, level thresholds, generic
+    ownership/delivery evidence) is global; every scored dimension, skill,
+    bonus, and risk signal comes from the job profile itself."""
+
+    text = candidate_material.lower()
+    rationale = job_profile.get("rationale") if isinstance(job_profile.get("rationale"), dict) else {}
+
+    must_have = _clean_string_list(job_profile.get("must_have_skills"))
+    matched_skills = [item for item in must_have if item.lower() in text]
+    missing_skills = [item for item in must_have if item.lower() not in text]
+    skill_coverage = len(matched_skills) / len(must_have) if must_have else 0.0
+
+    rubric = job_profile.get("scoring_rubric") if isinstance(job_profile.get("scoring_rubric"), dict) else {}
+    dimensions: List[Dict[str, Any]] = []
+    weighted = 0.0
+    weight_sum = 0.0
+    for raw_name, raw_weight in rubric.items():
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            continue
+        if weight <= 0:
+            continue
+        terms = _rubric_terms(str(raw_name))
+        hits = [term for term in terms if term.lower() in text]
+        coverage = len(hits) / len(terms) if terms else 0.0
+        weighted += weight * coverage
+        weight_sum += weight
+        dimensions.append(
+            {
+                "维度": str(raw_name),
+                "权重": weight,
+                "命中关键词": hits,
+                "覆盖率": round(coverage, 2),
+            }
+        )
+    rubric_coverage = weighted / weight_sum if weight_sum else skill_coverage
+
+    bonus_signals = list(
+        dict.fromkeys(
+            _clean_string_list((rationale or {}).get("must_have_signals"))
+            + _clean_string_list((rationale or {}).get("bonus_signals"))
+        )
+    )
+    bonus_hits = [item for item in bonus_signals if item.lower() in text]
+    risk_signals = _clean_string_list((rationale or {}).get("risk_signals"))
+    risk_hits = [item for item in risk_signals if item.lower() in text]
+
+    has_ownership = any(term in text for term in ["负责", "主导", "owner", "lead", "独立"])
+    has_delivery = any(term in text for term in ["上线", "交付", "量产", "0到1", "复盘", "迭代"])
+
+    score = 55 * rubric_coverage + 30 * skill_coverage
+    score += 5 if has_ownership else 0
+    score += 5 if has_delivery else 0
+    score += min(10, len(bonus_hits) * 5)
+    score -= min(20, len(risk_hits) * 10)
+    final_score = int(max(0, min(100, round(score))))
+
+    if final_score >= 80:
+        level = "强推"
+    elif final_score >= 65:
+        level = "可面"
+    elif final_score >= 50:
+        level = "备选"
+    else:
+        level = "不推荐"
+
+    risks: List[str] = []
+    if missing_skills:
+        risks.append(f"必备技能未见证据：{', '.join(missing_skills)}")
+    for item in risk_hits:
+        risks.append(f"命中岗位风险信号：{item}")
+    if not has_ownership:
+        risks.append("独立贡献边界不清晰")
+
+    conclusion = "建议进入下一轮" if level in {"强推", "可面"} else "暂不建议进入下一轮，除非业务阶段可以接受补足周期。"
+    return {
+        "匹配评分": final_score,
+        "推荐等级": level,
+        "推荐结论": conclusion,
+        "技术强项": list(dict.fromkeys(matched_skills + bonus_hits))[:10],
+        "风险点": risks,
+        "评分维度": dimensions,
+        "必备技能命中": matched_skills,
+        "必备技能缺口": missing_skills,
+        "加分信号命中": bonus_hits,
+        "风险信号命中": risk_hits,
+        "评分依据": (
+            "55×岗位评分权重覆盖 + 30×必备技能覆盖 + 独立贡献/交付信号(各5) + 加分信号(≤10) − 风险信号(≤20)；"
+            "维度与关键词全部来自岗位画像的 scoring_rubric / must_have_skills / rationale。"
+        ),
+    }
+
+
+def _rubric_terms(name: str) -> List[str]:
+    parts = re.split(r"[（）()/、,，;；：:→\s]+", name)
+    return [part.strip() for part in parts if len(part.strip()) >= 2]
+
+
 def _contains_any(text: str, terms: List[str]) -> bool:
     return any(term.casefold() in text for term in terms)
 
@@ -733,7 +835,7 @@ def _constraint_focus_terms(team_constraint: str) -> List[str]:
     for label, terms in groups.items():
         if label in normalized or any(term in normalized for term in terms):
             return terms
-    return [term for term in re.split(r"[\s,，/]+", team_constraint) if term][:6] or ["真机", "泛化", "工程落地"]
+    return [term for term in re.split(r"[\s,，/]+", team_constraint) if term][:6] or ["工程落地", "交付", "迭代"]
 
 
 def _projection_score(facts: List[Dict[str, Any]], focus_terms: List[str], aperture_weight: float) -> int:

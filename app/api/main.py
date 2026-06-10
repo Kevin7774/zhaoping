@@ -221,7 +221,9 @@ class SearchWatchlistRequest(BaseModel):
 class RunRequest(BaseModel):
     scenario: str
     input: str
-    team_constraint: str = "真机泛化"
+    # Empty means "derive from context": job-profile tasks anchor on the job
+    # title; legacy free-text runs keep the home-robot default downstream.
+    team_constraint: str = ""
     aperture_weight: float = 0.7
     frontend_state: dict[str, Any] = Field(default_factory=dict)
 
@@ -505,7 +507,7 @@ def scenarios_run(request: RunRequest) -> dict:
         task = start_task(
             scenario,
             request.input.strip(),
-            team_constraint=(request.team_constraint or "真机泛化").strip() or "真机泛化",
+            team_constraint=(request.team_constraint or "").strip() or None,
             aperture_weight=max(0.0, min(float(request.aperture_weight), 1.0)),
             frontend_state=request.frontend_state,
         )
@@ -562,7 +564,7 @@ def workflow_session_create(request: WorkflowSessionRequest) -> dict:
         return create_workflow_session(
             scenario,
             request.input.strip(),
-            team_constraint=(request.team_constraint or "真机泛化").strip() or "真机泛化",
+            team_constraint=(request.team_constraint or "").strip() or None,
             aperture_weight=max(0.0, min(float(request.aperture_weight), 1.0)),
             frontend_state=request.frontend_state,
         )

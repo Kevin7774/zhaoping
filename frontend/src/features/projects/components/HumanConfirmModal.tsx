@@ -29,14 +29,19 @@ export function HumanConfirmModal({
 }: HumanConfirmModalProps) {
   const textareaId = useId();
   const [draftText, setDraftText] = useState(draft);
+  const [adjusting, setAdjusting] = useState(false);
 
   useEffect(() => {
-    if (open) setDraftText(draft);
+    if (open) {
+      setDraftText(draft);
+      setAdjusting(false);
+    }
   }, [draft, open]);
 
   if (!open) return null;
   const missingRequiredLeadPreview = Boolean(requiresLeadPreview && !leadPreview);
   const approveDisabled = busy || missingRequiredLeadPreview;
+  const displayContext = softenVisibleContext(context);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-[#111827]/45 px-3 py-4 backdrop-blur-[2px] sm:items-center sm:px-4 sm:py-6">
@@ -49,9 +54,9 @@ export function HumanConfirmModal({
         <div className="border-b border-[#EEF2F7] bg-[#F9FAFB]/60 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[12px] font-semibold uppercase tracking-normal text-[#F59E0B]">Human Gate</div>
+              <div className="text-[12px] font-semibold tracking-normal text-[#6B7280]">待确认</div>
               <h2 id="human-confirm-title" className="mt-1 text-[18px] font-bold text-[#111827]">
-                人工确认
+                确认继续
               </h2>
             </div>
             <button
@@ -66,9 +71,9 @@ export function HumanConfirmModal({
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
-          <div className="rounded-[12px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
-            <div className="text-[14px] font-semibold text-[#111827]">{candidateName || "AI Agent 请求确认"}</div>
-            <p className="mt-1 text-[13px] leading-5 text-[#92400E]">{context}</p>
+          <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-4 py-3">
+            <div className="text-[14px] font-semibold text-[#111827]">{candidateName || "确认信息"}</div>
+            <p className="mt-1 text-[13px] leading-5 text-[#4B5563]">{displayContext}</p>
           </div>
 
           {requiresLeadPreview ? (
@@ -190,16 +195,24 @@ export function HumanConfirmModal({
             </section>
           ) : null}
 
-          <label htmlFor={textareaId} className="block text-[13px] font-semibold text-[#374151]">
-            草稿正文
-          </label>
-          <textarea
-            id={textareaId}
-            value={draftText}
-            onChange={(event) => setDraftText(event.target.value)}
-            rows={10}
-            className="w-full resize-y rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] leading-[22px] text-[#111827] outline-none transition focus:border-[#BFDBFE] focus:ring-2 focus:ring-[#EFF6FF]"
-          />
+          {adjusting ? (
+            <div className="space-y-2">
+              <label htmlFor={textareaId} className="block text-[13px] font-semibold text-[#374151]">
+                调整内容
+              </label>
+              <textarea
+                id={textareaId}
+                value={draftText}
+                onChange={(event) => setDraftText(event.target.value)}
+                rows={8}
+                className="w-full resize-y rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] leading-[22px] text-[#111827] outline-none transition focus:border-[#BFDBFE] focus:ring-2 focus:ring-[#EFF6FF]"
+              />
+            </div>
+          ) : (
+            <div className="rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-[12px] leading-5 text-[#6B7280]">
+              需要改动时再展开调整。
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
@@ -212,26 +225,50 @@ export function HumanConfirmModal({
             disabled={busy}
             className="h-[38px] rounded-[10px] bg-[#EF4444] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            拒绝
+            暂不推进
           </button>
-          <button
-            type="button"
-            onClick={() => onApprove(draftText, "edit")}
-            disabled={approveDisabled}
-            className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            编辑后通过
-          </button>
+          {adjusting ? (
+            <button
+              type="button"
+              onClick={() => onApprove(draftText, "edit")}
+              disabled={approveDisabled}
+              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              保存并继续
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdjusting(true)}
+              disabled={approveDisabled}
+              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              调整
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onApprove(draftText, "approve")}
             disabled={approveDisabled}
             className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            通过
+            继续
           </button>
         </div>
       </section>
     </div>
+  );
+}
+
+function softenVisibleContext(value: string) {
+  return (
+    value
+      .replace(/AI\s*Agent\s*/gi, "")
+      .replace(/\bAI\b\s*/gi, "")
+      .replace(/人工确认/g, "确认")
+      .replace(/是否推进/g, "是否继续")
+      .replace(/\s+/g, " ")
+      .replace(/\s+([，。：；、])/g, "$1")
+      .trim() || "请确认后继续。"
   );
 }
