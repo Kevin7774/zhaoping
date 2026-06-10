@@ -23,6 +23,7 @@ from app.core.orchestrator import (
     _calibrated_target_sources,
     _d_plan,
     _d_signals,
+    _job_profile_match,
     _live_services_for_search_config,
     get_meta,
     task_store,
@@ -47,6 +48,7 @@ from app.skills.search_sources import SEARCH_DATA_SOURCES
 from app.skills.recruiting_scenarios import (
     HOME_ROBOT_RECRUITING_SCENARIOS,
     build_talent_map,
+    build_talent_map_from_job,
     evaluate_candidate,
     generate_job_profile_and_jd,
     generate_weekly_report,
@@ -1890,6 +1892,55 @@ def test_build_slam_talent_map_uses_transfer_sources() -> None:
     assert any(keyword == "SLAM / 导航算法工程师" for keyword in result["搜索关键词"])
     assert any(profile["能力名称"] == "激光/视觉/IMU多传感器融合建图" for profile in result["能力细分"])
     assert "动态校准目标" in result["溯源验证计划"]
+
+
+def test_build_talent_map_from_job_keeps_job_domain() -> None:
+    job_profile = {
+        "id": "job_fde_1",
+        "title": "AI Native FDE / Agentic Builder",
+        "seniority": "Senior",
+        "must_have_skills": ["全栈开发", "AI coding 实战", "Agentic workflow"],
+        "nice_to_have_skills": ["电商 SaaS 经验"],
+        "target_companies": ["AI 应用创业公司"],
+        "exclusion_signals": ["只会写 prompt"],
+        "rationale": {
+            "sourcing_keywords": ["Agentic Builder", "FDE"],
+            "outreach_angle": "用真实业务问题和完整 SDLC 主导权吸引 builder。",
+        },
+    }
+
+    result = build_talent_map_from_job(job_profile)
+
+    assert result["优先来源公司"] == ["AI 应用创业公司"]
+    assert result["排除来源"] == ["只会写 prompt"]
+    assert "AI Native FDE / Agentic Builder" in result["搜索关键词"]
+    assert "Agentic Builder" in result["搜索关键词"]
+    assert "全栈开发" in result["触达话术"]
+    assert "用真实业务问题和完整 SDLC 主导权吸引 builder。" in result["触达话术"]
+    assert "机器人" not in result["触达话术"]
+    assert result["候选人来源"]["优先来源公司"] == ["AI 应用创业公司"]
+    assert result["岗位上下文"]["job_id"] == "job_fde_1"
+
+
+def test_job_profile_match_reports_job_specific_coverage() -> None:
+    match = _job_profile_match(
+        {
+            "title": "AI Native FDE / Agentic Builder",
+            "must_have_skills": ["全栈开发", "Agentic workflow", "支付风控"],
+            "rationale": {
+                "must_have_signals": ["AI coding 实战"],
+                "risk_signals": ["只会写 prompt"],
+            },
+        },
+        "候选人主导全栈开发和 Agentic workflow 项目，有 AI coding 实战，但部分模块只会写 prompt。",
+    )
+
+    assert match["岗位"] == "AI Native FDE / Agentic Builder"
+    assert match["必备技能命中"] == ["全栈开发", "Agentic workflow"]
+    assert match["必备技能缺口"] == ["支付风控"]
+    assert match["加分信号命中"] == ["AI coding 实战"]
+    assert match["风险信号命中"] == ["只会写 prompt"]
+    assert match["技能覆盖率"] == 0.67
 
 
 def test_evaluate_candidate_distinguishes_real_robot_from_sim_only() -> None:

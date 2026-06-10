@@ -164,6 +164,7 @@ describe("ProjectDetailPage backend hardening", () => {
   });
 
   function mockBackend(options: {
+    jobs?: unknown[];
     candidates?: unknown[];
     candidateResponses?: unknown[][];
     schedules?: unknown[];
@@ -179,7 +180,7 @@ describe("ProjectDetailPage backend hardening", () => {
       const url = String(input);
       if (url === "/api/integrations/status") return jsonResponse(integrationsPayload(options.integrations));
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload, options.projectStatus ?? 200);
-      if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
+      if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(options.jobs ?? jobsPayload);
       if (url === "/api/projects/project_2026_ai_team/materials/upload") {
         return jsonResponse({
           fileName: "uploaded-bp.pdf",
@@ -530,6 +531,20 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(screen.queryByText("BP 文件路径")).toBeNull();
     expect(screen.getByText("项目材料")).toBeTruthy();
     expect(screen.getByText("bp_ai_hardware.md")).toBeTruthy();
+  });
+
+  it("keeps role generation actions in one place when no jobs exist", async () => {
+    mockBackend({ jobs: [], candidates: [] });
+
+    renderProjectPage();
+
+    expect(await screen.findByRole("heading", { name: "岗位智能生成" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "预览岗位矩阵" })).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "当前建议动作" })).toBeNull();
+    expect(screen.getByText("当前建议：")).toBeTruthy();
+    expect(screen.getByText(/确认覆盖后才会写入当前项目/)).toBeTruthy();
+    expect(screen.getByText(/当前选中搜索源 \d+\/\d+ 项已就绪/)).toBeTruthy();
+    expect(screen.queryByText(/搜索服务 .*可用/)).toBeNull();
   });
 
   it("shows an error state when backend project loading fails", async () => {

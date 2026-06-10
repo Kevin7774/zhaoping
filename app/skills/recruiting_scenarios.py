@@ -368,6 +368,66 @@ def build_talent_map(target: str) -> Dict[str, Any]:
     }
 
 
+def build_talent_map_from_job(job_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the Scenario B talent map from a project job profile.
+
+    Tasks that carry project/job context must keep that job's own domain;
+    the static home-robot role metadata is only a fallback for legacy
+    free-text runs without a job profile."""
+
+    title = str(job_profile.get("title") or "").strip() or "目标岗位"
+    rationale = job_profile.get("rationale") if isinstance(job_profile.get("rationale"), dict) else {}
+    must_have = _clean_string_list(job_profile.get("must_have_skills"))
+    nice_to_have = _clean_string_list(job_profile.get("nice_to_have_skills"))
+    sourcing_keywords = _clean_string_list((rationale or {}).get("sourcing_keywords"))
+    keywords = list(dict.fromkeys([title, *sourcing_keywords, *must_have, *nice_to_have]))
+    priority_sources = _clean_string_list(job_profile.get("target_companies"))
+    exclusions = _clean_string_list(job_profile.get("exclusion_signals"))
+
+    focus = "、".join(must_have[:6]) or "岗位核心技能"
+    outreach_angle = str((rationale or {}).get("outreach_angle") or "").strip()
+    outreach_strategy = (
+        f"我们在招{title}，重点关注{focus}方向的实战落地经验。"
+        + (outreach_angle or "想了解你在相关项目中的独立贡献、上线结果和复盘。")
+    )
+
+    return {
+        "目标公司": priority_sources,
+        "目标团队": [],
+        "候选人来源": {
+            "优先来源公司": priority_sources,
+            "次优来源公司": [],
+            "高校/实验室": [],
+        },
+        "搜索关键词": keywords,
+        "触达策略": outreach_strategy,
+        "溯源验证计划": {
+            "静态基座": f"项目岗位画像「{title}」（必备技能、目标公司、sourcing 关键词）",
+            "当前状态": "目标公司与关键词来自岗位画像，需接入实时检索证据后校准。",
+        },
+        "能力细分": [
+            {"能力名称": skill, "来源": "岗位画像 must_have_skills"} for skill in must_have
+        ],
+        "优先来源公司": priority_sources,
+        "次优来源公司": [],
+        "高校/实验室": [],
+        "候选人关键词": keywords,
+        "排除来源": exclusions,
+        "触达话术": outreach_strategy,
+        "岗位上下文": {
+            "job_id": job_profile.get("id"),
+            "title": title,
+            "seniority": job_profile.get("seniority"),
+        },
+    }
+
+
+def _clean_string_list(value: Any) -> List[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 def _contains_any(text: str, terms: List[str]) -> bool:
     return any(term.casefold() in text for term in terms)
 

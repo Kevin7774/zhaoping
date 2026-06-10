@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { createProject, listProjects, type ProjectRecord } from "../features/projects/api";
+import { apiClient } from "../shared/api/client";
 import {
   DataError,
   DataLoading,
@@ -17,6 +18,12 @@ function projectUrl(projectId: string) {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
+type MonitorResult = {
+  ok: boolean;
+  action: string;
+  output: string;
+};
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -28,6 +35,26 @@ export function DashboardPage() {
   const [projectName, setProjectName] = useState("");
   const [projectStatus, setProjectStatus] = useState("active");
   const [reloadToken, setReloadToken] = useState(0);
+  const [monitorBusy, setMonitorBusy] = useState<"start" | "status" | null>(null);
+  const [monitorOutput, setMonitorOutput] = useState("");
+  const [monitorError, setMonitorError] = useState("");
+
+  async function runMonitor(action: "start" | "status") {
+    setMonitorBusy(action);
+    setMonitorError("");
+    try {
+      const result =
+        action === "start"
+          ? await apiClient.post<MonitorResult>("/monitor/start")
+          : await apiClient.get<MonitorResult>("/monitor/status");
+      setMonitorOutput(result.output);
+      if (!result.ok) setMonitorError("监控脚本返回非零退出码，请检查输出。");
+    } catch (error) {
+      setMonitorError(error instanceof Error ? error.message : "监控接口调用失败");
+    } finally {
+      setMonitorBusy(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +173,7 @@ export function DashboardPage() {
           )}
         </SectionPanel>
 
+        <div className="min-w-0 space-y-5">
         <SectionPanel title="新建项目" subtitle="创建后会进入一个没有岗位和候选人的隔离空间。">
           <div className="space-y-4">
             <label className="block text-[12px] font-medium text-[#6B7280]">
@@ -188,6 +216,40 @@ export function DashboardPage() {
             {createError ? <div className="text-[13px] text-[#EF4444]">{createError}</div> : null}
           </div>
         </SectionPanel>
+
+        <SectionPanel title="测试监控" subtitle="开发环境专用：HTTP 访问日志 + PG 行级审计 + watcher 汇总流。">
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => runMonitor("start")}
+                disabled={monitorBusy !== null}
+                className="h-10 flex-1 rounded-[10px] bg-[#16A34A] text-[13px] font-medium text-white transition hover:bg-[#15803D] disabled:cursor-not-allowed disabled:bg-[#BBF7D0]"
+              >
+                {monitorBusy === "start" ? "启动中" : "一键启动监控"}
+              </button>
+              <button
+                type="button"
+                onClick={() => runMonitor("status")}
+                disabled={monitorBusy !== null}
+                className="h-10 flex-1 rounded-[10px] border border-[#D1D5DB] bg-white text-[13px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
+              >
+                {monitorBusy === "status" ? "查询中" : "查看状态"}
+              </button>
+            </div>
+            {monitorOutput ? (
+              <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-[10px] bg-[#0F172A] px-3 py-2 font-mono text-[12px] leading-5 text-[#A7F3D0]">
+                {monitorOutput}
+              </pre>
+            ) : (
+              <div className="text-[12px] text-[#9CA3AF]">
+                日志：artifacts/manual_test_20260610/monitor.log（可终端 tail -f 实时查看）
+              </div>
+            )}
+            {monitorError ? <div className="text-[13px] text-[#EF4444]">{monitorError}</div> : null}
+          </div>
+        </SectionPanel>
+        </div>
       </div>
     </div>
   );

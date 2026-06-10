@@ -516,6 +516,7 @@ def test_preview_project_from_bp_falls_back_when_llm_times_out(
         json={
             "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
             "bpFilePath": str(bp_path),
+            "minimumRoleCount": 14,
         },
     )
 
@@ -547,6 +548,7 @@ def test_initialize_project_from_bp_falls_back_and_persists_when_llm_times_out(
         json={
             "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
             "bpFilePath": str(bp_path),
+            "minimumRoleCount": 14,
         },
     )
 
@@ -653,6 +655,62 @@ def test_initialize_project_from_bp_retries_when_role_count_is_below_minimum(
     assert response.json()["jobCount"] == 14
     redesign_prompts = [prompt for prompt in llm.prompts if "少于要求的 14" in prompt]
     assert len(redesign_prompts) == 1
+
+
+def test_preview_project_from_bp_keeps_accepted_roles_when_still_below_minimum(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_single_role.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = FakeProjectInitLLM(role_count=1)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/preview-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 14,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobCount"] == 1
+    assert any("低于设置的最少岗位数 14" in item for item in payload["coverageGaps"])
+
+
+def test_preview_project_from_bp_returns_422_when_no_roles_pass_critic_gate(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_single_role.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = FakeProjectInitLLM(role_count=1, evidence_quote="材料里完全不存在的引用文本")
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/preview-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 1,
+        },
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "素材未能解析出任何通过证据审核的岗位" in detail
+    assert "找到原文" in detail
+    with session_factory() as session:
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 0
 
 
 def test_initialize_project_from_bp_runs_pipeline_and_persists_full_job_matrix(

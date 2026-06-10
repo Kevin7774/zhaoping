@@ -46,6 +46,7 @@ from app.skills.recruiting_scenarios import (
     apply_evidence_context_to_candidate_evaluation,
     build_search_keywords,
     build_talent_map,
+    build_talent_map_from_job,
     evaluate_candidate,
     generate_job_profile_and_jd,
     generate_weekly_report,
@@ -495,18 +496,28 @@ CHINESE_ENTITY_RE = re.compile(
 )
 
 
-def _calibrated_target_sources(role_key: str, intelligence: Dict[str, Any]) -> Dict[str, Any]:
+def _calibrated_target_sources(
+    role_key: str,
+    intelligence: Dict[str, Any],
+    seed_sources: Dict[str, List[str]] | None = None,
+) -> Dict[str, Any]:
     """Promote live company/lab signals into the main target-source output.
 
     Static scenario sources are seeds only. They remain visible for audit/fallback,
     but live entities take over the primary lists once the search layer returns
-    usable organization or lab signals.
+    usable organization or lab signals. When the task carries a project job
+    profile, its target companies replace the home-robot seed lists.
     """
 
-    source_map = HOME_ROBOT_TALENT_SOURCE_MAP.get(role_key, {})
-    seed_companies = list(source_map.get("priority_sources", ROBOT_ROLES_METADATA[role_key]["target_targets"]))
-    seed_secondary = list(source_map.get("secondary_sources", []))
-    seed_labs = list(source_map.get("labs", []))
+    if seed_sources is not None:
+        seed_companies = list(seed_sources.get("目标公司") or [])
+        seed_secondary = list(seed_sources.get("次优来源公司") or [])
+        seed_labs = list(seed_sources.get("高校实验室") or [])
+    else:
+        source_map = HOME_ROBOT_TALENT_SOURCE_MAP.get(role_key, {})
+        seed_companies = list(source_map.get("priority_sources", ROBOT_ROLES_METADATA[role_key]["target_targets"]))
+        seed_secondary = list(source_map.get("secondary_sources", []))
+        seed_labs = list(source_map.get("labs", []))
 
     dynamic_entities = _extract_dynamic_source_entities(intelligence)
     dynamic_companies = [
@@ -806,6 +817,10 @@ def _apply_calibrated_targets_to_talent_map(result: Dict[str, Any], targets: Dic
 def _a_plan(ctx: Dict[str, Any]) -> Any:
     role_key = infer_role_key(ctx["input"])
     ctx["role_key"] = role_key
+    job_profile = _job_profile_for_sourcing(ctx)
+    if job_profile is not None:
+        ctx["log"] = f"已拆解招聘需求，目标岗位为项目岗位「{job_profile['title']}」"
+        return {"role_key": role_key, "岗位": job_profile["title"], "岗位来源": "project_job_profile"}
     role = ROBOT_ROLES_METADATA[role_key]
     ctx["log"] = f"已拆解招聘需求，目标岗位识别为「{role['name_zh']}」"
     return {"role_key": role_key, "岗位": role["name_zh"], "技术层": role["tech_layer"]}
@@ -815,7 +830,7 @@ def _a_industry(ctx: Dict[str, Any]) -> Any:
     role_key = ctx["role_key"]
     intelligence = _source_intelligence_with_audit(ctx["input"], role_key, ctx=ctx, agent_id="industry")
     ctx["data"]["industry_intelligence"] = intelligence
-    targets = _calibrated_target_sources(role_key, intelligence)
+    targets = _calibrated_target_sources(role_key, intelligence, seed_sources=_job_seed_sources(_job_profile_for_sourcing(ctx)))
     ctx["data"]["calibrated_targets"] = targets
     companies = targets["目标公司"]
     labs = targets["高校实验室"]
@@ -894,15 +909,20 @@ def _a_finalize(ctx: Dict[str, Any]) -> Any:
 def _b_plan(ctx: Dict[str, Any]) -> Any:
     role_key = infer_role_key(ctx["input"])
     ctx["role_key"] = role_key
+    job_profile = _job_profile_for_sourcing(ctx)
+    if job_profile is not None:
+        ctx["log"] = f"已加载项目岗位「{job_profile['title']}」，准备绘制人才地图"
+        return {"role_key": role_key, "岗位": job_profile["title"], "岗位来源": "project_job_profile"}
     role = ROBOT_ROLES_METADATA[role_key]
     ctx["log"] = f"已识别目标方向「{role['name_zh']}」，准备绘制人才地图"
     return {"role_key": role_key, "岗位": role["name_zh"]}
 
 
 def _b_map(ctx: Dict[str, Any]) -> Any:
-    result = build_talent_map(ctx["input"])
+    job_profile = _job_profile_for_sourcing(ctx)
+    result = build_talent_map_from_job(job_profile) if job_profile is not None else build_talent_map(ctx["input"])
     intelligence = _source_intelligence_with_audit(ctx["input"], ctx["role_key"], ctx=ctx, agent_id="talent_map")
-    targets = _calibrated_target_sources(ctx["role_key"], intelligence)
+    targets = _calibrated_target_sources(ctx["role_key"], intelligence, seed_sources=_job_seed_sources(job_profile))
     _apply_calibrated_targets_to_talent_map(result, targets)
     ctx["data"]["talent_map"] = result
     ctx["data"]["industry_intelligence"] = intelligence
@@ -1065,15 +1085,92 @@ def _project_sourcing_target(frontend_state: Optional[Dict[str, Any]]) -> tuple[
     return None
 
 
+def _job_profile_for_sourcing(ctx: Dict[str, Any]) -> Dict[str, Any] | None:
+    """Load the project job profile referenced by the task's frontend_state.
+
+    Returns None for legacy free-text runs without project/job context, or when
+    the job cannot be read; callers then fall back to the static role metadata.
+    """
+
+    if "sourcing_job_profile" in ctx:
+        return ctx["sourcing_job_profile"]
+    profile: Dict[str, Any] | None = None
+    target = _project_sourcing_target(ctx.get("frontend_state"))
+    if target is not None:
+        project_id, job_id = target
+        try:
+            with project_session_factory()() as session:
+                job = session.get(Job, job_id)
+                if job is not None and job.project_id == project_id:
+                    profile = {
+                        "id": job.id,
+                        "title": job.title,
+                        "seniority": job.seniority,
+                        "responsibilities": job.responsibilities or [],
+                        "must_have_skills": job.must_have_skills or [],
+                        "nice_to_have_skills": job.nice_to_have_skills or [],
+                        "target_companies": job.target_companies or [],
+                        "exclusion_signals": job.exclusion_signals or [],
+                        "search_strategy": job.search_strategy or {},
+                        "rationale": job.rationale or {},
+                    }
+        except Exception:  # noqa: BLE001 - job context is best-effort enrichment.
+            profile = None
+    ctx["sourcing_job_profile"] = profile
+    return profile
+
+
+def _job_seed_sources(job_profile: Dict[str, Any] | None) -> Dict[str, List[str]] | None:
+    if job_profile is None:
+        return None
+    return {
+        "目标公司": [str(item) for item in job_profile.get("target_companies") or []],
+        "次优来源公司": [],
+        "高校实验室": [],
+    }
+
+
 # ---- Scenario C: candidate evaluation ------------------------------------- #
 
 
 def _c_plan(ctx: Dict[str, Any]) -> Any:
     role_key = infer_role_key(ctx["input"])
     ctx["role_key"] = role_key
+    job_profile = _job_profile_for_sourcing(ctx)
+    if job_profile is not None:
+        ctx["log"] = f"已解析候选人材料，对标项目岗位「{job_profile['title']}」"
+        return {"对标岗位": job_profile["title"], "岗位来源": "project_job_profile"}
     role = ROBOT_ROLES_METADATA[role_key]
     ctx["log"] = f"已解析候选人材料，对标岗位「{role['name_zh']}」"
     return {"对标岗位": role["name_zh"]}
+
+
+def _job_profile_match(job_profile: Dict[str, Any], candidate_material: str) -> Dict[str, Any]:
+    """Deterministic per-job match detail: which of the job's own requirements
+    the candidate material covers, misses, or trips as a risk signal."""
+
+    text = candidate_material.lower()
+
+    def _hits(items: Any) -> tuple[list[str], list[str]]:
+        cleaned = [str(item).strip() for item in items or [] if str(item).strip()]
+        matched = [item for item in cleaned if item.lower() in text]
+        missing = [item for item in cleaned if item.lower() not in text]
+        return matched, missing
+
+    matched_skills, missing_skills = _hits(job_profile.get("must_have_skills"))
+    rationale = job_profile.get("rationale") if isinstance(job_profile.get("rationale"), dict) else {}
+    matched_signals, _ = _hits((rationale or {}).get("must_have_signals"))
+    risk_hits, _ = _hits((rationale or {}).get("risk_signals"))
+    total = len(matched_skills) + len(missing_skills)
+    return {
+        "岗位": job_profile.get("title"),
+        "必备技能命中": matched_skills,
+        "必备技能缺口": missing_skills,
+        "加分信号命中": matched_signals,
+        "风险信号命中": risk_hits,
+        "技能覆盖率": round(len(matched_skills) / total, 2) if total else None,
+        "说明": "命中基于候选人材料的关键词证据，仅作为初筛参考；最终判断以追问和人工评估为准。",
+    }
 
 
 def _c_eval(ctx: Dict[str, Any]) -> Any:
@@ -1094,6 +1191,10 @@ def _c_eval(ctx: Dict[str, Any]) -> Any:
     result["证据链"]["本地RAG命中数"] = capability_context["本地RAG"]["result_count"]
     result["证据链"]["公开检索命中数"] = capability_context["公开检索"]["实时检索"]["result_count"]
     result["能力证据"] = capability_context
+    job_profile = _job_profile_for_sourcing(ctx)
+    if job_profile is not None:
+        result["岗位匹配"] = _job_profile_match(job_profile, ctx["input"])
+        result["适合岗位"] = job_profile["title"]
     ctx["data"]["evaluation"] = result
     ctx["data"]["candidate_capability_context"] = capability_context
     dependency = result["decision_sandbox"]["evidence_dependency_contract"]
@@ -1114,6 +1215,7 @@ def _c_eval(ctx: Dict[str, Any]) -> Any:
         "evidence_dependency_contract": dependency,
         "本地RAG": capability_context["本地RAG"],
         "公开检索": capability_context["公开检索"],
+        **({"岗位匹配": result["岗位匹配"]} if "岗位匹配" in result else {}),
     }
 
 
@@ -1138,14 +1240,17 @@ def _c_reflect(ctx: Dict[str, Any]) -> Any:
 
 def _c_hitl(ctx: Dict[str, Any]) -> Any:
     result = ctx["data"]["evaluation"]
+    draft = {
+        "aperture_anchor": result["decision_sandbox"]["aperture_anchor"],
+        "narrative_stream": result["decision_sandbox"]["narrative_stream"],
+        "潜在工程边界": result["潜在工程边界"],
+        "probing_toolkit": result["追问武器库"],
+    }
+    if "岗位匹配" in result:
+        draft["岗位匹配"] = result["岗位匹配"]
     return {
         "prompt": "请确认增量价值推演与追问武器库，可通过或填写人工评价后继续。",
-        "draft": {
-            "aperture_anchor": result["decision_sandbox"]["aperture_anchor"],
-            "narrative_stream": result["decision_sandbox"]["narrative_stream"],
-            "潜在工程边界": result["潜在工程边界"],
-            "probing_toolkit": result["追问武器库"],
-        },
+        "draft": draft,
     }
 
 
@@ -1171,8 +1276,14 @@ def _d_plan(ctx: Dict[str, Any]) -> Any:
 def _d_signals(ctx: Dict[str, Any]) -> Any:
     weekly = ctx["data"]["weekly"]
     role_key = infer_role_key(ctx["input"])
+    job_profile = _job_profile_for_sourcing(ctx)
+    focus_name = (
+        str(job_profile.get("title") or "").strip()
+        if job_profile is not None
+        else ROBOT_ROLES_METADATA[role_key]["name_zh"]
+    ) or ROBOT_ROLES_METADATA[role_key]["name_zh"]
     market_intelligence = _source_intelligence_with_audit(
-        f"{ROBOT_ROLES_METADATA[role_key]['name_zh']} 招聘 市场人才信号 融资 产品发布 论文 GitHub",
+        f"{focus_name} 招聘 市场人才信号 融资 产品发布 论文 GitHub",
         role_key,
         limit=10,
         ctx=ctx,
@@ -1493,6 +1604,9 @@ def _paragraph(text: str, citations: list[str]) -> Dict[str, Any]:
 
 
 def _role_name(ctx: Dict[str, Any]) -> str:
+    job_profile = _job_profile_for_sourcing(ctx)
+    if job_profile is not None and str(job_profile.get("title") or "").strip():
+        return str(job_profile["title"]).strip()
     role_key = ctx.get("role_key") or infer_role_key(ctx.get("input", ""))
     return ROBOT_ROLES_METADATA[role_key]["name_zh"]
 
@@ -1878,15 +1992,25 @@ def _source_intelligence(
 ) -> Dict[str, Any]:
     """Return source coverage plus bounded live hits for industry research."""
 
-    role = ROBOT_ROLES_METADATA[role_key]
-    capabilities = [capability["capability_name_zh"] for capability in get_capabilities_for_role(role_key)]
+    job_profile = _job_profile_for_sourcing(ctx) if ctx is not None else None
+    if job_profile is not None:
+        focus_role_name = str(job_profile.get("title") or "")
+        rationale = job_profile.get("rationale") if isinstance(job_profile.get("rationale"), dict) else {}
+        focus_terms = [
+            str(item).strip()
+            for item in [*(rationale or {}).get("sourcing_keywords", []), *job_profile.get("must_have_skills", [])]
+            if str(item).strip()
+        ]
+    else:
+        focus_role_name = ROBOT_ROLES_METADATA[role_key]["name_zh"]
+        focus_terms = [capability["capability_name_zh"] for capability in get_capabilities_for_role(role_key)]
     search_config = _search_config_from_ctx(ctx)
     search_mode = str(search_config["search_mode"])
     query = " ".join(
         [
             user_input,
-            role["name_zh"],
-            *capabilities[:4],
+            focus_role_name,
+            *focus_terms[:4],
             "目标公司 实验室 招聘 论文 GitHub Hugging Face 专利 融资 新闻",
         ]
     )

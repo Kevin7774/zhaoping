@@ -215,6 +215,7 @@ class ServiceRouter:
                 risk_level=str(settings.get("risk_level", "high")),
                 freshness=str(settings.get("freshness", "daily")),
                 requires_absolute_url=bool(settings.get("requires_absolute_url", False)),
+                requires_browser_bridge=bool(settings.get("requires_browser_bridge", False)),
             )
 
         if service.type == "search" and provider == "external_search_tool":

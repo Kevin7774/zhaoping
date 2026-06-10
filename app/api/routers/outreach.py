@@ -208,8 +208,38 @@ def get_outreach_history(
     return OutreachHistoryResponse(items=[_history_response(record) for record in records])
 
 
+def _job_rationale(job: Job) -> dict:
+    return job.rationale if isinstance(job.rationale, dict) else {}
+
+
+def _job_driven_outreach(job: Job) -> bool:
+    """Jobs designed from project materials carry a rationale and drive their own outreach narrative.
+
+    Legacy seeded jobs without rationale keep the original hardware-delivery copy.
+    """
+    return bool(_job_rationale(job))
+
+
+def _outreach_challenge(project: Project, job: Job, candidate: Candidate) -> str:
+    rationale = _job_rationale(job)
+    base = str(
+        rationale.get("business_context") or rationale.get("job_scope") or rationale.get("why_needed") or ""
+    ).strip()
+    if base:
+        return f"把「{_excerpt(base, 80)}」从方案推进到可上线、可迭代的真实交付"
+    return _hardware_challenge_for_candidate(job, candidate)
+
+
+def _outreach_must_mention(project: Project, job: Job) -> list[str]:
+    if _job_driven_outreach(job):
+        return [item for item in [project.name, job.title] if item]
+    return ["智能硬件交付"]
+
+
 def _build_quantgroup_subject(job: Job, candidate: Candidate) -> str:
     specialty = _candidate_specialty(job, candidate)
+    if _job_driven_outreach(job):
+        return f"关于 {specialty} 在「{job.title}」方向落地的技术切磋"
     return f"关于 {specialty} 真机部署问题的技术切磋"
 
 
@@ -225,9 +255,28 @@ def _build_backend_draft(
 
     recent_work = _candidate_recent_work(candidate)
     technical_detail = _candidate_technical_detail(job, candidate)
-    business_challenge = _hardware_challenge_for_candidate(job, candidate)
+    business_challenge = _outreach_challenge(project, job, candidate)
     domain = _candidate_domain(candidate)
-    project_name = project.name or "当前硬件项目"
+    project_name = project.name or "当前项目"
+    if _job_driven_outreach(job):
+        return "\n".join(
+            [
+                f"看到你材料里写到的「{recent_work}」，这个工程取舍很扎实。",
+                "",
+                f"{candidate.name}，你好。我这边负责「{project_name}」里「{job.title}」方向的落地，最近卡在"
+                f"{business_challenge}：方案在评审里能讲通，但一到真实业务交付，就会被需求边界、数据质量和"
+                "上线节奏一起放大。",
+                "",
+                f"你在 {technical_detail} 上的经历，和我们现在要把这件事从 demo 推到真实商业化的阶段很接近。"
+                "我更想拿一个具体技术问题和你对齐：在不牺牲系统可维护性的前提下，哪些约束应该先固化进交付链路，"
+                "哪些应该留给数据和模型迭代？",
+                "",
+                f"这封触达采用 {strategy_tag} 策略：不聊流程，只做一次平等的技术切磋。"
+                "如果你愿意，我想约 20 分钟，把我们现在的未解瓶颈摊开，请你按专家视角直接挑问题。",
+                "",
+                "研发总监",
+            ]
+        )
     return "\n".join(
         [
             f"看到你材料里写到的「{recent_work}」，这个工程取舍很硬核。",
@@ -254,7 +303,8 @@ def _build_llm_hardware_draft(
     candidate: Candidate,
     strategy_tag: OutreachStrategyTag,
 ) -> str | None:
-    system_prompt = load_system_prompt("outreach_agent_v2")
+    job_driven = _job_driven_outreach(job)
+    system_prompt = load_system_prompt("outreach_agent_v3" if job_driven else "outreach_agent_v2")
     if not system_prompt:
         return None
     candidate_detail = {
@@ -270,13 +320,23 @@ def _build_llm_hardware_draft(
     job_challenge = {
         "project_name": project.name,
         "job_title": job.title,
-        "challenge": _hardware_challenge_for_candidate(job, candidate),
+        "challenge": _outreach_challenge(project, job, candidate),
         "strategy_tag": strategy_tag,
     }
+    if job_driven:
+        rationale = _job_rationale(job)
+        job_challenge.update(
+            {
+                "business_context": rationale.get("business_context"),
+                "job_scope": rationale.get("job_scope"),
+                "outreach_angle": rationale.get("outreach_angle"),
+                "must_have_skills": list(job.must_have_skills or [])[:8],
+            }
+        )
     candidate_evidence = _candidate_evidence(candidate)
     tone_control = {
         "style": "硬核极客",
-        "must_mention": ["智能硬件交付"],
+        "must_mention": _outreach_must_mention(project, job),
         "forbidden": list(OUTREACH_FORBIDDEN_PHRASES),
     }
     prompt = (

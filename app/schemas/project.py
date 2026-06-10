@@ -38,7 +38,7 @@ class ProjectBpInitializeRequest(CamelModel):
     project_prompt: str | None = Field(default=None, min_length=1, max_length=4000)
     industry_research_prompt: str | None = Field(default=None, min_length=1, max_length=4000)
     llm_service: str | None = Field(default=None, max_length=128)
-    minimum_role_count: int = Field(default=14, ge=1, le=64)
+    minimum_role_count: int = Field(default=1, ge=1, le=64)
 
 
 class ProjectMaterialUploadResponse(CamelModel):

@@ -77,6 +77,60 @@ def test_company_email_login_rejects_public_email_domains(client: TestClient) ->
     assert "company email" in response.json()["detail"].lower()
 
 
+def test_outreach_draft_follows_job_rationale_narrative(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add(
+            Job(
+                id="job_fde_builder",
+                project_id="project_2026_ai_team",
+                title="AI Native FDE / Agentic Builder",
+                headcount=1,
+                status="sourcing",
+                must_have_skills=["全栈开发", "AI coding 实战"],
+                rationale={
+                    "business_context": "AI 电商定制平台需要可上线可迭代的交付能力。",
+                    "job_scope": "承接从问题定义到指标复盘的完整 SDLC。",
+                    "outreach_angle": "用真实业务问题和完整 SDLC 主导权吸引 builder。",
+                },
+            )
+        )
+        session.flush()
+        session.add(
+            JobCandidate(
+                job_id="job_fde_builder",
+                candidate_id="cand_lin_chen",
+                match_score=88,
+                pipeline_status="sourced",
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_fde_builder",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert "AI Native FDE / Agentic Builder" in draft["subject"]
+    assert "真机部署" not in draft["subject"]
+    body = draft["body"]
+    assert "Alex Chen" in body
+    assert "2026 AI 团队招聘" in body
+    assert "AI Native FDE / Agentic Builder" in body
+    assert "AI 电商定制平台需要可上线可迭代的交付能力" in body
+    assert "技术切磋" in body
+    assert "真机部署" not in body
+    assert "硬件" not in body
+
+
 def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     draft_response = client.post(
         "/outreach/draft",

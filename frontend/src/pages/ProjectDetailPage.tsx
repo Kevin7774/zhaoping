@@ -355,7 +355,7 @@ export function ProjectDetailPage() {
   const [bpMaterialParseSummary, setBpMaterialParseSummary] = useState<string | null>(null);
   const [bpProjectPrompt, setBpProjectPrompt] = useState("");
   const [bpIndustryResearchPrompt, setBpIndustryResearchPrompt] = useState("");
-  const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(14);
+  const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(1);
   const [bpPreview, setBpPreview] = useState<ProjectBpInitializeResponse | null>(null);
   const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
   const [bpMaterialUploading, setBpMaterialUploading] = useState(false);
@@ -1139,8 +1139,9 @@ export function ProjectDetailPage() {
   const recommendedAction = !recommendedJob
     ? {
         label: "预览岗位矩阵",
-        description: "当前还没有岗位，先从项目材料或提示词生成岗位矩阵。",
+        description: "当前还没有岗位，先在岗位智能生成区预览岗位矩阵；预览不会写入数据库。",
         disabled: bpBusy !== null,
+        showButton: false,
         title: undefined,
         run: () => {
           void handlePreviewBpJobs();
@@ -1151,6 +1152,7 @@ export function ProjectDetailPage() {
           label: "开始找候选人",
           description: `${recommendedJob.roleName} 候选人不足：${recommendedLinkedCount}/${recommendedTarget}，下一步先补充可评估线索。`,
           disabled: runningJobAction?.jobProfileId === recommendedJob.jobProfileId || !actionAvailability.find_candidates.enabled,
+          showButton: true,
           title: !actionAvailability.find_candidates.enabled ? actionAvailability.find_candidates.reason : undefined,
           run: () => handleRunAction(recommendedJob, "find_candidates" as const),
         }
@@ -1158,9 +1160,19 @@ export function ProjectDetailPage() {
           label: "开始评估候选人",
           description: `${recommendedJob.roleName} 已有候选人池，下一步评估匹配度、风险和推进优先级。`,
           disabled: runningJobAction?.jobProfileId === recommendedJob.jobProfileId || !actionAvailability.candidate_evaluation.enabled,
+          showButton: true,
           title: !actionAvailability.candidate_evaluation.enabled ? actionAvailability.candidate_evaluation.reason : undefined,
           run: () => handleRunAction(recommendedJob, "candidate_evaluation" as const),
         };
+  const roleGenerationActionHint = !recommendedJob
+    ? "当前还没有岗位，先预览岗位矩阵；确认覆盖后才会写入当前项目。"
+    : bpPreview
+      ? "已生成预览，请先检查岗位、HC 和证据；确认覆盖会重建当前项目岗位。"
+      : "如需重建岗位，先预览岗位矩阵；确认后才会覆盖现有岗位。";
+  const roleGenerationActionLabel = !recommendedJob ? "当前建议：" : bpPreview ? "预览状态：" : "岗位生成：";
+  const searchProviderSummaryText = `当前选中搜索源 ${searchProviderSummary.ready}/${searchProviderSummary.total} 项已就绪${
+    searchProviderSummary.blocked ? `，${searchProviderSummary.blocked} 项需处理` : "，无明确阻断"
+  }`;
 
   return (
     <div className="min-w-0 pb-8">
@@ -1216,30 +1228,12 @@ export function ProjectDetailPage() {
       ) : null}
 
       <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+        <div>
           <div>
             <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位智能生成</h2>
             <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
               可从 BP、项目提示词或两者结合生成岗位矩阵；预览不会写入数据库，确认覆盖后才会重建当前项目岗位。
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handlePreviewBpJobs}
-              disabled={bpBusy !== null}
-              className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {bpBusy === "preview" ? "生成中" : "预览岗位矩阵"}
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmBpJobs}
-              disabled={!bpPreview || bpBusy !== null}
-              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {bpBusy === "confirm" ? "写入中" : "确认覆盖岗位"}
-            </button>
           </div>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[180px_minmax(260px,1fr)_160px]">
@@ -1317,7 +1311,7 @@ export function ProjectDetailPage() {
               max={64}
               value={bpMinimumRoleCount}
               onChange={(event) => {
-                setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 14)));
+                setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 1)));
                 setBpPreview(null);
               }}
               className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
@@ -1424,6 +1418,30 @@ export function ProjectDetailPage() {
             ) : null}
           </div>
         ) : null}
+        <div className="mt-4 flex flex-col gap-3 border-t border-[#EEF2F7] pt-4 lg:flex-row lg:items-center lg:justify-between">
+          <p className="max-w-[720px] text-[12px] leading-[18px] text-[#6B7280]">
+            <span className="font-semibold text-[#374151]">{roleGenerationActionLabel}</span>
+            {roleGenerationActionHint}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handlePreviewBpJobs}
+              disabled={bpBusy !== null}
+              className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bpBusy === "preview" ? "生成中" : "预览岗位矩阵"}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmBpJobs}
+              disabled={!bpPreview || bpBusy !== null}
+              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bpBusy === "confirm" ? "写入中" : "确认覆盖岗位"}
+            </button>
+          </div>
+        </div>
       </section>
 
       {integrationsError || integrations ? (
@@ -1431,10 +1449,7 @@ export function ProjectDetailPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-[14px] font-semibold text-[#111827]">系统预检</h2>
-              <div className="mt-1 text-[12px] text-[#6B7280]">
-                搜索服务 {searchProviderSummary.ready}/{searchProviderSummary.total} 可用
-                {searchProviderSummary.blocked ? `，${searchProviderSummary.blocked} 项需处理` : "，当前无阻断"}
-              </div>
+              <div className="mt-1 text-[12px] text-[#6B7280]">{searchProviderSummaryText}</div>
             </div>
             <details className="lg:max-w-[760px]">
               <summary className="cursor-pointer rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151]">
@@ -1465,23 +1480,25 @@ export function ProjectDetailPage() {
         </section>
       ) : null}
 
-      <section className="my-4 min-w-0 rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-5 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">当前建议动作</h2>
-            <p className="mt-1 text-[13px] leading-5 text-[#1E40AF]">{recommendedAction.description}</p>
+      {recommendedAction.showButton ? (
+        <section className="my-4 min-w-0 rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-5 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">当前建议动作</h2>
+              <p className="mt-1 text-[13px] leading-5 text-[#1E40AF]">{recommendedAction.description}</p>
+            </div>
+            <button
+              type="button"
+              onClick={recommendedAction.run}
+              disabled={recommendedAction.disabled}
+              title={recommendedAction.title}
+              className="h-9 self-start rounded-[10px] bg-[#2563EB] px-4 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50 lg:self-center"
+            >
+              {recommendedAction.label}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={recommendedAction.run}
-            disabled={recommendedAction.disabled}
-            title={recommendedAction.title}
-            className="h-9 self-start rounded-[10px] bg-[#2563EB] px-4 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50 lg:self-center"
-          >
-            {recommendedAction.label}
-          </button>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">

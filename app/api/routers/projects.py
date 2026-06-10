@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.core.bp_pipeline import BpStageOutputError, run_bp_pipeline
+from app.core.bp_pipeline import BpNoAcceptedRolesError, BpStageOutputError, run_bp_pipeline
 from app.core.router import get_router
 from app.db.session import get_project_session, project_session_factory
 from app.models import Candidate, CandidateSearchSchedule, Job, JobCandidate, Project
@@ -433,6 +433,19 @@ def _project_response(project: Project, stats: dict[str, int]) -> ProjectRespons
     )
 
 
+def _no_accepted_roles_detail(exc: BpNoAcceptedRolesError) -> str:
+    detail = "素材未能解析出任何通过证据审核的岗位。"
+    rejected_summary = "；".join(
+        f"「{item.get('title') or '未命名岗位'}」：{'；'.join(str(reason) for reason in item.get('reasons') or [])}"
+        for item in exc.rejected[:5]
+        if isinstance(item, dict)
+    )
+    if rejected_summary:
+        detail += f"被拒绝的岗位及原因：{rejected_summary}。"
+    detail += "请确认素材包含岗位职责、技能要求等原文内容后重试。"
+    return detail
+
+
 def _build_jobs_from_bp_pipeline(
     project_id: str,
     request: ProjectBpInitializeRequest,
@@ -459,6 +472,8 @@ def _build_jobs_from_bp_pipeline(
         )
     except HTTPException:
         raise
+    except BpNoAcceptedRolesError as exc:
+        raise HTTPException(status_code=422, detail=_no_accepted_roles_detail(exc)) from exc
     except BpStageOutputError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except TimeoutError as exc:

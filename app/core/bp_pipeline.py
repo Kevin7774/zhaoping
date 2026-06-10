@@ -52,6 +52,17 @@ class BpStageOutputError(RuntimeError):
     """A pipeline stage exhausted retries without valid structured output."""
 
 
+class BpNoAcceptedRolesError(BpStageOutputError):
+    """The critic gate rejected every designed role."""
+
+    def __init__(self, rejected: list[dict[str, Any]]) -> None:
+        self.rejected = rejected
+        super().__init__(
+            "critic gate accepted 0 roles. "
+            f"rejected: {json.dumps(rejected, ensure_ascii=False)[:600]}"
+        )
+
+
 def run_bp_pipeline(
     llm: Any,
     *,
@@ -137,17 +148,23 @@ def run_bp_pipeline(
         )
         accepted, rejected = critic_gate(design.get("roles") or [], source_text=source_text)
 
+    if not accepted:
+        raise BpNoAcceptedRolesError(rejected)
+
+    # minimum_role_count is a soft target: accepted roles are returned with a
+    # coverage gap note instead of discarding several minutes of pipeline work.
+    coverage_gaps = [str(item) for item in design.get("coverage_gaps") or []]
     if len(accepted) < minimum_role_count:
-        raise BpStageOutputError(
-            f"critic gate accepted {len(accepted)} roles; expected at least {minimum_role_count}. "
-            f"rejected: {json.dumps(rejected, ensure_ascii=False)[:600]}"
+        coverage_gaps.append(
+            f"仅 {len(accepted)} 个岗位通过 Critic Gate，低于设置的最少岗位数 {minimum_role_count}；"
+            "如需更多岗位，可补充素材后重新生成，或下调最少岗位数。"
         )
 
     return {
         "industry_reading": design.get("industry_reading"),
         "technical_assumptions": design.get("technical_assumptions") or [],
         "roles": accepted,
-        "coverage_gaps": design.get("coverage_gaps") or [],
+        "coverage_gaps": coverage_gaps,
         "claims": claims,
         "capability_graph": capability_graph,
         "gap_analysis": gap_analysis,

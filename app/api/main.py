@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -100,6 +102,81 @@ async def strip_api_prefix(request: Request, call_next):
     elif path.startswith("/api/"):
         request.scope["path"] = path[4:]
     return await call_next(request)
+
+
+# Dev-only access log for manual-test monitoring; disabled in production.
+_ACCESS_LOG_PATH = (
+    None
+    if os.environ.get("APP_ENV") == "production"
+    else Path(__file__).resolve().parents[2] / "data" / "runtime" / "manual_test_access.jsonl"
+)
+
+
+@app.middleware("http")
+async def manual_test_access_log(request: Request, call_next):
+    if _ACCESS_LOG_PATH is None or request.method == "OPTIONS":
+        return await call_next(request)
+    start = asyncio.get_event_loop().time()
+    status = 599
+    error_body = None
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        if status >= 400:
+            raw = b"".join([chunk async for chunk in response.body_iterator])
+            error_body = raw[:2000].decode("utf-8", "replace")
+            response = Response(
+                content=raw,
+                status_code=status,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+            )
+        return response
+    finally:
+        entry = {
+            "ts": datetime.now().isoformat(timespec="milliseconds"),
+            "method": request.method,
+            "path": request.url.path,
+            "query": str(request.url.query or ""),
+            "status": status,
+            "ms": round((asyncio.get_event_loop().time() - start) * 1000, 1),
+            "client": request.client.host if request.client else None,
+        }
+        if error_body is not None:
+            entry["error_body"] = error_body
+        try:
+            with _ACCESS_LOG_PATH.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
+
+# Dev-only control endpoints for the manual-test monitoring stack
+# (scripts/manual_test_monitor.sh); 404 in production like the access log.
+_MONITOR_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "manual_test_monitor.sh"
+
+
+def _run_monitor_script(action: str) -> dict[str, Any]:
+    if _ACCESS_LOG_PATH is None or not _MONITOR_SCRIPT.exists():
+        raise HTTPException(status_code=404, detail="monitor endpoints are disabled")
+    try:
+        proc = subprocess.run(
+            [str(_MONITOR_SCRIPT), action], capture_output=True, text=True, timeout=60
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail=f"monitor script timed out: {exc}") from exc
+    output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return {"ok": proc.returncode == 0, "action": action, "output": output[-2000:]}
+
+
+@app.post("/monitor/start")
+def monitor_start() -> dict[str, Any]:
+    return _run_monitor_script("start")
+
+
+@app.get("/monitor/status")
+def monitor_status() -> dict[str, Any]:
+    return _run_monitor_script("status")
 
 
 class IngestRequest(BaseModel):
