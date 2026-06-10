@@ -572,9 +572,21 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByText("展开设置"));
     expect(screen.getAllByText("GitHub/代码/模型").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/GitHub 搜人、Repo、Code、Topic/)).toBeTruthy();
+    expect(screen.getByText(/最多 8 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/当前已选 19 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/开放网页 · 1 provider/)).toBeTruthy();
+    expect(screen.getByText(/GitHub\/代码\/模型 · 6 provider/)).toBeTruthy();
+    expect(screen.getByText("brave_web_search")).toBeTruthy();
+    expect(screen.getByText("github_candidates")).toBeTruthy();
+    expect(screen.getByText("pdl_people_search")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("搜索深度"), { target: { value: "deep_live" } });
     fireEvent.click(screen.getByLabelText("网页抓取"));
     fireEvent.click(screen.getByLabelText("尽调源"));
+    expect(screen.getByText(/当前已选 36 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/网页抓取 · 4 provider/)).toBeTruthy();
+    expect(screen.getByText("scrapling_adaptive_scrape")).toBeTruthy();
+    expect(screen.getByText(/尽调源 · 13 provider/)).toBeTruthy();
+    expect(screen.getByText("sec_edgar_company_filings")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "找候选人" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/scenarios/run", expect.objectContaining({ method: "POST" })));

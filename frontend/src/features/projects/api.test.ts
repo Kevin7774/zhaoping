@@ -539,6 +539,59 @@ describe("projects api", () => {
     });
   });
 
+  it("raises provider budget so every enabled source layer can contribute one provider", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_B", scenario: "B", status: "processing" }));
+    const job = {
+      jobProfileId: "job_vla_algorithm",
+      roleName: "VLA / 具身智能算法工程师",
+      headcount: 2,
+      priorityLevel: "P0",
+      isAiNativeFriendly: true,
+      essentialCapabilities: [],
+      preferredCapabilities: [],
+      exclusionTags: [],
+      targetCompanyTypes: [],
+      targetSchoolsLabs: [],
+      salaryRangeMin: 0,
+      salaryRangeMax: 0,
+      funnel: [],
+    } satisfies JobProfile;
+
+    await runProjectScenario("project_2026_ai_team", job, "find_candidates", {
+      searchConfig: {
+        searchProfile: "candidate_sourcing",
+        executionPolicy: "bounded_live",
+        sourceLayers: {
+          liveWeb: true,
+          academic: true,
+          codeModel: true,
+          peopleDatabase: true,
+          social: true,
+          newsFunding: true,
+          educationCompetition: true,
+          crawlerSnapshot: true,
+          dueDiligence: true,
+        },
+        budget: {
+          maxProviders: 8,
+          perProviderLimit: 2,
+          timeoutSeconds: 6,
+          maxCrawlPages: 0,
+        },
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      frontend_state: {
+        search_budget: {
+          max_providers: 9,
+          per_provider_limit: 2,
+        },
+      },
+    });
+  });
+
   it("starts weekly report through scenario D", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_weekly", scenario: "D", status: "processing" }));
 

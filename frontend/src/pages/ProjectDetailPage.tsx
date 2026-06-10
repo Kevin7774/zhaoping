@@ -52,9 +52,11 @@ import { WeeklyReportCard } from "../features/projects/components/WeeklyReportCa
 import {
   SEARCH_EXECUTION_POLICY_OPTIONS,
   SEARCH_SOURCE_LAYER_OPTIONS,
+  SEARCH_SOURCE_LAYER_SERVICES,
   budgetForExecutionPolicy,
   buildActionExplanation,
   createDefaultSearchConfig,
+  effectiveMaxProvidersForSearchConfig,
   providerPreflightFromIntegrations,
   providerPreflightSummary,
   type SearchConfig,
@@ -1124,6 +1126,12 @@ export function ProjectDetailPage() {
     SEARCH_EXECUTION_POLICY_OPTIONS.find((option) => option.value === candidateSearchConfig.executionPolicy)?.label ??
     candidateSearchConfig.executionPolicy;
   const enabledSourceLayerCount = Object.values(candidateSearchConfig.sourceLayers).filter(Boolean).length;
+  const selectedSearchProviderCount = new Set(
+    SEARCH_SOURCE_LAYER_OPTIONS.flatMap((option) =>
+      candidateSearchConfig.sourceLayers[option.value] ? SEARCH_SOURCE_LAYER_SERVICES[option.value] : [],
+    ),
+  ).size;
+  const effectiveSearchMaxProviders = effectiveMaxProvidersForSearchConfig(candidateSearchConfig);
   const recommendedJob =
     jobs.find((job) => linkedCandidateCount(job, jobCandidateCounts) < recommendedCandidateTarget(job)) ?? jobs[0] ?? null;
   const recommendedLinkedCount = recommendedJob ? linkedCandidateCount(recommendedJob, jobCandidateCounts) : 0;
@@ -1482,7 +1490,7 @@ export function ProjectDetailPage() {
               <div>
                 <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位搜索设置</h2>
                 <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
-                  {currentSearchPolicyLabel} · {enabledSourceLayerCount} 个来源层 · 单源{" "}
+                  {currentSearchPolicyLabel} · {enabledSourceLayerCount} 个来源层 · 当前已选 {selectedSearchProviderCount} 个 provider · 单源{" "}
                   {candidateSearchConfig.budget.perProviderLimit} 条
                 </p>
               </div>
@@ -1521,7 +1529,7 @@ export function ProjectDetailPage() {
                   </select>
                 </label>
                 <span className="rounded-[7px] bg-[#F3F4F6] px-2 py-1 text-[11px] leading-4 text-[#6B7280]">
-                  {candidateSearchConfig.budget.maxProviders} 个来源 · 单源 {candidateSearchConfig.budget.perProviderLimit} 条
+                  最多 {effectiveSearchMaxProviders} 个 provider · 单源 {candidateSearchConfig.budget.perProviderLimit} 条
                 </span>
               </div>
             </div>
@@ -1563,6 +1571,36 @@ export function ProjectDetailPage() {
                   <span className="font-medium text-[#374151]">{option.label}</span>：{option.hint}
                 </p>
               ))}
+            </div>
+            <div className="mt-3 space-y-2">
+              {SEARCH_SOURCE_LAYER_OPTIONS.map((option) => {
+                const services = SEARCH_SOURCE_LAYER_SERVICES[option.value] ?? [];
+                const enabled = candidateSearchConfig.sourceLayers[option.value];
+                return (
+                  <div key={`${option.value}-providers`} className="min-w-0 border-t border-[#EEF2F7] pt-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] leading-4">
+                      <span className={enabled ? "font-semibold text-[#111827]" : "font-medium text-[#9CA3AF]"}>
+                        {option.label} · {services.length} provider
+                      </span>
+                      <span className={enabled ? "text-[#047857]" : "text-[#9CA3AF]"}>
+                        {enabled ? "已启用" : "未启用"}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {services.map((service) => (
+                        <span
+                          key={`${option.value}-${service}`}
+                          className={`rounded-[6px] px-1.5 py-0.5 text-[10px] leading-4 ${
+                            enabled ? "bg-[#F3F4F6] text-[#374151]" : "bg-[#F9FAFB] text-[#9CA3AF]"
+                          }`}
+                        >
+                          {service}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             </div>
           </details>

@@ -15,6 +15,7 @@ from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
 from app.core.prompt_config import load_system_prompt
 from app.core.orchestrator import (
+    SEARCH_SOURCE_LAYER_METADATA,
     _a_industry,
     _a_plan,
     _c_eval,
@@ -22,6 +23,7 @@ from app.core.orchestrator import (
     _calibrated_target_sources,
     _d_plan,
     _d_signals,
+    _live_services_for_search_config,
     get_meta,
     task_store,
 )
@@ -351,6 +353,33 @@ def test_service_config_defaults_exist() -> None:
     assert "evidence_record_schema" in config.skills
     assert "search_data_sources" in config.skills
     assert "home_robot_recruiting_scenarios" in config.skills
+
+
+def test_search_source_layers_reference_real_routable_providers() -> None:
+    config = load_app_config()
+    router = ServiceRouter(config)
+    for layer_name, metadata in SEARCH_SOURCE_LAYER_METADATA.items():
+        services = tuple(str(service) for service in metadata.get("services", ()))
+        assert services, f"{layer_name} must map to at least one real search provider"
+        for service_name in services:
+            assert config.service(service_name).type == "search"
+            provider = router.search(service_name)
+            assert callable(getattr(provider, "search", None)), service_name
+
+        source_layers = {name: name == layer_name for name in SEARCH_SOURCE_LAYER_METADATA}
+        selected = _live_services_for_search_config(
+            {
+                "execution_policy": "bounded_live",
+                "source_layers": source_layers,
+                "budget": {
+                    "max_providers": 50,
+                    "per_provider_limit": 1,
+                    "timeout_seconds": 1,
+                    "max_crawl_pages": 0,
+                },
+            }
+        )
+        assert selected == services
 
 
 def test_router_uses_plain_text_parser_without_embedding(tmp_path: Path) -> None:

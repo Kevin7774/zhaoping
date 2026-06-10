@@ -98,7 +98,7 @@ const POLICY_BUDGETS: Record<SearchExecutionPolicy, SearchBudget> = {
   deep_live: { maxProviders: 14, perProviderLimit: 3, timeoutSeconds: 12, maxCrawlPages: 3 },
 };
 
-const SOURCE_LAYER_SERVICE_FILTER: Record<SearchSourceLayer, string[]> = {
+export const SEARCH_SOURCE_LAYER_SERVICES: Record<SearchSourceLayer, string[]> = {
   liveWeb: ["brave_web_search"],
   academic: [
     "openalex_works_search",
@@ -182,6 +182,11 @@ export function budgetForExecutionPolicy(policy: SearchExecutionPolicy): SearchB
   return { ...POLICY_BUDGETS[policy] };
 }
 
+export function effectiveMaxProvidersForSearchConfig(config: SearchConfig): number {
+  const enabledLayerCount = Object.values(config.sourceLayers).filter(Boolean).length;
+  return Math.max(config.budget.maxProviders, enabledLayerCount);
+}
+
 export function searchConfigToBackendState(config: SearchConfig) {
   return {
     search_profile: config.searchProfile,
@@ -193,7 +198,7 @@ export function searchConfigToBackendState(config: SearchConfig) {
       ]),
     ),
     search_budget: {
-      max_providers: config.budget.maxProviders,
+      max_providers: effectiveMaxProvidersForSearchConfig(config),
       per_provider_limit: config.budget.perProviderLimit,
       timeout_seconds: config.budget.timeoutSeconds,
       max_crawl_pages: config.budget.maxCrawlPages,
@@ -276,7 +281,7 @@ function providerFilterForSearchInput(searchConfigOrMode: SearchConfig | SearchM
   const services = new Set<string>();
   for (const [layer, enabled] of Object.entries(searchConfigOrMode.sourceLayers)) {
     if (!enabled) continue;
-    for (const service of SOURCE_LAYER_SERVICE_FILTER[layer as SearchSourceLayer] ?? []) {
+    for (const service of SEARCH_SOURCE_LAYER_SERVICES[layer as SearchSourceLayer] ?? []) {
       services.add(service);
     }
   }
