@@ -40,7 +40,7 @@ export function WeeklyReportCard({ report, onGenerate, canGenerate = true, disab
   const reportReady = hasReport(report);
 
   return (
-    <aside className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <aside className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">本周招聘周报</h2>
         <button

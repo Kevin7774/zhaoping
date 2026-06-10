@@ -82,7 +82,7 @@ export function CandidateTable({
       : `已显示 ${visibleCount}`;
 
   return (
-    <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">候选人名单</h2>
         <button type="button" className="text-[13px] font-medium text-[#2563EB]">
@@ -120,7 +120,7 @@ export function CandidateTable({
                     : "候选人无邮箱";
 
                 return (
-                  <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px]">
+                  <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px] transition-colors hover:bg-[#FAFBFD]">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">

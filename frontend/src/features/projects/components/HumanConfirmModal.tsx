@@ -39,14 +39,14 @@ export function HumanConfirmModal({
   const approveDisabled = busy || missingRequiredLeadPreview;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#111827]/45 px-4 py-6">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#111827]/45 px-4 py-6 backdrop-blur-[2px]">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="human-confirm-title"
-        className="w-full max-w-[720px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
+        className="w-full max-w-[720px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.28)]"
       >
-        <div className="border-b border-[#EEF2F7] px-6 py-5">
+        <div className="border-b border-[#EEF2F7] bg-[#F9FAFB]/60 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[12px] font-semibold uppercase tracking-normal text-[#F59E0B]">Human Gate</div>

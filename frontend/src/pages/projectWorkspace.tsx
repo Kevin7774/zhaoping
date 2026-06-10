@@ -364,7 +364,7 @@ export function PageHeader({
   return (
     <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
       <div className="min-w-0">
-        <h1 className="text-[24px] font-bold leading-8 text-[#111827]">{title}</h1>
+        <h1 className="text-[24px] font-bold leading-8 tracking-[-0.01em] text-[#111827]">{title}</h1>
         <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[#6B7280]">{subtitle}</p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -378,10 +378,10 @@ export function MetricStrip({ items }: { items: MetricItem[] }) {
       {items.map((item) => (
         <article
           key={item.label}
-          className="min-h-[104px] rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+          className="min-h-[104px] rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-[#DBEAFE] hover:shadow-[0_2px_4px_rgba(16,24,40,0.05),0_14px_36px_-18px_rgba(37,99,235,0.18)]"
         >
           <div className="text-[13px] leading-5 text-[#6B7280]">{item.label}</div>
-          <strong className={`mt-2 block text-[28px] font-bold leading-9 ${item.tone || "text-[#111827]"}`}>
+          <strong className={`mt-2 block text-[28px] font-bold leading-9 tracking-[-0.02em] ${item.tone || "text-[#111827]"}`}>
             {item.value}
           </strong>
           {item.helper ? <div className="mt-1 text-[12px] leading-[18px] text-[#9CA3AF]">{item.helper}</div> : null}
@@ -403,8 +403,8 @@ export function SectionPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="flex flex-col justify-between gap-3 border-b border-[#EEF2F7] px-5 py-4 md:flex-row md:items-start">
+    <section className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+      <div className="flex flex-col justify-between gap-3 rounded-t-[13px] border-b border-[#EEF2F7] bg-[#F9FAFB]/60 px-5 py-4 md:flex-row md:items-start">
         <div>
           <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">{title}</h2>
           {subtitle ? <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">{subtitle}</p> : null}
@@ -418,7 +418,10 @@ export function SectionPanel({
 
 export function StatusPill({ status, label }: { status?: string | null; label?: string }) {
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium leading-[18px] ${statusTone(status)}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium leading-[18px] ${statusTone(status)}`}
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
       {label || statusLabel(status)}
     </span>
   );
@@ -427,13 +430,16 @@ export function StatusPill({ status, label }: { status?: string | null; label?: 
 export function DataLoading() {
   return (
     <div className="space-y-5">
-      <div className="h-24 animate-pulse rounded-[14px] border border-[#E5E7EB] bg-white" />
+      <div className="h-24 animate-pulse rounded-[14px] border border-[#E5E7EB] bg-gradient-to-r from-white via-[#F3F4F6] to-white" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="h-[104px] animate-pulse rounded-[14px] border border-[#E5E7EB] bg-white" />
+          <div
+            key={item}
+            className="h-[104px] animate-pulse rounded-[14px] border border-[#E5E7EB] bg-gradient-to-r from-white via-[#F3F4F6] to-white"
+          />
         ))}
       </div>
-      <div className="h-64 animate-pulse rounded-[14px] border border-[#E5E7EB] bg-white" />
+      <div className="h-64 animate-pulse rounded-[14px] border border-[#E5E7EB] bg-gradient-to-r from-white via-[#F3F4F6] to-white" />
     </div>
   );
 }
@@ -445,7 +451,7 @@ export function DataError({ message, onRetry }: { message: string; onRetry: () =
       <button
         type="button"
         onClick={onRetry}
-        className="mt-4 h-[38px] rounded-[10px] bg-[#EF4444] px-3.5 text-[14px] font-medium text-white"
+        className="mt-4 h-[38px] rounded-[10px] bg-[#EF4444] px-3.5 text-[14px] font-medium text-white shadow-[0_1px_2px_rgba(239,68,68,0.3)] transition hover:bg-[#DC2626] active:translate-y-px"
       >
         重新加载
       </button>
@@ -479,7 +485,7 @@ export function GhostButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="h-9 rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+      className="h-9 rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#BFDBFE] hover:bg-[#F9FAFB] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -503,7 +509,7 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="h-9 rounded-[10px] bg-[#2563EB] px-3 text-[13px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+      className="h-9 rounded-[10px] bg-[#2563EB] px-3 text-[13px] font-medium text-white shadow-[0_1px_2px_rgba(37,99,235,0.28)] transition hover:bg-[#1D4ED8] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>

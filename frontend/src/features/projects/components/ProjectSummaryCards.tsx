@@ -54,7 +54,7 @@ export function ProjectSummaryCards({
       {summaryCards.map((card) => (
         <article
           key={card.key}
-          className="flex h-[104px] items-start gap-4 rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+          className="flex h-[104px] items-start gap-4 rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]"
         >
           <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[13px] font-semibold ${card.tone}`}>
             {card.mark}

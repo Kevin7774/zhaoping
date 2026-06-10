@@ -75,7 +75,7 @@ export function MultiJobProgressTable({
   const availabilityFor = (action: RunProjectScenarioAction) => actionAvailability[action] ?? { enabled: true };
 
   return (
-    <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位进展</h2>
         <button type="button" onClick={onRefresh} className="text-[13px] font-medium text-[#2563EB]">

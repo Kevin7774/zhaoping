@@ -42,7 +42,7 @@ export function LiveTaskSummary({
   const leadIngestion = leadIngestionStatsFromResult(taskSnapshot?.result);
 
   return (
-    <aside className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <aside className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="border-b border-[#EEF2F7] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>

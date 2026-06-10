@@ -1048,7 +1048,7 @@ export function ProjectDetailPage() {
       <ProjectSummaryCards {...projectSummary} />
 
       {integrationsError || integrations ? (
-        <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
           <div className="font-semibold text-[#111827]">后端能力状态</div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
             <span>Search：{capabilityStatusLabel(searchGate.status)}</span>
@@ -1062,7 +1062,7 @@ export function ProjectDetailPage() {
         </section>
       ) : null}
 
-      <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
           <div>
             <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">BP 智能生成岗位</h2>
@@ -1137,7 +1137,7 @@ export function ProjectDetailPage() {
         ) : null}
       </section>
 
-      <section className="my-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <section className="my-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
         <div className="grid grid-cols-6 items-start">
           {steps.map((step, index) => {
             const state = workflowStatus(index, jobs, candidates, taskSnapshot?.status ?? null, activeTaskAction);
@@ -1190,7 +1190,7 @@ export function ProjectDetailPage() {
             onRefresh={() => loadProjectData(filterCriteria)}
           />
           {matchResult ? (
-            <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位匹配结果</h2>
                 <span className="text-[12px] text-[#6B7280]">{matchResult.jobName}</span>
@@ -1230,7 +1230,7 @@ export function ProjectDetailPage() {
             onToggle={handleUpdateCandidateSearchSchedule}
             onIntervalChange={handleCandidateSearchIntervalChange}
           />
-          <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">筛选条件</h2>
               <button
@@ -1360,7 +1360,7 @@ export function ProjectDetailPage() {
             </div>
           </section>
 
-          <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">邮件草稿</h2>
               <span className="rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[12px] font-medium text-[#6B7280]">
@@ -1552,7 +1552,7 @@ function CandidateAutoSearchCard({
   const safeJobs = Array.isArray(jobs) ? jobs : [];
   const scheduleByJobId = new Map(safeSchedules.map((schedule) => [schedule.jobId, schedule]));
   return (
-    <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">自动搜候选人</h2>
         <span className={canUpdate ? "text-[12px] text-[#16A34A]" : "text-[12px] text-[#EF4444]"}>

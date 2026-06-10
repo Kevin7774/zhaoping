@@ -118,7 +118,7 @@ export function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-[#EEF2F7]">
                   {projects.map((project) => (
-                    <tr key={project.projectId}>
+                    <tr key={project.projectId} className="transition-colors hover:bg-[#FAFBFD]">
                       <td className="px-4 py-4">
                         <div className="font-semibold text-[#111827]">{project.name}</div>
                         <div className="mt-1 font-mono text-[12px] text-[#9CA3AF]">{project.projectId}</div>
