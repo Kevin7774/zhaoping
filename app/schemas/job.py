@@ -25,3 +25,12 @@ class JobResponse(CamelModel):
     pipeline_status: str
     candidate_count: int = Field(ge=0)
     average_match_score: int = Field(ge=0, le=100)
+    seniority: str | None = None
+    responsibilities: list[str] | None = None
+    must_have_skills: list[str] | None = None
+    nice_to_have_skills: list[str] | None = None
+    target_companies: list[str] | None = None
+    exclusion_signals: list[str] | None = None
+    interview_questions: list[str] | None = None
+    scoring_rubric: dict[str, int | float | str] | None = None
+    search_strategy: dict[str, str | list[str]] | None = None

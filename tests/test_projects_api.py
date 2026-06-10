@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.api.routers.projects as projects_router
 from app.api.main import app
 from app.api.routers.projects import _utc_datetime
 from app.db.session import get_project_session
@@ -91,6 +93,213 @@ def test_get_project_jobs_returns_pipeline_status_and_rollups(client: TestClient
             "averageMatchScore": 85,
         },
     ]
+
+
+class FakeProjectInitLLM:
+    def __init__(self, role_count: int = 14) -> None:
+        self.prompts: list[str] = []
+        self.role_count = role_count
+
+    def text(self, prompt: str, max_tokens: int = 1024) -> str:
+        self.prompts.append(prompt)
+        roles = []
+        for index in range(self.role_count):
+            roles.append(
+                {
+                    "role_id": f"hanno_role_{index:02d}",
+                    "title": f"汉诺云智边缘 AI 岗位 {index}",
+                    "seniority": "Senior",
+                    "responsibilities": [f"负责边缘 AI 交付链路 {index}"],
+                    "must_have_skills": ["Edge AI", "PostgreSQL", "FastAPI"],
+                    "nice_to_have_skills": ["Docling", "SSE"],
+                    "target_companies": ["边缘计算公司", "智能硬件厂商"],
+                    "exclusion_signals": ["仅做 Demo 无交付经验"],
+                    "interview_questions": ["请拆解一次现场边缘盒子部署故障。"],
+                    "scoring_rubric": {"edge_delivery": 40, "ai_engineering": 35, "safety": 25},
+                    "search_strategy": {
+                        "community": '"edge ai" AND FastAPI',
+                        "academic": '"edge computing" AND "AI"',
+                        "industry": "智能硬件 AND 边缘计算",
+                    },
+                }
+            )
+        return json.dumps({
+            "industry_reading": "汉诺云智面向边缘计算与 AI 交付。",
+            "technical_assumptions": ["需要覆盖云边协同、硬件交付和 AI 应用工程。"],
+            "roles": roles,
+            "coverage_gaps": [],
+        }, ensure_ascii=False)
+
+
+class FakeProjectInitRouter:
+    def __init__(self, llm: FakeProjectInitLLM) -> None:
+        self.llm_provider = llm
+
+    def llm(self, service_name: str | None = None) -> FakeProjectInitLLM:
+        return self.llm_provider
+
+
+class SequenceProjectInitLLM(FakeProjectInitLLM):
+    def __init__(self, outputs: list[str]) -> None:
+        super().__init__(role_count=1)
+        self.outputs = outputs
+
+    def text(self, prompt: str, max_tokens: int = 1024) -> str:
+        self.prompts.append(prompt)
+        return self.outputs.pop(0)
+
+
+def test_initialize_project_from_bp_retries_once_when_llm_json_is_malformed(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    valid_output = FakeProjectInitLLM(role_count=1).text("seed")
+    llm = SequenceProjectInitLLM(
+        [
+            '{"industry_reading":"x","roles":[{"role_id":"broken","title":"Broken"}]',
+            valid_output,
+        ]
+    )
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/initialize-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["jobCount"] == 1
+    assert len(llm.prompts) == 2
+    assert "校验失败原因" in llm.prompts[1]
+    assert "只输出符合 Schema 的合法 JSON" in llm.prompts[1]
+
+
+def test_initialize_project_from_bp_allows_second_json_repair_retry(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = SequenceProjectInitLLM(
+        [
+            '{"industry_reading":"x","roles":[{"role_id":"broken","title":"Broken"}]',
+            '{"industry_reading":"x","roles":[{"role_id":"still_broken","title":"Broken"}]',
+            FakeProjectInitLLM(role_count=1).text("seed"),
+        ]
+    )
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/initialize-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["jobCount"] == 1
+    assert len(llm.prompts) == 3
+    assert "输出紧凑 JSON" in llm.prompts[1]
+    assert "输出紧凑 JSON" in llm.prompts[2]
+
+
+def test_initialize_project_from_bp_retries_when_role_count_is_below_minimum(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = SequenceProjectInitLLM(
+        [
+            FakeProjectInitLLM(role_count=7).text("seed"),
+            FakeProjectInitLLM(role_count=14).text("seed"),
+        ]
+    )
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/initialize-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 14,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["jobCount"] == 14
+    assert len(llm.prompts) == 2
+    assert "至少输出 14 个 roles" in llm.prompts[1]
+
+
+def test_initialize_project_from_bp_uses_v2_prompt_and_persists_full_job_matrix(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = FakeProjectInitLLM(role_count=14)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/initialize-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["projectId"] == "project_hanno_ai_hardware"
+    assert payload["jobCount"] == 14
+    assert payload["promptName"] == "bp_deconstructor_v2"
+    assert "JSON-only" in llm.prompts[0]
+    assert "不可编造" in llm.prompts[0]
+    assert "must_have_skills" in llm.prompts[0]
+
+    jobs_response = client.get("/projects/project_hanno_ai_hardware/jobs")
+
+    assert jobs_response.status_code == 200
+    jobs = jobs_response.json()
+    assert len(jobs) == 14
+    first_job = jobs[0]
+    assert first_job["title"] == "汉诺云智边缘 AI 岗位 0"
+    assert first_job["seniority"] == "Senior"
+    assert first_job["responsibilities"] == ["负责边缘 AI 交付链路 0"]
+    assert first_job["mustHaveSkills"] == ["Edge AI", "PostgreSQL", "FastAPI"]
+    assert first_job["niceToHaveSkills"] == ["Docling", "SSE"]
+    assert first_job["targetCompanies"] == ["边缘计算公司", "智能硬件厂商"]
+    assert first_job["exclusionSignals"] == ["仅做 Demo 无交付经验"]
+    assert first_job["interviewQuestions"] == ["请拆解一次现场边缘盒子部署故障。"]
+    assert first_job["scoringRubric"] == {"edge_delivery": 40, "ai_engineering": 35, "safety": 25}
+    assert first_job["searchStrategy"]["community"] == '"edge ai" AND FastAPI'
+
+    with session_factory() as session:
+        project = session.get(Project, "project_hanno_ai_hardware")
+        stored_jobs = session.query(Job).filter(Job.project_id == "project_hanno_ai_hardware").all()
+    assert project is not None
+    assert len(stored_jobs) == 14
 
 
 def test_get_project_jobs_supports_pagination(client: TestClient) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,29 @@ def parse_resume_file(
     return active_router.document_parser(document_parser_service).parse(str(path))
 
 
+def parse_resume_file_with_metadata(
+    file_path: str,
+    *,
+    router: ServiceRouter | None = None,
+    document_parser_service: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Resume file not found: {file_path}")
+    active_router = router or get_router()
+    parser = active_router.document_parser(document_parser_service)
+    markdown = parser.parse(str(path))
+    metadata = getattr(parser, "last_metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {
+            "parser": parser.__class__.__name__,
+            "provider": parser.__class__.__name__,
+            "confidence": 0.7,
+            "degraded_reason": None,
+        }
+    return markdown, metadata
+
+
 def extract_resume_lead(
     markdown: str,
     *,
@@ -66,14 +90,18 @@ def extract_resume_lead(
     llm_service: str | None = None,
 ) -> dict[str, Any]:
     source_path = Path(source_file)
-    extracted = _extract_with_llm(markdown, router=router, llm_service=llm_service) or _heuristic_extract(markdown)
+    heuristic = _heuristic_extract(markdown)
+    extracted = _merge_resume_extracts(_extract_with_llm(markdown, router=router, llm_service=llm_service), heuristic)
+    name = _clean_text(extracted.name)
+    if _is_generic_resume_heading(name):
+        name = _name_from_markdown(markdown) or _name_from_source_file(source_path) or name
     evidence = _clean_items(extracted.evidence)
     if not evidence:
         evidence = [_excerpt(markdown, 700)]
     evidence = _clean_items([*evidence, f"来源文件：{source_path.name}"])
     skills = _clean_items(extracted.skills)
     payload: dict[str, Any] = {
-        "name": _clean_text(extracted.name),
+        "name": name,
         "current_company": _clean_text(extracted.current_company),
         "title": _clean_text(extracted.title),
         "location": _clean_text(extracted.location),
@@ -132,8 +160,13 @@ def prepare_resume_lead(
     document_parser_service: str | None = None,
     llm_service: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    markdown = parse_resume_file(file_path, router=router, document_parser_service=document_parser_service)
+    markdown, parser_metadata = parse_resume_file_with_metadata(
+        file_path,
+        router=router,
+        document_parser_service=document_parser_service,
+    )
     lead = extract_resume_lead(markdown, source_file=file_path, router=router, llm_service=llm_service)
+    _attach_parser_metadata(lead, parser_metadata)
     return markdown, lead
 
 
@@ -344,6 +377,24 @@ def _heuristic_extract(markdown: str) -> ResumeLeadExtract:
     )
 
 
+def _merge_resume_extracts(primary: ResumeLeadExtract | None, fallback: ResumeLeadExtract) -> ResumeLeadExtract:
+    if primary is None:
+        return fallback
+    return ResumeLeadExtract(
+        name=primary.name or fallback.name,
+        current_company=primary.current_company or fallback.current_company,
+        title=primary.title or fallback.title,
+        location=primary.location or fallback.location,
+        email=primary.email or fallback.email,
+        github_url=primary.github_url or fallback.github_url,
+        linkedin_url=primary.linkedin_url or fallback.linkedin_url,
+        homepage_url=primary.homepage_url or fallback.homepage_url,
+        skills=primary.skills or fallback.skills,
+        evidence=primary.evidence or fallback.evidence,
+        confidence=max(primary.confidence, fallback.confidence),
+    )
+
+
 def _loads_json_object(value: str) -> dict[str, Any]:
     text = value.strip()
     if text.startswith("```"):
@@ -364,6 +415,68 @@ def _loads_json_object(value: str) -> dict[str, Any]:
 
 def _public_url(extracted: ResumeLeadExtract) -> str | None:
     return extracted.github_url or extracted.linkedin_url or extracted.homepage_url
+
+
+def _attach_parser_metadata(lead: dict[str, Any], metadata: dict[str, Any]) -> None:
+    parser = _clean_text(metadata.get("parser"))
+    provider = _clean_text(metadata.get("provider"))
+    degraded_reason = _clean_text(metadata.get("degraded_reason"))
+    parser_confidence = _metadata_confidence(metadata.get("confidence"))
+    if parser:
+        lead["parser"] = parser
+    if provider:
+        lead["provider"] = provider
+    lead["parser_confidence"] = parser_confidence
+    if degraded_reason is not None:
+        lead["degraded_reason"] = degraded_reason
+    raw_payload = dict(lead.get("raw_payload") or {})
+    if parser:
+        raw_payload["parser"] = parser
+    if provider:
+        raw_payload["provider"] = provider
+    raw_payload["parser_confidence"] = parser_confidence
+    raw_payload["degraded_reason"] = degraded_reason
+    lead["raw_payload"] = raw_payload
+
+
+def _metadata_confidence(value: Any) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return 0.7
+    return max(0.0, min(confidence, 1.0))
+
+
+def _is_generic_resume_heading(value: str | None) -> bool:
+    if not value:
+        return False
+    normalized = re.sub(r"[\s:：]+", "", unicodedata.normalize("NFKC", value))
+    return normalized in {"个人总结", "个人简介", "技术与能力", "技术能力", "工作经历", "项目经历", "姓名"}
+
+
+def _name_from_markdown(markdown: str) -> str | None:
+    lines = [line.strip(" #\t") for line in markdown.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        normalized = unicodedata.normalize("NFKC", line).strip()
+        inline = re.match(r"^姓名\s*[:：]\s*([\u4e00-\u9fff]{2,4})$", normalized)
+        if inline:
+            return inline.group(1)
+        if re.sub(r"[\s:：]+", "", normalized) == "姓名":
+            for next_line in lines[index + 1 : index + 4]:
+                candidate = unicodedata.normalize("NFKC", next_line).strip()
+                match = re.fullmatch(r"[\u4e00-\u9fff]{2,4}", candidate)
+                if match:
+                    return candidate
+    return None
+
+
+def _name_from_source_file(path: Path) -> str | None:
+    stem = path.stem
+    stem = re.sub(r"^\d+[_-]*", "", stem)
+    stem = re.sub(r"【[^】]+】", "", stem)
+    stem = stem.replace("简历", "").replace("resume", "").strip(" _-")
+    match = re.search(r"[\u4e00-\u9fff]{2,4}", stem)
+    return match.group(0) if match else None
 
 
 def _clean_items(values: list[str]) -> list[str]:

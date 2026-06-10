@@ -21,6 +21,15 @@ class FakeDocumentParser:
         return Path(file_path).read_text(encoding="utf-8")
 
 
+class FakeMetadataDocumentParser(FakeDocumentParser):
+    last_metadata = {
+        "parser": "docling",
+        "provider": "docling",
+        "confidence": 0.93,
+        "degraded_reason": None,
+    }
+
+
 class FakeLLM:
     def __init__(self, output: dict) -> None:
         self.output = output
@@ -41,6 +50,12 @@ class FakeRouter:
 
     def llm(self, service_name: str | None = None) -> FakeLLM:
         return self.llm_provider
+
+
+class FakeMetadataRouter(FakeRouter):
+    def __init__(self, llm_output: dict) -> None:
+        super().__init__(llm_output)
+        self.parser = FakeMetadataDocumentParser()
 
 
 @pytest.fixture()
@@ -174,6 +189,48 @@ def test_extract_resume_lead_validates_llm_json_and_preserves_source_file(tmp_pa
     assert "只输出合法 JSON" in router.llm_provider.prompts[0]
     assert "极其严厉的数据清洗与结构化抽取 Agent" in router.llm_provider.prompts[0]
     assert "confidence_score" in router.llm_provider.prompts[0]
+
+
+def test_extract_resume_lead_uses_source_filename_when_heading_is_generic(tmp_path) -> None:
+    from app.core.resume_ingestion import extract_resume_lead
+
+    path = tmp_path / "简历张载德.pdf"
+    markdown = "## 个⼈总结\n\n长期构建 AI-native 产品、Agent 工作流与开发者工具系统。"
+
+    lead = extract_resume_lead(markdown, source_file=str(path), router=FakeRouter({"name": "个⼈总结"}))
+
+    assert lead["name"] == "张载德"
+    assert lead["raw_payload"]["source_filename"] == "简历张载德.pdf"
+
+
+def test_extract_resume_lead_reads_name_label_from_resume_lines(tmp_path) -> None:
+    from app.core.resume_ingestion import extract_resume_lead
+
+    path = tmp_path / "1337_【AI全栈工程师】代先生_一年以内.pdf"
+    markdown = "姓名 ：\n\n代宁\n\n年龄 ：\n\n22\n\n邮箱 ：\n\n15229216182@163.com"
+
+    lead = extract_resume_lead(markdown, source_file=str(path), router=FakeRouter({"name": "姓名 ："}))
+
+    assert lead["name"] == "代宁"
+    assert lead["email"] == "15229216182@163.com"
+
+
+def test_prepare_resume_lead_records_parser_metadata(tmp_path) -> None:
+    from app.core.resume_ingestion import prepare_resume_lead
+
+    path = resume_file(tmp_path)
+    router = FakeMetadataRouter(llm_resume_output())
+
+    _markdown, lead = prepare_resume_lead(str(path), router=router)
+
+    assert lead["parser"] == "docling"
+    assert lead["provider"] == "docling"
+    assert lead["parser_confidence"] == pytest.approx(0.93)
+    assert lead["confidence"] == pytest.approx(0.91)
+    assert lead["raw_payload"]["parser"] == "docling"
+    assert lead["raw_payload"]["provider"] == "docling"
+    assert lead["raw_payload"]["parser_confidence"] == pytest.approx(0.93)
+    assert lead["raw_payload"]["degraded_reason"] is None
 
 
 def test_import_resume_to_project_reuses_candidate_lead_ingestion(

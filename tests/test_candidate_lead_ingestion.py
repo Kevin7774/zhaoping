@@ -136,6 +136,7 @@ def test_ingestion_inserts_candidate_and_job_link(session_factory: sessionmaker[
     assert result["normalized"] == 1
     assert result["inserted_candidates"] == 1
     assert result["linked_job_candidates"] == 1
+    assert result["compliance_review_required"] == 1
     assert result["rejected"] == 0
 
     with session_factory() as session:
@@ -152,7 +153,7 @@ def test_ingestion_inserts_candidate_and_job_link(session_factory: sessionmaker[
         )
         assert link is not None
         assert link.project_id == "project_2026_ai_team"
-        assert link.pipeline_status == "sourced"
+        assert link.pipeline_status == "pending_compliance_review"
         assert link.source_task_id == "task_B_1"
 
 
@@ -188,6 +189,34 @@ def test_ingestion_marks_obfuscated_contact_for_compliance_review(session_factor
                 JobCandidate.candidate_id == candidate.id,
             )
         )
+        assert link is not None
+        assert link.pipeline_status == "pending_compliance_review"
+
+
+def test_ingestion_marks_public_web_email_for_compliance_review(session_factory: sessionmaker[Session]) -> None:
+    from app.core.candidate_lead_ingestion import ingest_candidate_leads
+
+    with session_factory() as session:
+        result = ingest_candidate_leads(
+            session,
+            project_id="project_2026_ai_team",
+            job_id="job_vla_algorithm",
+            source_task_id="task_public_email",
+            raw_leads=[
+                {
+                    "name": "Public Web Candidate",
+                    "email": "public@example.com",
+                    "source_platform": "public_web",
+                    "source_url": "https://example.com/profile/public-web-candidate",
+                    "evidence": ["Public profile lists the contact email."],
+                    "extraction_method": "public_profile_scrape",
+                }
+            ],
+        )
+
+    assert result["compliance_review_required"] == 1
+    with session_factory() as session:
+        link = session.scalar(select(JobCandidate).where(JobCandidate.source_task_id == "task_public_email"))
         assert link is not None
         assert link.pipeline_status == "pending_compliance_review"
 

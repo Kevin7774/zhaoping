@@ -211,7 +211,7 @@ def _build_llm_hardware_draft(
     candidate: Candidate,
     strategy_tag: OutreachStrategyTag,
 ) -> str | None:
-    system_prompt = load_system_prompt("outreach_agent")
+    system_prompt = load_system_prompt("outreach_agent_v2")
     if not system_prompt:
         return None
     candidate_detail = {
@@ -230,11 +230,19 @@ def _build_llm_hardware_draft(
         "challenge": _hardware_challenge_for_candidate(job, candidate),
         "strategy_tag": strategy_tag,
     }
+    candidate_evidence = _candidate_evidence(candidate)
+    tone_control = {
+        "style": "硬核极客",
+        "must_mention": ["智能硬件交付"],
+        "forbidden": list(OUTREACH_FORBIDDEN_PHRASES),
+    }
     prompt = (
         f"{system_prompt}\n\n"
         "只输出邮件正文，不要 Markdown，不要解释。\n"
         f"candidate_detail:\n{json.dumps(candidate_detail, ensure_ascii=False, indent=2)}\n\n"
-        f"job_challenge:\n{json.dumps(job_challenge, ensure_ascii=False, indent=2)}"
+        f"candidate_evidence:\n{json.dumps(candidate_evidence, ensure_ascii=False, indent=2)}\n\n"
+        f"job_challenge:\n{json.dumps(job_challenge, ensure_ascii=False, indent=2)}\n\n"
+        f"tone_control:\n{json.dumps(tone_control, ensure_ascii=False, indent=2)}"
     )
     try:
         draft = get_router().llm().text(prompt, max_tokens=900)
@@ -244,6 +252,10 @@ def _build_llm_hardware_draft(
     if not draft:
         return None
     if any(phrase in draft for phrase in OUTREACH_FORBIDDEN_PHRASES):
+        return None
+    if candidate.name and candidate.name not in draft:
+        return None
+    if strategy_tag and strategy_tag not in draft:
         return None
     return draft
 

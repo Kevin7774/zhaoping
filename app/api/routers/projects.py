@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from datetime import datetime, timezone
-from typing import TypedDict
+from pathlib import Path
+from typing import Any, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.db.session import get_project_session
+from app.core.prompt_config import load_system_prompt
+from app.core.router import get_router
+from app.core.workflow_context import retry_prompt
+from app.db.session import get_project_session, project_session_factory
 from app.models import Candidate, CandidateSearchSchedule, Job, JobCandidate, Project
 from app.schemas.candidate_search_schedule import (
     CandidateSearchScheduleListResponse,
@@ -16,18 +23,110 @@ from app.schemas.candidate_search_schedule import (
 )
 from app.schemas.candidate import CandidateComplianceReviewRequest, CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
-from app.schemas.project import ProjectResponse
+from app.schemas.project import ProjectBpInitializeRequest, ProjectBpInitializeResponse, ProjectResponse
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 PENDING_COMPLIANCE_REVIEW_STATUS = "pending_compliance_review"
 PIPELINE_STATUS_PRIORITY = (PENDING_COMPLIANCE_REVIEW_STATUS, "awaiting_human", "processing", "pending_outreach", "sourced", "done")
+BP_DECONSTRUCTOR_PROMPT_NAME = "bp_deconstructor_v2"
+BP_DECONSTRUCTOR_MAX_TOKENS = 16000
+BP_DECONSTRUCTOR_MAX_ATTEMPTS = 3
+BP_DECONSTRUCTOR_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["industry_reading", "technical_assumptions", "roles", "coverage_gaps"],
+    "properties": {
+        "industry_reading": {"type": "string"},
+        "technical_assumptions": {"type": "array", "items": {"type": "string"}},
+        "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+        "roles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "title",
+                    "seniority",
+                    "responsibilities",
+                    "must_have_skills",
+                    "nice_to_have_skills",
+                    "target_companies",
+                    "exclusion_signals",
+                    "interview_questions",
+                    "scoring_rubric",
+                    "search_strategy",
+                ],
+            },
+        },
+    },
+}
 
 
 class JobStats(TypedDict):
     candidate_count: int
     average_match_score: int
     pipeline_status: str | None
+
+
+@router.post(
+    "/{project_id}/initialize-from-bp",
+    response_model=ProjectBpInitializeResponse,
+    response_model_exclude_none=True,
+)
+def initialize_project_from_bp(
+    project_id: str,
+    request: ProjectBpInitializeRequest,
+) -> ProjectBpInitializeResponse:
+    bp_path = Path(request.bp_file_path)
+    if not bp_path.is_file():
+        raise HTTPException(status_code=404, detail=f"BP file not found: {request.bp_file_path}")
+    bp_text = bp_path.read_text(encoding="utf-8")
+    if not bp_text.strip():
+        raise HTTPException(status_code=422, detail="BP file is empty")
+
+    prompt = _build_bp_deconstructor_prompt(bp_text)
+    try:
+        llm = get_router().llm(request.llm_service)
+        matrix = _deconstruct_bp_matrix(llm, prompt, minimum_role_count=request.minimum_role_count)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"BP deconstructor LLM failed: {exc}") from exc
+    roles = matrix.get("roles")
+    if not isinstance(roles, list) or not roles:
+        raise HTTPException(status_code=502, detail="BP deconstructor returned no roles")
+
+    jobs = [_job_from_role(project_id, role, index) for index, role in enumerate(roles)]
+    factory = project_session_factory()
+    with factory() as session:
+        existing_job_ids = set(session.scalars(select(Job.id).where(Job.project_id == project_id)).all())
+        if existing_job_ids:
+            session.execute(delete(JobCandidate).where(JobCandidate.job_id.in_(existing_job_ids)))
+        session.execute(delete(Job).where(Job.project_id == project_id))
+        project = session.get(Project, project_id)
+        if project is None:
+            project = Project(id=project_id, name=request.project_name, status="active")
+            session.add(project)
+        else:
+            project.name = request.project_name
+            project.status = "active"
+        session.flush()
+        session.add_all(jobs)
+        session.commit()
+        response_jobs = [
+            _job_response(job, {"candidate_count": 0, "average_match_score": 0, "pipeline_status": None})
+            for job in jobs
+        ]
+
+    return ProjectBpInitializeResponse(
+        project_id=project_id,
+        project_name=request.project_name,
+        prompt_name=BP_DECONSTRUCTOR_PROMPT_NAME,
+        job_count=len(response_jobs),
+        jobs=response_jobs,
+        industry_reading=_clean_text(matrix.get("industry_reading")),
+        technical_assumptions=_string_list(matrix.get("technical_assumptions")),
+        coverage_gaps=_string_list(matrix.get("coverage_gaps")),
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -46,7 +145,7 @@ def get_project(project_id: str, session: Session = Depends(get_project_session)
     )
 
 
-@router.get("/{project_id}/jobs", response_model=list[JobResponse])
+@router.get("/{project_id}/jobs", response_model=list[JobResponse], response_model_exclude_none=True)
 def get_project_jobs(
     project_id: str,
     response: Response,
@@ -60,16 +159,7 @@ def get_project_jobs(
     jobs = session.execute(select(Job).where(Job.project_id == project_id).offset(skip).limit(limit)).scalars().all()
     stats_by_job_id = _job_stats_by_job_id(session, [job.id for job in jobs])
     return [
-        JobResponse(
-            id=job.id,
-            project_id=job.project_id,
-            title=job.title,
-            headcount=job.headcount,
-            status=job.status,
-            pipeline_status=stats["pipeline_status"] or job.status,
-            candidate_count=stats["candidate_count"],
-            average_match_score=stats["average_match_score"],
-        )
+        _job_response(job, stats)
         for job in jobs
         for stats in [_job_stats_for(job.id, stats_by_job_id)]
     ]
@@ -396,6 +486,187 @@ def _aggregate_pipeline_status(statuses: list[str]) -> str | None:
         if status in status_set:
             return status
     return statuses[0]
+
+
+def _job_response(job: Job, stats: JobStats) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        project_id=job.project_id,
+        title=job.title,
+        headcount=job.headcount,
+        status=job.status,
+        pipeline_status=stats["pipeline_status"] or job.status,
+        candidate_count=stats["candidate_count"],
+        average_match_score=stats["average_match_score"],
+        seniority=_clean_text(job.seniority),
+        responsibilities=_non_empty_list(job.responsibilities),
+        must_have_skills=_non_empty_list(job.must_have_skills),
+        nice_to_have_skills=_non_empty_list(job.nice_to_have_skills),
+        target_companies=_non_empty_list(job.target_companies),
+        exclusion_signals=_non_empty_list(job.exclusion_signals),
+        interview_questions=_non_empty_list(job.interview_questions),
+        scoring_rubric=_non_empty_dict(job.scoring_rubric),
+        search_strategy=_non_empty_dict(job.search_strategy),
+    )
+
+
+def _build_bp_deconstructor_prompt(bp_text: str) -> str:
+    system_prompt = load_system_prompt(BP_DECONSTRUCTOR_PROMPT_NAME)
+    if not system_prompt:
+        raise HTTPException(status_code=500, detail=f"Missing prompt: {BP_DECONSTRUCTOR_PROMPT_NAME}")
+    return (
+        f"{system_prompt}\n\n"
+        "输入 BP 如下。只输出一个 JSON 对象；不要 Markdown，不要代码围栏，不要解释。\n"
+        "bp_markdown:\n"
+        f"{bp_text}"
+    )
+
+
+def _parse_bp_deconstructor_output(raw_output: str) -> dict[str, Any]:
+    text = raw_output.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        text = text[start : end + 1]
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail=f"BP deconstructor returned invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="BP deconstructor returned non-object JSON")
+    return payload
+
+
+def _deconstruct_bp_matrix(
+    llm: Any,
+    initial_prompt: str,
+    *,
+    minimum_role_count: int,
+) -> dict[str, Any]:
+    prompt = initial_prompt
+    last_error = "unknown structured output error"
+    for _attempt in range(BP_DECONSTRUCTOR_MAX_ATTEMPTS):
+        output = llm.text(prompt, max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS)
+        try:
+            matrix = _parse_bp_deconstructor_output(output)
+            _validate_minimum_role_count(matrix, minimum_role_count=minimum_role_count)
+            return matrix
+        except HTTPException as exc:
+            last_error = str(exc.detail)
+            prompt = _bp_repair_prompt(output, last_error, minimum_role_count)
+    raise HTTPException(status_code=502, detail=f"BP deconstructor structured output failed: {last_error}")
+
+
+def _validate_minimum_role_count(matrix: dict[str, Any], *, minimum_role_count: int) -> None:
+    roles = matrix.get("roles")
+    role_count = len(roles) if isinstance(roles, list) else 0
+    if role_count < minimum_role_count:
+        raise HTTPException(
+            status_code=502,
+            detail=f"BP deconstructor returned {role_count} roles; expected at least {minimum_role_count}",
+        )
+
+
+def _bp_repair_prompt(last_output: str, validation_error: str, minimum_role_count: int) -> str:
+    repair = retry_prompt(
+        BP_DECONSTRUCTOR_SCHEMA,
+        last_output,
+        validation_error,
+    )
+    return (
+        f"{repair}\n\n"
+        "输出紧凑 JSON：每个数组保留 2-4 条最关键内容，search_strategy 每个字段使用一句 Boolean/关键词策略，"
+        "scoring_rubric 保留 3-5 个维度。\n"
+        f"数量硬约束：至少输出 {minimum_role_count} 个 roles；不要用重复岗位凑数。"
+    )
+
+
+def _job_from_role(project_id: str, role: Any, index: int) -> Job:
+    if not isinstance(role, dict):
+        raise HTTPException(status_code=502, detail=f"Role #{index + 1} is not an object")
+    title = _clean_text(role.get("title"))
+    if not title:
+        raise HTTPException(status_code=502, detail=f"Role #{index + 1} is missing title")
+    return Job(
+        id=_stable_job_id(project_id, role, index),
+        project_id=project_id,
+        title=title[:128],
+        headcount=_headcount(role.get("headcount")),
+        status="sourcing",
+        seniority=_clean_text(role.get("seniority")),
+        responsibilities=_string_list(role.get("responsibilities")),
+        must_have_skills=_string_list(role.get("must_have_skills") or role.get("hard_requirements")),
+        nice_to_have_skills=_string_list(role.get("nice_to_have_skills")),
+        target_companies=_string_list(role.get("target_companies")),
+        exclusion_signals=_string_list(role.get("exclusion_signals")),
+        interview_questions=_string_list(role.get("interview_questions")),
+        scoring_rubric=_object_dict(role.get("scoring_rubric")),
+        search_strategy=_search_strategy(role),
+    )
+
+
+def _stable_job_id(project_id: str, role: dict[str, Any], index: int) -> str:
+    raw = _clean_text(role.get("role_id")) or _clean_text(role.get("title")) or f"role_{index}"
+    slug = re.sub(r"[^A-Za-z0-9_]+", "_", raw).strip("_").lower() or f"role_{index}"
+    digest = hashlib.sha1(f"{project_id}:{raw}:{index}".encode("utf-8")).hexdigest()[:8]
+    return f"job_{slug[:42]}_{digest}"[:64]
+
+
+def _search_strategy(role: dict[str, Any]) -> dict[str, Any]:
+    raw_strategy = role.get("search_strategy")
+    if isinstance(raw_strategy, dict):
+        return {str(key): value for key, value in raw_strategy.items() if value not in (None, "", [], {})}
+    search_queries = role.get("search_queries")
+    if isinstance(search_queries, dict):
+        return {str(key): value for key, value in search_queries.items() if value not in (None, "", [], {})}
+    queries = _string_list(search_queries)
+    return {"queries": queries} if queries else {}
+
+
+def _headcount(value: Any) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(0, min(count, 99))
+
+
+def _clean_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _string_list(value: Any) -> list[str]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, dict):
+        return [f"{key}: {item}" for key, item in value.items() if str(item or "").strip()]
+    if isinstance(value, list | tuple | set):
+        return [str(item).strip() for item in value if str(item or "").strip()]
+    return [str(value).strip()]
+
+
+def _object_dict(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): item for key, item in value.items() if item not in (None, "", [], {})}
+
+
+def _non_empty_list(value: Any) -> list[str] | None:
+    items = _string_list(value)
+    return items or None
+
+
+def _non_empty_dict(value: Any) -> dict[str, Any] | None:
+    payload = _object_dict(value)
+    return payload or None
 
 
 def _candidate_response(job_candidate: JobCandidate, candidate: Candidate, job: Job) -> CandidateResponse:

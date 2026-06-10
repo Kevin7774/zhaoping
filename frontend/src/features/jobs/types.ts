@@ -20,6 +20,15 @@ export type JobProfile = {
   jobProfileId: string;
   roleName: string;
   headcount?: number;
+  seniority?: string;
+  responsibilities?: string[];
+  mustHaveSkills?: string[];
+  niceToHaveSkills?: string[];
+  targetCompanies?: string[];
+  exclusionSignals?: string[];
+  interviewQuestions?: string[];
+  scoringRubric?: Record<string, unknown>;
+  searchStrategy?: Record<string, unknown>;
   pipelineStatus?: StepStatus;
   candidateCount?: number;
   averageMatchScore?: number;

@@ -13,16 +13,25 @@ class DocumentParser(Protocol):
 
 
 class PlainTextDocumentParser:
+    last_metadata: dict[str, object] = {}
+
     def parse(self, file_path: str) -> str:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Input document does not exist: {file_path}")
+        self.last_metadata = {
+            "parser": "plain_text",
+            "provider": "local_file",
+            "confidence": 0.99,
+            "degraded_reason": None,
+        }
         return path.read_text(encoding="utf-8")
 
 
 class DoclingDocumentParser:
     def __init__(self) -> None:
         self._converter = None
+        self.last_metadata: dict[str, object] = {}
 
     def parse(self, file_path: str) -> str:
         path = Path(file_path)
@@ -35,6 +44,12 @@ class DoclingDocumentParser:
                 raise RuntimeError("docling is required for Docling document parsing.") from exc
             self._converter = DocumentConverter()
         result = self._converter.convert(str(path))
+        self.last_metadata = {
+            "parser": "docling",
+            "provider": "docling",
+            "confidence": 0.9,
+            "degraded_reason": None,
+        }
         return result.document.export_to_markdown()
 
 
@@ -42,16 +57,28 @@ class AutoDocumentParser:
     def __init__(self) -> None:
         self._plain_text = PlainTextDocumentParser()
         self._docling = DoclingDocumentParser()
+        self.last_metadata: dict[str, object] = {}
 
     def parse(self, file_path: str) -> str:
         path = Path(file_path)
         if path.suffix.lower() in {".md", ".markdown", ".txt"}:
-            return self._plain_text.parse(file_path)
+            text = self._plain_text.parse(file_path)
+            self.last_metadata = dict(self._plain_text.last_metadata)
+            return text
         try:
-            return self._docling.parse(file_path)
+            text = self._docling.parse(file_path)
+            self.last_metadata = dict(self._docling.last_metadata)
+            return text
         except Exception as exc:
             if path.suffix.lower() == ".pdf":
-                return _parse_pdf_with_pdftotext(file_path, exc)
+                text = _parse_pdf_with_pdftotext(file_path, exc)
+                self.last_metadata = {
+                    "parser": "pdftotext",
+                    "provider": "poppler",
+                    "confidence": 0.45,
+                    "degraded_reason": f"Docling failed: {exc}",
+                }
+                return text
             raise
 
 

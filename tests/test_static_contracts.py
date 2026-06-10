@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -93,14 +94,29 @@ def test_get_capabilities_for_role_includes_ids() -> None:
     }
 
 
-def test_job_deconstructor_prompt_generates_comprehensive_dynamic_roles() -> None:
-    prompt = load_system_prompt("job_deconstructor")
+def test_job_deconstructor_v2_prompt_generates_schema_safe_comprehensive_dynamic_roles() -> None:
+    prompt = load_system_prompt("bp_deconstructor_v2")
 
+    assert "JSON-only" in prompt
     assert "不得限制为 3 个岗位" in prompt
     assert "行业研究" in prompt
     assert "技术架构" in prompt
     assert "硬件拓扑" in prompt
     assert "产品交付" in prompt
+    assert "must_have_skills" in prompt
+    assert "search_strategy" in prompt
+    assert "不可编造" in prompt
+
+
+def test_outreach_agent_v2_prompt_controls_tone_and_requires_evidence() -> None:
+    prompt = load_system_prompt("outreach_agent_v2")
+
+    assert "JSON-only" in prompt
+    assert "硬核极客" in prompt
+    assert "智能硬件交付" in prompt
+    assert "不可编造候选人经历" in prompt
+    assert "candidate_evidence" in prompt
+    assert "tone_control" in prompt
 
 
 def test_chunking_and_stable_ids() -> None:
@@ -532,11 +548,19 @@ def test_frontend_api_client_wraps_chat_workspace_endpoints() -> None:
 
 def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
     registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
-    backend_paths = sorted(app.openapi()["paths"])
+    backend_paths = set(app.openapi()["paths"])
+    registry_paths = {
+        match.group(1)
+        for match in re.finditer(
+            r"^\s*'([^']+)':\s*'(?:productized|system|closed)'",
+            registry_source,
+            flags=re.MULTILINE,
+        )
+    }
 
-    assert len(backend_paths) == 50
-    for path in backend_paths:
-        assert path in registry_source
+    assert sorted(backend_paths - registry_paths) == []
+    assert sorted(registry_paths - backend_paths) == []
+    assert "/projects/{project_id}/candidates/{job_candidate_id}/compliance-review" in registry_paths
     for status in ["productized", "system", "closed"]:
         assert status in registry_source
     for artifact_type in [

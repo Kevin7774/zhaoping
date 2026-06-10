@@ -50,6 +50,17 @@ function MiniStatus({ status }: { status: StepStatus }) {
   );
 }
 
+function matrixSummary(job: JobProfile, linkedCount: number) {
+  const parts = [
+    job.seniority,
+    ...(job.mustHaveSkills ?? []).slice(0, 2),
+    ...(job.targetCompanies ?? []).slice(0, 1),
+    ...Object.values(job.searchStrategy ?? {}).slice(0, 1).map((value) => String(value)),
+  ].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
+  return `真实后端岗位 · 已关联 ${linkedCount} 人`;
+}
+
 export function MultiJobProgressTable({
   jobs,
   candidateCounts,
@@ -101,6 +112,7 @@ export function MultiJobProgressTable({
                 const jobAnalysisAvailability = availabilityFor("job_analysis");
                 const findCandidatesAvailability = availabilityFor("find_candidates");
                 const evaluationAvailability = availabilityFor("candidate_evaluation");
+                const linkedCount = candidateCounts[job.jobProfileId] ?? 0;
 
                 return (
                   <tr key={job.jobProfileId} className="h-[52px]">
@@ -108,7 +120,9 @@ export function MultiJobProgressTable({
                       <div className="truncate font-semibold text-[#111827]" title={job.roleName}>
                         {job.roleName}
                       </div>
-                      <div className="mt-0.5 truncate text-[12px] text-[#9CA3AF]">真实后端岗位 · 已关联 {candidateCounts[job.jobProfileId] ?? 0} 人</div>
+                      <div className="mt-0.5 truncate text-[12px] text-[#9CA3AF]" title={matrixSummary(job, linkedCount)}>
+                        {matrixSummary(job, linkedCount)}
+                      </div>
                     </td>
                     <td className="px-2 py-3 text-[#374151]">{job.headcount ?? "—"}</td>
                     <td className="px-2 py-3"><MiniStatus status={actionStatus(job, "analysis")} /></td>

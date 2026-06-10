@@ -92,6 +92,21 @@ CONTACT_COMPLIANCE_RISK_MARKERS = (
     "反爬",
     "暗网",
 )
+PUBLIC_EMAIL_SOURCE_MARKERS = (
+    "public_web",
+    "open_web",
+    "search_result",
+    "web_profile",
+    "public_profile",
+    "profile_scrape",
+    "public_profile_scrape",
+    "scraping",
+    "scrape",
+    "crawler",
+    "github",
+    "linkedin",
+)
+TRUSTED_DIRECT_CONTACT_SOURCES = {"resume_file", "manual", "referral", "hr_upload"}
 
 
 def normalize_candidate_lead(raw: Mapping[str, Any]) -> NormalizationResult:
@@ -495,11 +510,23 @@ def _first_present(payload: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
 def _requires_contact_compliance_review(payload: Mapping[str, Any]) -> bool:
     if not _clean_email(_first_present(payload, ("email", "邮箱"))):
         return False
+    if _is_public_email_source(payload):
+        return True
     for text in _flatten_payload_text(payload):
         normalized = text.casefold()
         if any(marker in normalized for marker in CONTACT_COMPLIANCE_RISK_MARKERS):
             return True
     return False
+
+
+def _is_public_email_source(payload: Mapping[str, Any]) -> bool:
+    source_platform = str(_first_present(payload, ("source_platform", "sourcePlatform", "source_key", "sourceKey", "platform")) or "").casefold()
+    if source_platform in TRUSTED_DIRECT_CONTACT_SOURCES:
+        return False
+    source_url = _clean_url(_first_present(payload, URL_FIELDS))
+    extraction_method = str(_first_present(payload, ("extraction_method", "extractionMethod", "contact_source", "contactSource")) or "").casefold()
+    combined = f"{source_platform} {extraction_method}"
+    return bool(source_url and any(marker in combined for marker in PUBLIC_EMAIL_SOURCE_MARKERS))
 
 
 def _flatten_payload_text(value: Any, *, depth: int = 0) -> list[str]:

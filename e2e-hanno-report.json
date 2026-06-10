@@ -1,0 +1,252 @@
+{
+  "generated_at": "2026-06-09T15:21:45.884074+00:00",
+  "project_id": "project_hanno_ai_hardware",
+  "final_status": "LIMITED",
+  "environment": {
+    "system_python": "3.10.12",
+    "venv_python": "3.12.13",
+    "python_runtime_used": ".venv/bin/python 3.12.13",
+    "backend": "FastAPI on 127.0.0.1:8022 during test",
+    "frontend": "Vite TS entry on 127.0.0.1:5176 during test",
+    "database": "temporary Docker PostgreSQL postgres:16-alpine on 127.0.0.1:55432",
+    "mailtrap": "MAILTRAP_SMTP_* unset; real send blocked"
+  },
+  "entrypoints": {
+    "frontend_index": "frontend/index.html -> /src/main.tsx",
+    "frontend_main": "frontend/src/main.tsx -> ./app/App",
+    "frontend_app": "frontend/src/app/App.tsx -> RouterProvider(router)",
+    "frontend_router": "frontend/src/app/router.tsx includes /projects/:projectId",
+    "legacy_app_jsx_active": false,
+    "api_base": "frontend/src/shared/api/client.ts uses VITE_API_BASE ?? /api; Vite proxy VITE_API_TARGET=http://127.0.0.1:8022"
+  },
+  "commands": {
+    "python_versions": [
+      "python --version => Python 3.10.12",
+      ".venv/bin/python --version => Python 3.12.13"
+    ],
+    "step1": [
+      ".venv/bin/python -m pytest tests/test_resume_ingestion.py -q => 11 passed, 6 warnings"
+    ],
+    "step2": [
+      "pnpm --dir frontend lint => exit 0",
+      "pnpm --dir frontend build => exit 0",
+      "pnpm --dir frontend test => 9 files / 68 tests passed",
+      ".venv/bin/python -m compileall app scripts tests => exit 0",
+      ".venv/bin/python -m pytest -q => 205 passed, 6 warnings"
+    ],
+    "e2e": [
+      "POST /projects/project_hanno_ai_hardware/initialize-from-bp minimumRoleCount=14",
+      "GET /projects/project_hanno_ai_hardware/jobs?limit=100",
+      "POST /resumes/local-import for data/input/resumes/简历张载德.pdf",
+      "POST /resumes/local-import for data/input/resumes/1337_【AI全栈工程师】代先生_一年以内.pdf",
+      "POST /outreach/draft for 代宁",
+      "PATCH /outreach/drafts/draft_4c9065541b20",
+      "POST /outreach/send simulate=false => 503 blocked",
+      "POST /outreach/send simulate=true => history_421f45a4c965",
+      "Chrome CDP visit http://127.0.0.1:5176/projects/project_hanno_ai_hardware"
+    ]
+  },
+  "results": {
+    "bp_initialization": {
+      "status": "pass_after_self_heal",
+      "job_count": 16,
+      "prompt": "bp_deconstructor_v2",
+      "required_fields_present": [
+        "title",
+        "seniority",
+        "responsibilities",
+        "mustHaveSkills",
+        "niceToHaveSkills",
+        "targetCompanies",
+        "exclusionSignals",
+        "interviewQuestions",
+        "scoringRubric",
+        "searchStrategy"
+      ],
+      "notes": [
+        "First live attempt returned malformed JSON.",
+        "Second accepted 7 jobs before minimumRoleCount gate was added.",
+        "Final accepted 16 jobs."
+      ]
+    },
+    "resume_import": {
+      "status": "pass_after_self_heal",
+      "tasks": [
+        "b32f60b50466 done",
+        "c1abb2c02af8 done"
+      ],
+      "candidates": [
+        {
+          "name": "张载德",
+          "email": null,
+          "pipelineStatus": "sourced",
+          "parser": "docling",
+          "provider": "docling",
+          "parserConfidence": 0.9,
+          "degradedReason": null,
+          "confidence": 0.62
+        },
+        {
+          "name": "代宁",
+          "email": "15229216182@163.com",
+          "pipelineStatus": "sourced",
+          "parser": "docling",
+          "provider": "docling",
+          "parserConfidence": 0.9,
+          "degradedReason": null,
+          "confidence": 0.9
+        }
+      ],
+      "docling_quality": [
+        "No silent pdftotext fallback observed.",
+        "RapidOCR/Docling loaded real models.",
+        "Names corrected after heuristic fixes.",
+        "Zhang confidence remains 0.62 due LLM/heuristic blend; P2 quality follow-up."
+      ]
+    },
+    "public_email_compliance": {
+      "status": "contract_pass_live_product_gap",
+      "unit_regression": "tests/test_candidate_lead_ingestion.py covers public_web email => pending_compliance_review",
+      "live_note": "No productized public-site extraction endpoint was available in TS page for a non-fake live public email ingestion run.",
+      "send_gate": "outreach create/send blocks pending_compliance_review in tests/test_product_loop_api.py"
+    },
+    "outreach": {
+      "draft_id": "draft_4c9065541b20",
+      "history_id": "history_421f45a4c965",
+      "manual_patch_persisted": true,
+      "contains_smart_hardware_delivery": true,
+      "contains_candidate_evidence": true,
+      "contains_as_ai": false,
+      "delivery": {
+        "simulate_false": "503 email_delivery is not active; real send is disabled",
+        "simulate_true": "simulated history persisted"
+      },
+      "mailtrap_real_delivery": "not_run_missing_MAILTRAP_SMTP_credentials"
+    },
+    "frontend_refresh": {
+      "status": "partial_pass",
+      "project_visible": true,
+      "job_matrix_visible": true,
+      "candidates_visible": [
+        "张载德",
+        "代宁"
+      ],
+      "screenshot": "artifacts/e2e_hanno/screenshots/project-detail.png",
+      "network_failed_responses": [
+        {
+          "path": "/api/projects/project_hanno_ai_hardware/reports/latest",
+          "status": 404,
+          "classification": "expected_no_weekly_report"
+        }
+      ],
+      "gap": "Project detail page did not automatically fetch/display outreach history; /outreach/history API persisted it."
+    },
+    "postgres_pool": {
+      "observed": "active|1 idle|6 at final probe",
+      "pool_exhausted": false,
+      "long_llm_db_session": "BP route calls LLM before opening project DB session"
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG-HANNO-001",
+      "severity": "P0",
+      "step": "3.1 BP parse",
+      "root_cause": "No BP initialization API / no job matrix persistence / v2 prompts absent",
+      "fix": "Added initialize-from-bp route, job matrix columns, v2 prompts, frontend registry/types/table projection",
+      "tests": [
+        "tests/test_projects_api.py",
+        "tests/test_static_contracts.py"
+      ]
+    },
+    {
+      "id": "BUG-HANNO-002",
+      "severity": "P0",
+      "step": "3.1 BP parse",
+      "root_cause": "LLM JSON malformed and only single parse attempt",
+      "fix": "Added schema-safe retry_prompt loop up to 3 attempts, compact JSON repair prompt, minimumRoleCount gate",
+      "tests": [
+        "tests/test_projects_api.py"
+      ]
+    },
+    {
+      "id": "BUG-HANNO-003",
+      "severity": "P1",
+      "step": "3.2 resume import",
+      "root_cause": "Parser metadata not persisted; generic headings used as names",
+      "fix": "Parser last_metadata, raw_payload parser/provider/parser_confidence/degraded_reason, filename/name-label heuristics, LLM+heuristic merge",
+      "tests": [
+        "tests/test_resume_ingestion.py"
+      ]
+    },
+    {
+      "id": "BUG-HANNO-004",
+      "severity": "P0",
+      "step": "3.3 compliance",
+      "root_cause": "Public web emails were not automatically pending compliance review",
+      "fix": "Public/open web/source scrape email sources now require compliance review; resume_file/manual/referral exempt",
+      "tests": [
+        "tests/test_candidate_lead_ingestion.py"
+      ]
+    },
+    {
+      "id": "BUG-HANNO-005",
+      "severity": "P1",
+      "step": "3.4 outreach",
+      "root_cause": "LLM draft could omit candidate full name or strategy tag while still accepted",
+      "fix": "Reject LLM draft unless candidate.name and strategy_tag are present; deterministic fallback preserves contract",
+      "tests": [
+        "tests/test_product_loop_api.py"
+      ]
+    }
+  ],
+  "changed_files_summary": [
+    "app/api/routers/projects.py",
+    "app/core/prompts/bp_deconstructor_v2.yaml",
+    "app/core/prompts/outreach_agent_v2.yaml",
+    "app/models/job.py",
+    "app/db/session.py",
+    "app/schemas/job.py",
+    "app/schemas/project.py",
+    "app/providers/document.py",
+    "app/core/resume_ingestion.py",
+    "app/core/candidate_lead_ingestion.py",
+    "app/api/routers/outreach.py",
+    "frontend/src/capabilities/capabilityRegistry.js",
+    "frontend/src/features/jobs/types.ts",
+    "frontend/src/features/projects/api.ts",
+    "frontend/src/features/projects/components/MultiJobProgressTable.tsx",
+    "tests/test_projects_api.py",
+    "tests/test_resume_ingestion.py",
+    "tests/test_candidate_lead_ingestion.py",
+    "tests/test_static_contracts.py"
+  ],
+  "regressions": [
+    {
+      "description": "Full pytest initially regressed two outreach tests after v2 prompt migration",
+      "resolution": "Added LLM draft acceptance guard; full pytest now passes"
+    }
+  ],
+  "limitations": [
+    "System python is 3.10.12; all project commands used .venv Python 3.12.13.",
+    "Mailtrap SMTP credentials are unset, so no real Mailtrap sandbox delivery was attempted.",
+    "No productized frontend public-site extraction flow exists for live open-web email ingestion; backend compliance contract is covered by tests.",
+    "Project detail page does not display outreach history automatically after refresh.",
+    "Weekly report endpoint returned 404 because no weekly report was generated in this run."
+  ],
+  "next_actions": {
+    "P0": [
+      "Configure MAILTRAP_SMTP_HOST/PORT/USERNAME/PASSWORD/FROM for sandbox-only real send, then rerun /outreach/send simulate=false.",
+      "Add productized public-site email extraction flow that writes extraction_method/source_url/evidence/compliance_status and exposes it in TS page."
+    ],
+    "P1": [
+      "Persist manual edit intent separately from draft body.",
+      "Expose outreach history on project detail refresh.",
+      "Add observability events for BP LLM repair attempts without logging secrets."
+    ],
+    "P2": [
+      "Improve resume LLM structured extraction for 张载德 confidence/name without relying on filename fallback.",
+      "Add a weekly report generation step to remove expected latest-report 404."
+    ]
+  }
+}

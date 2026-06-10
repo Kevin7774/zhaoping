@@ -3,11 +3,25 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+LOAD_ENV_FILE="${LOAD_ENV_FILE:-1}"
+
+load_env_file() {
+  if [[ "$LOAD_ENV_FILE" == "1" && -f "$ROOT_DIR/.env" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    . "$ROOT_DIR/.env"
+    set +a
+  fi
+}
+
+load_env_file
+
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 PUBLIC_HOST="${PUBLIC_HOST:-}"
+KILL_OLD_DEV="${KILL_OLD_DEV:-0}"
 CONDA_ENV="${CONDA_ENV:-robot_agent}"
 CONDA_BIN="${CONDA_BIN:-}"
 if [[ -z "${USE_CONDA:-}" ]]; then
@@ -42,11 +56,12 @@ cleanup() {
     done
     wait "${pids[@]}" 2>/dev/null || true
   fi
+  if [[ "${KILL_OLD_DEV:-0}" == "1" ]]; then
+    kill_known_dev_processes_on_port "backend" "$BACKEND_PORT"
+    kill_known_dev_processes_on_port "frontend" "$FRONTEND_PORT"
+  fi
   exit "$exit_code"
 }
-
-trap cleanup EXIT INT TERM
-
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "[dev] missing required command: $1" >&2
@@ -213,6 +228,113 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 }
 
+pids_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u
+    return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp "sport = :$port" 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' | sort -u
+    return 0
+  fi
+}
+
+process_cwd() {
+  local pid="$1"
+  readlink "/proc/$pid/cwd" 2>/dev/null || true
+}
+
+process_args() {
+  local pid="$1"
+  ps -p "$pid" -o args= 2>/dev/null || true
+}
+
+is_known_dev_process() {
+  local pid="$1"
+  local args
+  local cwd
+  args="$(process_args "$pid")"
+  cwd="$(process_cwd "$pid")"
+
+  if [[ "$args" == *"app.api.main:app"* ]]; then
+    return 0
+  fi
+
+  if [[ "$cwd" == "$ROOT_DIR"* ]] && [[ "$args" == *"vite"* || "$args" == *"pnpm"* || "$args" == *"npm"* || "$args" == *"node"* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+wait_for_pid_exit() {
+  local pid="$1"
+  for _ in $(seq 1 40); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+kill_known_dev_processes_on_port() {
+  local role="$1"
+  local port="$2"
+  local pid
+  local args
+  local port_pids=()
+  mapfile -t port_pids < <(pids_on_port "$port")
+  if ((${#port_pids[@]} == 0)); then
+    return 0
+  fi
+
+  for pid in "${port_pids[@]}"; do
+    if [[ -z "$pid" ]]; then
+      continue
+    fi
+    if ! is_known_dev_process "$pid"; then
+      args="$(process_args "$pid")"
+      echo "[dev] ${role} port ${port} is used by an unknown process; not killing pid=${pid}: ${args}" >&2
+      continue
+    fi
+
+    args="$(process_args "$pid")"
+    echo "[dev] stopping old ${role} process on port ${port}: pid=${pid} ${args}"
+    kill "$pid" 2>/dev/null || true
+    if ! wait_for_pid_exit "$pid"; then
+      echo "[dev] old ${role} process did not stop after SIGTERM; sending SIGKILL: pid=${pid}" >&2
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
+free_port_or_exit() {
+  local role="$1"
+  local host="$2"
+  local port="$3"
+  local bind_url="$4"
+
+  if assert_port_free "$host" "$port"; then
+    return 0
+  fi
+
+  if [[ "$KILL_OLD_DEV" == "1" ]]; then
+    kill_known_dev_processes_on_port "$role" "$port"
+  fi
+
+  if assert_port_free "$host" "$port"; then
+    return 0
+  fi
+
+  echo "[dev] ${role} port is already in use or unavailable for binding: ${bind_url}" >&2
+  if [[ "$KILL_OLD_DEV" != "1" ]]; then
+    echo "[dev] re-run with KILL_OLD_DEV=1 or use ./start.sh to stop known old dev processes first." >&2
+  fi
+  exit 1
+}
+
 wait_for_backend() {
   for _ in $(seq 1 60); do
     if curl -fsS "${BACKEND_URL}/health" >/dev/null 2>&1; then
@@ -262,6 +384,8 @@ EOF
   fi
 }
 
+trap cleanup EXIT INT TERM
+
 require_command python3
 require_command curl
 bootstrap_node_path
@@ -282,15 +406,8 @@ if [[ -z "$frontend_bin" ]]; then
   exit 1
 fi
 
-if ! assert_port_free "$BACKEND_HOST" "$BACKEND_PORT"; then
-  echo "[dev] backend port is already in use or unavailable for binding: ${BACKEND_BIND_URL}" >&2
-  exit 1
-fi
-
-if ! assert_port_free "$FRONTEND_HOST" "$FRONTEND_PORT"; then
-  echo "[dev] frontend port is already in use or unavailable for binding: ${FRONTEND_BIND_URL}" >&2
-  exit 1
-fi
+free_port_or_exit "backend" "$BACKEND_HOST" "$BACKEND_PORT" "$BACKEND_BIND_URL"
+free_port_or_exit "frontend" "$FRONTEND_HOST" "$FRONTEND_PORT" "$FRONTEND_BIND_URL"
 
 cd "$ROOT_DIR"
 

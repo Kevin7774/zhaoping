@@ -97,6 +97,22 @@ def ensure_project_schema(engine) -> None:
                 "source_task_id": "VARCHAR(64)",
             },
         )
+    if "jobs" in table_names:
+        _ensure_columns(
+            engine,
+            "jobs",
+            {
+                "seniority": "VARCHAR(64)",
+                "responsibilities": "JSON",
+                "must_have_skills": "JSON",
+                "nice_to_have_skills": "JSON",
+                "target_companies": "JSON",
+                "exclusion_signals": "JSON",
+                "interview_questions": "JSON",
+                "scoring_rubric": "JSON",
+                "search_strategy": "JSON",
+            },
+        )
     if "outreach_drafts" in table_names:
         _ensure_columns(
             engine,

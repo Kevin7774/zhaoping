@@ -242,24 +242,85 @@ sequenceDiagram
 
 ## 环境安装
 
-项目要求 Python 3.11 或更高版本；不要使用系统默认 Python 3.10 运行本项目。推荐固定使用 `robot_agent` conda 环境，当前已验证环境为 Python 3.11。
+项目开发环境优先使用仓库内 `.venv`。当前已验证运行时为 Python 3.12.13；不要使用系统默认 Python 3.10 运行本项目。
 
 ```bash
-conda create -n robot_agent python=3.11 -y
+python --version
+.venv/bin/python --version
+.venv/bin/python -m pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+pnpm --dir frontend install
+```
+
+验收标准：
+
+- `.venv/bin/python --version` 应显示 `Python 3.12.13`，或至少是项目约定的 Python 3.12 运行时。
+- `pnpm --dir frontend install` 成功后，前端开发服务由 `scripts/start_dev.sh` 或根目录 `./start.sh` 启动。
+- `.env` 不要提交到 Git；只在本机保存数据库、LLM、邮件等私密配置。
+
+如果你仍然使用 conda，可以保留 `robot_agent` 环境，但要显式确认 Python 版本符合当前项目要求：
+
+```bash
 conda activate robot_agent
 python --version
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 ```
 
-如果本机已经存在 `robot_agent` 环境，直接激活并补齐依赖：
+## 持久 PostgreSQL
+
+本地长期开发推荐用 Docker volume 持久化 PostgreSQL 数据。下面命令只绑定到 `127.0.0.1`，不会把数据库暴露到局域网或公网：
 
 ```bash
-conda activate robot_agent
-python --version
-pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+docker volume create zhaoping_pg_data
+
+docker run -d \
+  --name zhaoping-postgres \
+  --restart unless-stopped \
+  -e POSTGRES_USER=zhaoping \
+  -e POSTGRES_PASSWORD='换成你的本机密码' \
+  -e POSTGRES_DB=zhaoping \
+  -p 127.0.0.1:55432:5432 \
+  -v zhaoping_pg_data:/var/lib/postgresql/data \
+  postgres:16-alpine
 ```
 
-`python --version` 必须显示 `Python 3.11.x`。如果显示 `Python 3.10.x`，说明没有进入正确环境。
+如果容器已经创建过，后续只需要：
+
+```bash
+docker start zhaoping-postgres
+```
+
+`.env` 中配置后端项目库和任务库：
+
+```bash
+PROJECT_DATABASE_URL=postgresql+psycopg://zhaoping:换成你的本机密码@127.0.0.1:55432/zhaoping
+TASK_DATABASE_URL=postgresql+psycopg://zhaoping:换成你的本机密码@127.0.0.1:55432/zhaoping
+```
+
+验证 PostgreSQL 状态：
+
+```bash
+docker exec zhaoping-postgres pg_isready -U zhaoping -d zhaoping
+
+set -a
+source .env
+set +a
+
+.venv/bin/python - <<'PY'
+from app.db.session import project_database_url
+from app.db.task_models import task_database_url
+
+print(project_database_url())
+print(task_database_url())
+PY
+```
+
+如果密码中包含 `@`、`:`、`/`、`#` 等特殊字符，需要在 URL 中做百分号编码。
+
+备份示例：
+
+```bash
+docker exec zhaoping-postgres pg_dump -U zhaoping zhaoping > backup.sql
+```
 
 ## 建表
 
@@ -331,7 +392,19 @@ systemctl --user status zhaoping-public.service --no-pager
 
 说明：quick tunnel 的 `trycloudflare.com` 地址适合临时演示，不保证永久固定。如果需要“一直同一个网址可访问”，应使用 Cloudflare Named Tunnel 绑定自己的域名，或部署到云平台；同时电脑不能关机或睡眠。
 
-开发模式可一键启动后端 API 与 Vite 前端控制台：
+开发模式可用根目录一键脚本启动后端 API 与 Vite 前端控制台：
+
+```bash
+./start.sh
+```
+
+`./start.sh` 会做三件事：
+
+- 自动加载仓库根目录 `.env`，让后端读取 `PROJECT_DATABASE_URL` 和 `TASK_DATABASE_URL`。
+- 默认启用 `KILL_OLD_DEV=1`，启动前清理占用开发端口的旧本项目后端/Vite 进程。
+- 委托执行 `scripts/start_dev.sh`，并把 `VITE_API_TARGET` 指到当前后端地址。
+
+保守模式可以直接运行底层脚本。它默认不杀旧进程，端口被占用时会报错退出：
 
 ```bash
 ./scripts/start_dev.sh
@@ -356,27 +429,52 @@ PUBLIC_HOST=你的电脑局域网IP ./scripts/start_dev.sh
 可用环境变量覆盖端口或环境：
 
 ```bash
-BACKEND_PORT=8010 FRONTEND_PORT=5174 CONDA_ENV=robot_agent ./scripts/start_dev.sh
+BACKEND_PORT=8010 FRONTEND_PORT=5174 ./start.sh
 ```
 
 如果 `pnpm` 或 `npm` 不在非交互式 shell 的 `PATH` 中，可以显式指定：
 
 ```bash
-PNPM_BIN=/path/to/pnpm ./scripts/start_dev.sh
+PNPM_BIN=/path/to/pnpm ./start.sh
 # 或
-NPM_BIN=/path/to/npm ./scripts/start_dev.sh
+NPM_BIN=/path/to/npm ./start.sh
 ```
 
-如果不使用 conda，改用当前 Python 环境启动后端：
+如果要保留旧进程，不自动清理端口：
 
 ```bash
-USE_CONDA=0 ./scripts/start_dev.sh
+KILL_OLD_DEV=0 ./start.sh
+```
+
+如果不想自动加载 `.env`，例如你已经在 shell 中手动注入环境变量：
+
+```bash
+LOAD_ENV_FILE=0 ./start.sh
 ```
 
 只启动 API：
 
 ```bash
-conda run -n robot_agent uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+set -a
+source .env
+set +a
+
+.venv/bin/python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000
+```
+
+如果看到 `address already in use`，说明端口已有进程占用。推荐直接使用：
+
+```bash
+./start.sh
+```
+
+它只会清理识别为本项目旧开发服务的进程；如果端口被未知进程占用，脚本会拒绝误杀并打印占用信息。
+
+也可以手动查看占用：
+
+```bash
+ss -ltnp 'sport = :8000'
+ss -ltnp 'sport = :5173'
 ```
 
 当前接口：

@@ -138,6 +138,17 @@ export type JobMatchResponse = {
   [key: string]: unknown;
 };
 
+export type ProjectBpInitializeResponse = {
+  projectId: string;
+  projectName: string;
+  promptName: string;
+  jobCount: number;
+  jobs: JobProfile[];
+  industryReading?: string | null;
+  technicalAssumptions: string[];
+  coverageGaps: string[];
+};
+
 export type CandidateSearchSchedule = {
   id: number;
   projectId: string;
@@ -172,6 +183,15 @@ type JobBackendResponse = {
   projectId: string;
   title?: string;
   headcount?: number | null;
+  seniority?: string | null;
+  responsibilities?: string[] | null;
+  mustHaveSkills?: string[] | null;
+  niceToHaveSkills?: string[] | null;
+  targetCompanies?: string[] | null;
+  exclusionSignals?: string[] | null;
+  interviewQuestions?: string[] | null;
+  scoringRubric?: Record<string, unknown> | null;
+  searchStrategy?: Record<string, unknown> | null;
   status?: string | null;
   pipelineStatus?: string | null;
   candidateCount?: number | null;
@@ -210,6 +230,19 @@ export function getProjectJobs(projectId: string, options: ListQueryOptions = {}
   return apiClient
     .get<JobBackendResponse[]>(`/projects/${encodeURIComponent(projectId)}/jobs`, { query: options })
     .then((jobs) => jobs.map(mapJob));
+}
+
+export async function initializeProjectFromBp(
+  projectId: string,
+  request: { projectName: string; bpFilePath: string; llmService?: string | null },
+): Promise<ProjectBpInitializeResponse> {
+  const response = await apiClient.post<
+    Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] }
+  >(`/projects/${encodeURIComponent(projectId)}/initialize-from-bp`, request);
+  return {
+    ...response,
+    jobs: response.jobs.map(mapJob),
+  };
 }
 
 export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {
@@ -517,6 +550,15 @@ function mapJob(job: JobBackendResponse): JobProfile {
     jobProfileId: job.id,
     roleName: job.title || "—",
     headcount,
+    seniority: job.seniority ?? undefined,
+    responsibilities: Array.isArray(job.responsibilities) ? job.responsibilities : [],
+    mustHaveSkills: Array.isArray(job.mustHaveSkills) ? job.mustHaveSkills : [],
+    niceToHaveSkills: Array.isArray(job.niceToHaveSkills) ? job.niceToHaveSkills : [],
+    targetCompanies: Array.isArray(job.targetCompanies) ? job.targetCompanies : [],
+    exclusionSignals: Array.isArray(job.exclusionSignals) ? job.exclusionSignals : [],
+    interviewQuestions: Array.isArray(job.interviewQuestions) ? job.interviewQuestions : [],
+    scoringRubric: job.scoringRubric ?? {},
+    searchStrategy: job.searchStrategy ?? {},
     priorityLevel: priorityFromHeadcount(headcount ?? 0),
     pipelineStatus: status,
     candidateCount,
