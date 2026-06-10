@@ -1557,6 +1557,13 @@ export function ProjectDetailPage() {
                 </label>
               ))}
             </div>
+            <div className="mt-2 space-y-1">
+              {SEARCH_SOURCE_LAYER_OPTIONS.filter((option) => option.hint).map((option) => (
+                <p key={`${option.value}-hint`} className="text-[11px] leading-4 text-[#6B7280]">
+                  <span className="font-medium text-[#374151]">{option.label}</span>：{option.hint}
+                </p>
+              ))}
+            </div>
             </div>
           </details>
           <MultiJobProgressTable

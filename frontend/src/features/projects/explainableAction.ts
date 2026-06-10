@@ -61,10 +61,10 @@ export const SEARCH_EXECUTION_POLICY_OPTIONS: Array<{ value: SearchExecutionPoli
   { value: "deep_live", label: "深度联网" },
 ];
 
-export const SEARCH_SOURCE_LAYER_OPTIONS: Array<{ value: SearchSourceLayer; label: string; highRisk?: boolean }> = [
+export const SEARCH_SOURCE_LAYER_OPTIONS: Array<{ value: SearchSourceLayer; label: string; hint?: string; highRisk?: boolean }> = [
   { value: "liveWeb", label: "开放网页" },
   { value: "academic", label: "学术" },
-  { value: "codeModel", label: "代码/模型" },
+  { value: "codeModel", label: "GitHub/代码/模型", hint: "GitHub 搜人、Repo、Code、Topic + Hugging Face 模型。" },
   { value: "peopleDatabase", label: "人脉库" },
   { value: "social", label: "社媒" },
   { value: "newsFunding", label: "新闻融资" },

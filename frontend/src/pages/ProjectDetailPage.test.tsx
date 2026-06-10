@@ -570,6 +570,8 @@ describe("ProjectDetailPage backend hardening", () => {
 
     await screen.findByRole("heading", { name: "真实后端项目" });
     fireEvent.click(screen.getByText("展开设置"));
+    expect(screen.getAllByText("GitHub/代码/模型").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/GitHub 搜人、Repo、Code、Topic/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("搜索深度"), { target: { value: "deep_live" } });
     fireEvent.click(screen.getByLabelText("网页抓取"));
     fireEvent.click(screen.getByLabelText("尽调源"));
