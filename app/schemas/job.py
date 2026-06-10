@@ -16,6 +16,19 @@ class JobCreate(JobRequest):
     project_id: str = Field(min_length=1, max_length=64)
 
 
+class JobRationale(CamelModel):
+    why_needed: str | None = None
+    bp_evidence: list[str] = Field(default_factory=list)
+    business_commitments: list[str] = Field(default_factory=list)
+    capability_gaps: list[str] = Field(default_factory=list)
+    why_hire_not_vendor: str | None = None
+    if_not_hired_risk: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    first_90_day_outcomes: list[str] = Field(default_factory=list)
+    hiring_priority: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
 class JobResponse(CamelModel):
     id: str
     project_id: str
@@ -34,3 +47,4 @@ class JobResponse(CamelModel):
     interview_questions: list[str] | None = None
     scoring_rubric: dict[str, int | float | str] | None = None
     search_strategy: dict[str, str | list[str]] | None = None
+    rationale: JobRationale | None = None

@@ -5,6 +5,7 @@ type WeeklyReportCardProps = {
   onGenerate?: () => void;
   canGenerate?: boolean;
   disabledReason?: string;
+  error?: string | null;
 };
 
 function hasReport(report: WeeklyReport) {
@@ -36,7 +37,7 @@ function ReportBlock({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-export function WeeklyReportCard({ report, onGenerate, canGenerate = true, disabledReason }: WeeklyReportCardProps) {
+export function WeeklyReportCard({ report, onGenerate, canGenerate = true, disabledReason, error }: WeeklyReportCardProps) {
   const reportReady = hasReport(report);
 
   return (
@@ -53,6 +54,12 @@ export function WeeklyReportCard({ report, onGenerate, canGenerate = true, disab
           生成周报
         </button>
       </div>
+
+      {error ? (
+        <div className="mt-4 rounded-[10px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[13px] leading-5 text-[#B91C1C]">
+          {error}
+        </div>
+      ) : null}
 
       {reportReady ? (
         <div className="mt-4 space-y-4">

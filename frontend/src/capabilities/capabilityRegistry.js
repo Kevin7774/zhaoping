@@ -17,6 +17,8 @@ export const ARTIFACT_TYPES = [
 ]
 
 export const PATH_PRODUCTIZATION = {
+  '/auth/login': 'productized',
+  '/auth/me': 'productized',
   '/health': 'system',
   '/integrations/env': 'system',
   '/integrations/status': 'system',
@@ -64,10 +66,10 @@ export const PATH_PRODUCTIZATION = {
   '/tasks/{task_id}/retry': 'system',
   '/tasks/{task_id}/stream': 'system',
   '/workflow/meta': 'system',
-  '/workflow/sessions': 'productized',
-  '/workflow/sessions/{task_id}/nodes/{node_id}/retry': 'productized',
-  '/workflow/sessions/{task_id}/nodes/{node_id}/run': 'productized',
-  '/workflow/sessions/{task_id}/nodes/{node_id}/skip': 'productized',
+  '/workflow/sessions': 'system',
+  '/workflow/sessions/{task_id}/nodes/{node_id}/retry': 'system',
+  '/workflow/sessions/{task_id}/nodes/{node_id}/run': 'system',
+  '/workflow/sessions/{task_id}/nodes/{node_id}/skip': 'system',
   '/workflows/run': 'productized',
   '/workflows/validate': 'system',
 }

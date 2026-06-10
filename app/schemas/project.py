@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -49,6 +49,11 @@ class ProjectResearchTraceItem(CamelModel):
     risk: str | None = Field(default=None, max_length=2000)
 
 
+class ProjectRoleRejection(CamelModel):
+    title: str = Field(min_length=1, max_length=128)
+    reasons: list[str] = Field(default_factory=list)
+
+
 class ProjectBpInitializeResponse(CamelModel):
     project_id: str
     project_name: str
@@ -60,3 +65,9 @@ class ProjectBpInitializeResponse(CamelModel):
     technical_assumptions: list[str] = Field(default_factory=list)
     coverage_gaps: list[str] = Field(default_factory=list)
     research_trace: list[ProjectResearchTraceItem] = Field(default_factory=list)
+    # Five-stage pipeline outputs (auditable chain commitments -> capabilities -> gaps -> roles).
+    claims: dict[str, Any] | None = None
+    capability_graph: dict[str, Any] | None = None
+    gap_analysis: dict[str, Any] | None = None
+    rejected_roles: list[ProjectRoleRejection] = Field(default_factory=list)
+    generation_degraded: bool = False

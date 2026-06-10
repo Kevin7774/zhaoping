@@ -16,9 +16,23 @@ export type FunnelStageProgress = {
   status: StepStatus;
 };
 
+export type JobRationale = {
+  whyNeeded?: string | null;
+  bpEvidence?: string[];
+  businessCommitments?: string[];
+  capabilityGaps?: string[];
+  whyHireNotVendor?: string | null;
+  ifNotHiredRisk?: string | null;
+  dependencies?: string[];
+  first90DayOutcomes?: string[];
+  hiringPriority?: string | null;
+  confidence?: number | null;
+};
+
 export type JobProfile = {
   jobProfileId: string;
   roleName: string;
+  rationale?: JobRationale | null;
   headcount?: number;
   seniority?: string;
   responsibilities?: string[];

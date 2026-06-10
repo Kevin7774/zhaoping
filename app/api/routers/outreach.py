@@ -11,11 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_optional_current_user
 from app.core.prompt_config import load_system_prompt
 from app.core.integration_status import get_integration_status
 from app.core.router import get_router
 from app.db.session import get_project_session
-from app.models import Candidate, Job, JobCandidate, OutreachDraft, OutreachHistory, Project
+from app.models import Candidate, Job, JobCandidate, OutreachDraft, OutreachHistory, Project, User
 from app.schemas.outreach import (
     OutreachDraftPatchRequest,
     OutreachDraftRequest,
@@ -43,6 +44,7 @@ OUTREACH_FORBIDDEN_PHRASES = (
 def create_outreach_draft(
     request: OutreachDraftRequest,
     session: Session = Depends(get_project_session),
+    current_user: User | None = Depends(get_optional_current_user),
 ) -> OutreachDraftResponse:
     project = _require_project(session, request.project_id)
     job = _require_job(session, request.job_id, request.project_id)
@@ -60,6 +62,7 @@ def create_outreach_draft(
         body=_build_backend_draft(project, job, candidate, strategy_tag),
         strategy_tag=strategy_tag,
         status="draft",
+        created_by_user_id=current_user.id if current_user else None,
         created_at=now,
         updated_at=now,
     )
@@ -92,6 +95,7 @@ def update_outreach_draft(
 def send_outreach_draft(
     request: OutreachSendRequest,
     session: Session = Depends(get_project_session),
+    current_user: User | None = Depends(get_optional_current_user),
 ) -> OutreachHistoryRecord:
     draft = _require_draft(session, request.draft_id)
     if request.decision != "approve":
@@ -112,6 +116,7 @@ def send_outreach_draft(
             session,
             draft=draft,
             candidate=candidate,
+            current_user=current_user,
             status="blocked_simulation",
             delivery_mode="simulated",
             provider_status=f"blocked_by_compliance:{compliance_status}",
@@ -130,6 +135,7 @@ def send_outreach_draft(
                 to=candidate.email,
                 subject=draft.subject,
                 body=draft.body,
+                sender_email=current_user.email if current_user else None,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"email_delivery send failed: {exc}") from exc
@@ -141,6 +147,7 @@ def send_outreach_draft(
         session,
         draft=draft,
         candidate=candidate,
+        current_user=current_user,
         status=history_status,
         delivery_mode=delivery_mode,
         provider_status=provider_status,
@@ -152,6 +159,7 @@ def _record_outreach_history(
     *,
     draft: OutreachDraft,
     candidate: Candidate,
+    current_user: User | None,
     status: str,
     delivery_mode: str,
     provider_status: str,
@@ -167,12 +175,14 @@ def _record_outreach_history(
         draft_id=draft.id,
         segment_id=draft.segment_id,
         email=candidate.email,
+        sender_email=current_user.email if current_user else None,
         strategy_tag=draft.strategy_tag,
         subject=draft.subject,
         body=draft.body,
         status=status,
         delivery_mode=delivery_mode,
         provider_status=provider_status,
+        sent_by_user_id=current_user.id if current_user else None,
         created_at=now,
     )
     session.add(history)
@@ -453,10 +463,10 @@ def _email_delivery_active() -> bool:
     )
 
 
-def _send_real_email(*, to: str, subject: str, body: str) -> dict[str, Any]:
+def _send_real_email(*, to: str, subject: str, body: str, sender_email: str | None = None) -> dict[str, Any]:
     service_name = "mailtrap_smtp_email" if _should_use_mailtrap() else None
     provider = get_router().email_delivery(service_name) if service_name else get_router().email_delivery()
-    return provider.send(to=to, subject=subject, text_body=body, approved=True)
+    return provider.send(to=to, subject=subject, text_body=body, sender_email=sender_email, approved=True)
 
 
 def _provider_status(result: dict[str, Any]) -> str:
@@ -527,6 +537,7 @@ def _draft_response(draft: OutreachDraft) -> OutreachDraftResponse:
         body=draft.body,
         status=draft.status,
         strategy_tag=draft.strategy_tag,
+        created_by_user_id=draft.created_by_user_id,
         backend_generated=True,
         created_at=_as_utc(draft.created_at),
         updated_at=_as_utc(draft.updated_at),
@@ -542,6 +553,8 @@ def _history_response(history: OutreachHistory) -> OutreachHistoryRecord:
         draft_id=history.draft_id,
         segment_id=history.segment_id,
         email=history.email,
+        sender_email=history.sender_email,
+        sent_by_user_id=history.sent_by_user_id,
         strategy_tag=history.strategy_tag,
         subject=history.subject,
         body=history.body,

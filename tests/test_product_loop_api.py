@@ -47,6 +47,36 @@ def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
         app.dependency_overrides.clear()
 
 
+def _auth_headers(client: TestClient, email: str = "recruiter@hanno.ai") -> dict[str, str]:
+    response = client.post("/auth/login", json={"email": email, "name": "Recruiter"})
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['accessToken']}"}
+
+
+def test_company_email_login_returns_current_user_and_org(client: TestClient) -> None:
+    login_response = client.post("/auth/login", json={"email": "Recruiter@Hanno.AI", "name": "Recruiter"})
+
+    assert login_response.status_code == 200
+    login = login_response.json()
+    assert login["tokenType"] == "bearer"
+    assert login["user"]["email"] == "recruiter@hanno.ai"
+    assert login["user"]["orgId"] == login["org"]["orgId"]
+    assert login["org"]["domain"] == "hanno.ai"
+
+    me_response = client.get("/auth/me", headers={"Authorization": f"Bearer {login['accessToken']}"})
+
+    assert me_response.status_code == 200
+    assert me_response.json()["user"]["email"] == "recruiter@hanno.ai"
+    assert me_response.json()["org"]["domain"] == "hanno.ai"
+
+
+def test_company_email_login_rejects_public_email_domains(client: TestClient) -> None:
+    response = client.post("/auth/login", json={"email": "recruiter@gmail.com"})
+
+    assert response.status_code == 422
+    assert "company email" in response.json()["detail"].lower()
+
+
 def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
     draft_response = client.post(
         "/outreach/draft",
@@ -108,6 +138,8 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
             "draftId": draft["draftId"],
             "segmentId": None,
             "email": "alex.chen@example.com",
+            "senderEmail": None,
+            "sentByUserId": None,
             "strategyTag": "场景叙事类",
             "subject": "更新后的主题",
             "body": "人工编辑后的正文",
@@ -117,6 +149,34 @@ def test_outreach_draft_edit_send_and_history_loop(client: TestClient) -> None:
             "createdAt": send_result["createdAt"],
         }
     ]
+
+
+def test_outreach_records_logged_in_sender_and_user_ids(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    draft_response = client.post(
+        "/outreach/draft",
+        headers=headers,
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    assert draft["createdByUserId"]
+
+    send_response = client.post(
+        "/outreach/send",
+        headers=headers,
+        json={"draftId": draft["draftId"], "decision": "approve", "simulate": True},
+    )
+
+    assert send_response.status_code == 200
+    history = send_response.json()
+    assert history["senderEmail"] == "recruiter@hanno.ai"
+    assert history["sentByUserId"] == draft["createdByUserId"]
 
 
 def test_outreach_draft_allows_hardcore_strategy_tag_for_kpi_grouping(client: TestClient) -> None:
@@ -454,6 +514,7 @@ def test_outreach_real_send_uses_email_delivery_provider(
             subject: str,
             text_body: str,
             html_body: str | None = None,
+            sender_email: str | None = None,
             approved: bool = False,
         ) -> dict[str, object]:
             sent.update(
@@ -462,6 +523,7 @@ def test_outreach_real_send_uses_email_delivery_provider(
                     "subject": subject,
                     "text_body": text_body,
                     "html_body": html_body,
+                    "sender_email": sender_email,
                     "approved": approved,
                 }
             )
@@ -496,6 +558,54 @@ def test_outreach_real_send_uses_email_delivery_provider(
     assert sent["approved"] is True
     assert sent["subject"] == draft_response.json()["subject"]
     assert sent["text_body"] == draft_response.json()["body"]
+
+
+def test_outreach_real_send_uses_logged_in_email_as_sender(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _auth_headers(client, "talent.partner@hanno.ai")
+    sent: dict[str, object] = {}
+
+    class FakeEmailDelivery:
+        def send(
+            self,
+            *,
+            to: str,
+            subject: str,
+            text_body: str,
+            html_body: str | None = None,
+            sender_email: str | None = None,
+            approved: bool = False,
+        ) -> dict[str, object]:
+            sent.update({"sender_email": sender_email, "approved": approved, "to": to})
+            return {"status": "sent", "provider": "mailtrap_smtp_email", "message_id": "mailtrap-msg-2"}
+
+    class FakeRouter:
+        def email_delivery(self) -> FakeEmailDelivery:
+            return FakeEmailDelivery()
+
+    draft_response = client.post(
+        "/outreach/draft",
+        headers=headers,
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    monkeypatch.setattr("app.api.routers.outreach._email_delivery_active", lambda: True)
+    monkeypatch.setattr("app.api.routers.outreach.get_router", lambda: FakeRouter())
+
+    send_response = client.post(
+        "/outreach/send",
+        headers=headers,
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": False},
+    )
+
+    assert send_response.status_code == 200
+    assert sent["sender_email"] == "talent.partner@hanno.ai"
+    assert send_response.json()["senderEmail"] == "talent.partner@hanno.ai"
 
 
 def test_segments_query_save_list_and_detail(client: TestClient) -> None:
@@ -538,10 +648,74 @@ def test_segments_query_save_list_and_detail(client: TestClient) -> None:
     assert detail_response.json()["candidates"][0]["id"] == "cand_lin_chen"
 
 
+def test_segments_query_filters_source_platform_and_outreach_status(client: TestClient) -> None:
+    source_response = client.post(
+        "/segments/query",
+        json={
+            "projectId": "project_2026_ai_team",
+            "criteria": {"sourcePlatform": "GitHub", "outreachStatus": "not_sent"},
+        },
+    )
+
+    assert source_response.status_code == 200
+    assert source_response.json()["total"] == 1
+    assert source_response.json()["candidates"][0]["id"] == "cand_lin_chen"
+    assert source_response.json()["candidates"][0]["outreachStatus"] == "not_sent"
+
+    draft_response = client.post(
+        "/outreach/draft",
+        json={
+            "projectId": "project_2026_ai_team",
+            "jobId": "job_vla_algorithm",
+            "candidateId": "cand_lin_chen",
+        },
+    )
+    assert draft_response.status_code == 200
+
+    drafted_response = client.post(
+        "/segments/query",
+        json={
+            "projectId": "project_2026_ai_team",
+            "criteria": {"sourcePlatform": "GitHub", "outreachStatus": "drafted"},
+        },
+    )
+    assert drafted_response.status_code == 200
+    assert drafted_response.json()["total"] == 1
+    assert drafted_response.json()["candidates"][0]["outreachStatus"] == "drafted"
+
+    sent_response_before = client.post(
+        "/segments/query",
+        json={
+            "projectId": "project_2026_ai_team",
+            "criteria": {"sourcePlatform": "GitHub", "outreachStatus": "sent"},
+        },
+    )
+    assert sent_response_before.status_code == 200
+    assert sent_response_before.json()["total"] == 0
+
+    send_response = client.post(
+        "/outreach/send",
+        json={"draftId": draft_response.json()["draftId"], "decision": "approve", "simulate": True},
+    )
+    assert send_response.status_code == 200
+
+    sent_response_after = client.post(
+        "/segments/query",
+        json={
+            "projectId": "project_2026_ai_team",
+            "criteria": {"sourcePlatform": "GitHub", "outreachStatus": "sent"},
+        },
+    )
+    assert sent_response_after.status_code == 200
+    assert sent_response_after.json()["total"] == 1
+    assert sent_response_after.json()["candidates"][0]["outreachStatus"] == "sent"
+
+
 def test_weekly_report_can_be_saved_and_reloaded_as_latest(client: TestClient) -> None:
     empty_latest = client.get("/projects/project_2026_ai_team/reports/latest")
 
-    assert empty_latest.status_code == 404
+    assert empty_latest.status_code == 204
+    assert not empty_latest.content
 
     create_response = client.post(
         "/reports/weekly",
@@ -690,6 +864,7 @@ def _seed_project(session: Session) -> None:
             current_company="Embodied AI Lab",
             city="深圳",
             email="alex.chen@example.com",
+            source_platform="GitHub",
         ),
         Candidate(
             id="cand_no_email",
@@ -697,6 +872,7 @@ def _seed_project(session: Session) -> None:
             current_company="Unknown Lab",
             city="上海",
             email=None,
+            source_platform="Paper",
         ),
     ]
     matches = [

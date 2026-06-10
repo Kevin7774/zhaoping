@@ -36,6 +36,7 @@ import {
   type ProjectBpInitializeResponse,
   type ProjectGenerationMode,
   type ProjectRecord,
+  type ProjectScenarioRunOptions,
   type RunProjectScenarioAction,
   type SegmentRecord,
   type WeeklyReport,
@@ -47,6 +48,13 @@ import { LiveTaskSummary } from "../features/projects/components/LiveTaskSummary
 import { MultiJobProgressTable } from "../features/projects/components/MultiJobProgressTable";
 import { ProjectSummaryCards } from "../features/projects/components/ProjectSummaryCards";
 import { WeeklyReportCard } from "../features/projects/components/WeeklyReportCard";
+import {
+  SEARCH_MODE_OPTIONS,
+  buildActionExplanation,
+  providerPreflightFromIntegrations,
+  providerPreflightSummary,
+  type SearchMode,
+} from "../features/projects/explainableAction";
 import { humanGateRequestFromEvent, type HumanGateRequest } from "../features/projects/humanGate";
 import { defaultFilterCriteria, type FilterCriteria } from "../features/projects/state";
 import { apiClient, type ApiRequestLogEntry } from "../shared/api/client";
@@ -191,6 +199,29 @@ function capabilityGate(
   };
 }
 
+function candidateSearchScenarioOptions(
+  searchMode: SearchMode,
+  searchGate: CapabilityGate,
+  job: JobProfile,
+  integrations: IntegrationsStatusResponse | null,
+): ProjectScenarioRunOptions {
+  const providerPreflight = providerPreflightFromIntegrations(integrations, searchMode);
+  return {
+    searchMode,
+    providerPreflight,
+    actionExplanation: buildActionExplanation({
+      actionId: "project.find_candidates",
+      label: "找候选人",
+      apiRoute: "POST /scenarios/run",
+      inputSummary: job.roleName,
+      expectedOutput: "候选人线索、人机确认、任务审计事件",
+      capabilityGate: searchGate.reason || "Search API 状态未知",
+      searchMode,
+      providerPreflight,
+    }),
+  };
+}
+
 function emptyWeeklyReport(): WeeklyReport {
   return {
     conclusion: undefined,
@@ -319,11 +350,14 @@ export function ProjectDetailPage() {
   const [segmentPreviewCount, setSegmentPreviewCount] = useState<number | null>(null);
   const [savedSegment, setSavedSegment] = useState<SegmentRecord | null>(null);
   const [persistedWeeklyReport, setPersistedWeeklyReport] = useState<WeeklyReport | null>(null);
+  const [weeklyReportError, setWeeklyReportError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<{ jobName: string; response: JobMatchResponse } | null>(null);
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
   const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
   const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
   const [bpGenerationMode, setBpGenerationMode] = useState<ProjectGenerationMode>("bp_plus_prompt");
+  const [candidateSearchMode, setCandidateSearchMode] = useState<SearchMode>("live_recruiting");
+  const [actionExplanationText, setActionExplanationText] = useState<string | null>(null);
   const [bpFilePath, setBpFilePath] = useState(DEFAULT_BP_FILE_PATH);
   const [bpProjectPrompt, setBpProjectPrompt] = useState("");
   const [bpIndustryResearchPrompt, setBpIndustryResearchPrompt] = useState("");
@@ -348,7 +382,9 @@ export function ProjectDetailPage() {
   const [humanGateBusy, setHumanGateBusy] = useState(false);
   const completedTaskIdsRef = useRef<Set<string>>(new Set());
   const savedWeeklyReportTaskIdsRef = useRef<Set<string>>(new Set());
+  const failedWeeklyReportTaskIdsRef = useRef<Set<string>>(new Set());
   const handledHumanGateKeysRef = useRef<Set<string>>(new Set());
+  const emailDraftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
     events,
@@ -469,11 +505,14 @@ export function ProjectDetailPage() {
     setSegmentPreviewCount(null);
     setSavedSegment(null);
     setPersistedWeeklyReport(null);
+    setWeeklyReportError(null);
     setMatchResult(null);
     setMatchingJobId(null);
     setCandidateSearchSchedules([]);
     setScheduleBusyJobId(null);
     setBpGenerationMode("bp_plus_prompt");
+    setCandidateSearchMode("live_recruiting");
+    setActionExplanationText(null);
     setBpFilePath(DEFAULT_BP_FILE_PATH);
     setBpProjectPrompt("");
     setBpIndustryResearchPrompt("");
@@ -506,11 +545,20 @@ export function ProjectDetailPage() {
       !savedWeeklyReportTaskIdsRef.current.has(activeTaskId)
     ) {
       const report = weeklyReportFromTaskResult(taskSnapshot.result);
-      if (!report) return;
+      if (!report) {
+        if (!failedWeeklyReportTaskIdsRef.current.has(activeTaskId)) {
+          failedWeeklyReportTaskIdsRef.current.add(activeTaskId);
+          const message =
+            "周报解析失败：后端任务已完成，但结果中没有 conclusion/keyProgress/topCandidates/risks/nextActions 或中文等价字段。";
+          setWeeklyReportError(message);
+        }
+        return;
+      }
       savedWeeklyReportTaskIdsRef.current.add(activeTaskId);
       saveWeeklyReport(projectId, activeTaskId, report)
         .then((record) => {
           setPersistedWeeklyReport(record.content);
+          setWeeklyReportError(null);
           setToast("周报已保存，页面刷新后可读取最近周报");
         })
         .catch((error) => {
@@ -582,6 +630,14 @@ export function ProjectDetailPage() {
   const segmentCreateGate = useMemo(
     () => capabilityGate(integrations, "segments.create", "人群保存 API", integrationsError),
     [integrations, integrationsError],
+  );
+  const searchProviderPreflight = useMemo(
+    () => providerPreflightFromIntegrations(integrations, candidateSearchMode),
+    [candidateSearchMode, integrations],
+  );
+  const searchProviderSummary = useMemo(
+    () => providerPreflightSummary(searchProviderPreflight),
+    [searchProviderPreflight],
   );
   const actionAvailability = useMemo(
     () => ({
@@ -749,10 +805,17 @@ export function ProjectDetailPage() {
     setRunningCandidateId(null);
     const actionLabel =
       action === "job_analysis" ? "岗位分析" : action === "find_candidates" ? "找候选人" : "候选人评估";
+    const scenarioOptions: ProjectScenarioRunOptions =
+      action === "find_candidates" ? candidateSearchScenarioOptions(candidateSearchMode, searchGate, job, integrations) : {};
+    if (action === "find_candidates") {
+      setActionExplanationText(
+        `动作解释：${scenarioOptions.actionExplanation?.label ?? actionLabel} · ${scenarioOptions.actionExplanation?.apiRoute ?? "POST /scenarios/run"} · ${scenarioOptions.searchMode}`,
+      );
+    }
     setToast(`正在启动${actionLabel}任务`);
 
     try {
-      const created = await runProjectScenario(projectId, job, action);
+      const created = await runProjectScenario(projectId, job, action, scenarioOptions);
       setActiveTaskId(created.task_id);
       setActiveTaskAction(action);
       setTaskPanelOpen(true);
@@ -791,6 +854,7 @@ export function ProjectDetailPage() {
       setToast(weeklyReportGate.reason || "招聘周报不可用");
       return;
     }
+    setWeeklyReportError(null);
     setToast("正在启动招聘周报任务");
     try {
       const created = await runWeeklyReport(projectId, project.name);
@@ -1040,9 +1104,9 @@ export function ProjectDetailPage() {
   const statusText = projectStatusLabel[project.status] ?? project.status;
 
   return (
-    <div className="pb-8">
-      <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-        <div>
+    <div className="min-w-0 pb-8">
+      <section className="mb-5 flex min-w-0 flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-[24px] font-bold leading-8 text-[#111827]">{project.name}</h1>
             <span className={`rounded-full px-2 py-0.5 text-[12px] font-medium ${statusBadge(project.status)}`}>
@@ -1054,7 +1118,21 @@ export function ProjectDetailPage() {
             {formatDateTime(project.updatedAt)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-wrap items-end gap-2">
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            搜索模式
+            <select
+              value={candidateSearchMode}
+              onChange={(event) => setCandidateSearchMode(event.currentTarget.value as SearchMode)}
+              className="mt-1 h-[38px] w-[132px] rounded-[10px] border border-[#E5E7EB] bg-white px-2.5 text-[13px] text-[#111827]"
+            >
+              {SEARCH_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             onClick={handleRunFirstJob}
@@ -1075,6 +1153,10 @@ export function ProjectDetailPage() {
           </button>
           <button
             type="button"
+            onClick={() => {
+              setActionExplanationText("动作解释：更多 · 打开任务记录 · 不调用后端 API");
+              setTaskPanelOpen(true);
+            }}
             className="grid h-[38px] w-[38px] place-items-center rounded-[10px] border border-[#E5E7EB] bg-white text-[18px] leading-none text-[#6B7280]"
             aria-label="更多"
           >
@@ -1092,8 +1174,14 @@ export function ProjectDetailPage() {
 
       <ProjectSummaryCards {...projectSummary} />
 
+      {actionExplanationText ? (
+        <section className="mt-5 rounded-[12px] border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-3 text-[13px] leading-5 text-[#1E40AF]">
+          {actionExplanationText}
+        </section>
+      ) : null}
+
       {integrationsError || integrations ? (
-        <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+      <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3 text-[13px] leading-5 text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
           <div className="font-semibold text-[#111827]">后端能力状态</div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
             <span>Search：{capabilityStatusLabel(searchGate.status)}</span>
@@ -1102,12 +1190,27 @@ export function ProjectDetailPage() {
             <span>Vector：{capabilityStatusLabel(vectorGate.status)}</span>
             <span>Database：{capabilityStatusLabel(databaseGate.status)}</span>
             <span>Email Delivery：{capabilityStatusLabel(emailDeliveryGate.status)}</span>
+            <span>
+              搜索预检：{searchProviderSummary.ready}/{searchProviderSummary.total} 可用
+              {searchProviderSummary.blocked ? ` · ${searchProviderSummary.blocked} 阻断` : ""}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {searchProviderPreflight.slice(0, 6).map((item) => (
+              <span
+                key={`${item.service}-${item.status}`}
+                className="rounded-[7px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] text-[#4B5563]"
+                title={item.reason}
+              >
+                {item.service}: {capabilityStatusLabel(item.status)}
+              </span>
+            ))}
           </div>
           {integrationsError ? <div className="mt-1 text-[#EF4444]">{integrationsError}</div> : null}
         </section>
       ) : null}
 
-      <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+      <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
           <div>
             <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位智能生成</h2>
@@ -1215,6 +1318,11 @@ export function ProjectDetailPage() {
               </div>
               <div className="text-[12px] text-[#6B7280]">{bpPreview.projectName}</div>
             </div>
+            {bpPreview.generationDegraded ? (
+              <div className="mt-2 rounded-[10px] border border-[#FCD34D] bg-[#FFFBEB] px-3 py-2 text-[12px] leading-[18px] text-[#92400E]">
+                降级产出：LLM 不可用或超时，本次岗位矩阵未经过「承诺 → 能力 → 缺口 → 岗位」审计链，仅用于先启动项目，请稍后重新预览。
+              </div>
+            ) : null}
             {bpPreview.industryReading ? (
               <p className="mt-2 text-[12px] leading-[18px] text-[#6B7280]">{bpPreview.industryReading}</p>
             ) : null}
@@ -1232,20 +1340,50 @@ export function ProjectDetailPage() {
             <div className="mt-3 grid max-h-[320px] gap-2 overflow-auto md:grid-cols-2">
               {bpPreview.jobs.map((job) => (
                 <div key={job.jobProfileId} className="rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
-                  <div className="text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[13px] font-semibold text-[#111827]">{job.roleName}</div>
+                    {job.rationale?.hiringPriority ? (
+                      <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-medium text-[#2563EB]">
+                        {job.rationale.hiringPriority}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="mt-1 text-[12px] text-[#6B7280]">
                     HC {job.headcount ?? 1}
                     {(job.mustHaveSkills ?? []).length ? ` · ${(job.mustHaveSkills ?? []).slice(0, 3).join(" / ")}` : ""}
                   </div>
+                  {job.rationale?.whyNeeded ? (
+                    <div className="mt-1 text-[12px] leading-[18px] text-[#374151]">为什么需要：{job.rationale.whyNeeded}</div>
+                  ) : null}
+                  {job.rationale?.ifNotHiredRisk ? (
+                    <div className="mt-1 text-[12px] leading-[18px] text-[#92400E]">不招的风险：{job.rationale.ifNotHiredRisk}</div>
+                  ) : null}
+                  {(job.rationale?.bpEvidence ?? []).length ? (
+                    <div className="mt-1 truncate text-[11px] text-[#6B7280]" title={(job.rationale?.bpEvidence ?? []).join("\n")}>
+                      BP 证据：{(job.rationale?.bpEvidence ?? [])[0]}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
+            {(bpPreview.rejectedRoles ?? []).length ? (
+              <div className="mt-3 rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
+                <div className="text-[12px] font-semibold text-[#111827]">
+                  Critic Gate 拒绝 {(bpPreview.rejectedRoles ?? []).length} 个岗位（不会写入数据库）
+                </div>
+                {(bpPreview.rejectedRoles ?? []).map((item) => (
+                  <div key={item.title} className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
+                    {item.title}：{item.reasons.join("；")}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>
 
-      <section className="my-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-        <div className="grid grid-cols-6 items-start">
+      <section className="my-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+        <div className="grid grid-cols-3 items-start gap-y-4 sm:grid-cols-6">
           {steps.map((step, index) => {
             const state = workflowStatus(index, jobs, candidates, taskSnapshot?.status ?? null, activeTaskAction);
             const isDone = state === "done";
@@ -1255,7 +1393,7 @@ export function ProjectDetailPage() {
                 {index > 0 ? (
                   <div
                     className={[
-                      "absolute right-1/2 top-[14px] h-0.5 w-full",
+                      "absolute right-1/2 top-[14px] hidden h-0.5 w-full sm:block",
                       workflowStatus(index - 1, jobs, candidates, taskSnapshot?.status ?? null, activeTaskAction) === "done"
                         ? "bg-[#2563EB]"
                         : "bg-[#E5E7EB]",
@@ -1283,8 +1421,8 @@ export function ProjectDetailPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-5">
           <MultiJobProgressTable
             jobs={jobs}
             candidateCounts={jobCandidateCounts}
@@ -1323,6 +1461,12 @@ export function ProjectDetailPage() {
             isLoadingMore={loadingMoreCandidates}
             loadedCount={candidates.length}
             onLoadMore={handleLoadMoreCandidates}
+            onViewAll={() => {
+              setVisibleCandidates(candidates);
+              setSegmentPreviewCount(null);
+              setActionExplanationText("动作解释：查看全部候选人 · 使用当前已加载候选人数据 · 不调用后端 API");
+              setToast("已显示当前已加载的全部候选人");
+            }}
             totalCount={candidateTotalCount}
           />
         </div>
@@ -1504,6 +1648,7 @@ export function ProjectDetailPage() {
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] text-[#6B7280]">正文</span>
                   <textarea
+                    ref={emailDraftTextareaRef}
                     value={emailDraft}
                     onChange={(event) => setEmailDraft(event.target.value)}
                     disabled={emailDraftLoading}
@@ -1524,6 +1669,10 @@ export function ProjectDetailPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => {
+                      emailDraftTextareaRef.current?.focus();
+                      setActionExplanationText("动作解释：编辑邮件草稿 · 聚焦本地可编辑草稿 · 不调用后端 API");
+                    }}
                     disabled={!outreachDraft}
                     className="h-9 rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151]"
                   >
@@ -1556,6 +1705,7 @@ export function ProjectDetailPage() {
             onGenerate={handleRunWeeklyReport}
             canGenerate={weeklyReportGate.enabled}
             disabledReason={weeklyReportGate.reason}
+            error={weeklyReportError}
           />
         </aside>
       </section>

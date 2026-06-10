@@ -362,19 +362,19 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+    <section className="mb-5 flex min-w-0 flex-col justify-between gap-4 lg:flex-row lg:items-start">
       <div className="min-w-0">
         <h1 className="text-[24px] font-bold leading-8 tracking-[-0.01em] text-[#111827]">{title}</h1>
         <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[#6B7280]">{subtitle}</p>
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="min-w-0 shrink-0">{action}</div> : null}
     </section>
   );
 }
 
 export function MetricStrip({ items }: { items: MetricItem[] }) {
   return (
-    <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="数据概览">
+    <section className="mb-5 grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="数据概览">
       {items.map((item) => (
         <article
           key={item.label}
@@ -403,15 +403,15 @@ export function SectionPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
+    <section className="min-w-0 overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex flex-col justify-between gap-3 rounded-t-[13px] border-b border-[#EEF2F7] bg-[#F9FAFB]/60 px-5 py-4 md:flex-row md:items-start">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">{title}</h2>
           {subtitle ? <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">{subtitle}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="min-w-0 p-5">{children}</div>
     </section>
   );
 }

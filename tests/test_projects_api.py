@@ -96,40 +96,131 @@ def test_get_project_jobs_returns_pipeline_status_and_rollups(client: TestClient
     ]
 
 
+# Distinct vocabulary per template so the critic gate's boundary-overlap check
+# does not reject fake roles as duplicates of each other.
+FAKE_ROLE_TEMPLATES = [
+    ("vla_algorithm", "VLA 算法研究员", "设计视觉语言动作模型的训练与评测闭环", ["VLA", "imitation learning"]),
+    ("edge_inference", "边缘推理优化工程师", "压缩与量化多模态模型并部署到边缘盒子", ["TensorRT", "量化部署"]),
+    ("embedded_firmware", "嵌入式固件工程师", "开发传感器接入固件与 OTA 升级通道", ["RTOS", "OTA"]),
+    ("hardware_delivery", "智能硬件交付工程师", "负责现场安装联调与备件管理", ["工控机", "现场部署"]),
+    ("data_platform", "数据平台工程师", "建设多源采集清洗与质量监控流水线", ["ETL", "数据质量"]),
+    ("rag_engineer", "RAG 知识库工程师", "搭建文档解析向量检索与证据链", ["向量数据库", "文档解析"]),
+    ("agent_workflow", "Agent 工作流工程师", "编排任务画布与人工确认节点", ["工作流引擎", "SSE"]),
+    ("fullstack_product", "全栈产品工程师", "实现客户工作台配置后台与看板", ["React", "FastAPI"]),
+    ("devops_private", "私有化部署运维工程师", "搭建离线安装监控告警与升级回滚", ["Docker", "可观测性"]),
+    ("qa_evaluation", "测试与模型评估工程师", "建立回归集端到端用例与模型评测指标", ["pytest", "模型评估"]),
+    ("security_compliance", "安全合规工程师", "设计权限审计数据留存与隐私护栏", ["权限审计", "隐私合规"]),
+    ("solution_lead", "行业解决方案专家", "把行业痛点转译为方案包与验证清单", ["售前方案", "行业研究"]),
+    ("delivery_manager", "交付项目经理", "管理里程碑风险验收与跨方协调", ["项目管理", "验收标准"]),
+    ("customer_success", "客户成功工程师", "运营上线后反馈培训与续费线索", ["客户成功", "运维支持"]),
+    ("ocr_multimodal", "OCR 多模态工程师", "构建票据表单与现场图像结构化识别", ["OCR", "多模态"]),
+    ("sales_sea", "东盟区域销售经理", "开拓东盟渠道伙伴与政企客户", ["渠道销售", "海外市场"]),
+]
+
+FAKE_EVIDENCE_QUOTE = "边缘计算与 AI 综合解决方案"
+
+
+def fake_claims_payload(quote: str) -> dict:
+    return {
+        "business_commitments": [{"id": "C1", "claim": "交付边缘 AI 综合解决方案", "quote": quote}],
+        "product_lines": [{"id": "P1", "claim": "智能硬件产品线", "quote": quote}],
+        "customer_scenarios": [],
+        "delivery_constraints": [],
+        "existing_resources": [{"id": "R1", "resource": "已有供应链与厂房", "quote": quote}],
+    }
+
+
+def fake_capability_payload(role_count: int) -> dict:
+    return {
+        "capabilities": [
+            {
+                "id": f"CAP{index}",
+                "name": f"{FAKE_ROLE_TEMPLATES[index][1]}能力",
+                "description": FAKE_ROLE_TEMPLATES[index][2],
+                "kind": "tech",
+                "supports_commitments": ["C1"],
+            }
+            for index in range(role_count)
+        ]
+    }
+
+
+def fake_gap_payload(role_count: int) -> dict:
+    return {
+        "gaps": [
+            {
+                "capability_id": f"CAP{index}",
+                "status": "missing",
+                "resolution": "hire",
+                "rationale": "长期核心能力，外包会失去交付控制。",
+                "evidence": ["C1", "R1"],
+            }
+            for index in range(role_count)
+        ]
+    }
+
+
+def fake_role_design_payload(role_count: int, quote: str = FAKE_EVIDENCE_QUOTE) -> dict:
+    roles = []
+    for index in range(role_count):
+        role_id, title, responsibility, skills = FAKE_ROLE_TEMPLATES[index]
+        roles.append(
+            {
+                "role_id": role_id,
+                "title": title,
+                "seniority": "Senior",
+                "headcount": 1,
+                "responsibilities": [responsibility],
+                "must_have_skills": skills,
+                "nice_to_have_skills": ["跨团队协作"],
+                "target_companies": ["边缘计算公司", "智能硬件厂商"],
+                "exclusion_signals": ["仅做 Demo 无交付经验"],
+                "interview_questions": [f"请拆解一次与「{title}」相关的交付故障。"],
+                "scoring_rubric": {"domain_fit": 40, "engineering_depth": 35, "delivery": 25},
+                "search_strategy": {
+                    "community": f'"{skills[0]}" AND production',
+                    "academic": f'"{skills[0]}" AND evaluation',
+                    "industry": f'"{title}"',
+                },
+                "why_needed": f"业务承诺 C1 依赖 CAP{index} 能力缺口，必须由「{title}」承接，外部资源无法覆盖。",
+                "bp_evidence": [quote],
+                "business_commitments": ["C1"],
+                "capability_gaps": [f"CAP{index}"],
+                "why_hire_not_vendor": "知识需要留在组织内，外包会失去质量控制。",
+                "if_not_hired_risk": "对应交付承诺将延期并失去客户验收。",
+                "dependencies": [],
+                "first_90_day_outcomes": ["完成首个客户场景的可验收交付"],
+                "hiring_priority": ["P0", "P1", "P2"][index % 3],
+                "confidence": 0.9,
+            }
+        )
+    return {
+        "industry_reading": "汉诺云智面向边缘计算与 AI 交付。",
+        "technical_assumptions": ["需要覆盖云边协同、硬件交付和 AI 应用工程。"],
+        "roles": roles,
+        "coverage_gaps": [],
+    }
+
+
 class FakeProjectInitLLM:
-    def __init__(self, role_count: int = 14) -> None:
+    """Stage-aware fake for the five-stage BP pipeline."""
+
+    def __init__(self, role_count: int = 14, evidence_quote: str = FAKE_EVIDENCE_QUOTE) -> None:
         self.prompts: list[str] = []
         self.role_count = role_count
+        self.evidence_quote = evidence_quote
 
     def text(self, prompt: str, max_tokens: int = 1024) -> str:
         self.prompts.append(prompt)
-        roles = []
-        for index in range(self.role_count):
-            roles.append(
-                {
-                    "role_id": f"hanno_role_{index:02d}",
-                    "title": f"汉诺云智边缘 AI 岗位 {index}",
-                    "seniority": "Senior",
-                    "responsibilities": [f"负责边缘 AI 交付链路 {index}"],
-                    "must_have_skills": ["Edge AI", "PostgreSQL", "FastAPI"],
-                    "nice_to_have_skills": ["Docling", "SSE"],
-                    "target_companies": ["边缘计算公司", "智能硬件厂商"],
-                    "exclusion_signals": ["仅做 Demo 无交付经验"],
-                    "interview_questions": ["请拆解一次现场边缘盒子部署故障。"],
-                    "scoring_rubric": {"edge_delivery": 40, "ai_engineering": 35, "safety": 25},
-                    "search_strategy": {
-                        "community": '"edge ai" AND FastAPI',
-                        "academic": '"edge computing" AND "AI"',
-                        "industry": "智能硬件 AND 边缘计算",
-                    },
-                }
-            )
-        return json.dumps({
-            "industry_reading": "汉诺云智面向边缘计算与 AI 交付。",
-            "technical_assumptions": ["需要覆盖云边协同、硬件交付和 AI 应用工程。"],
-            "roles": roles,
-            "coverage_gaps": [],
-        }, ensure_ascii=False)
+        if "stage_id: bp_claims" in prompt:
+            payload: dict = fake_claims_payload(self.evidence_quote)
+        elif "stage_id: bp_capability_graph" in prompt:
+            payload = fake_capability_payload(self.role_count)
+        elif "stage_id: bp_gap_analysis" in prompt:
+            payload = fake_gap_payload(self.role_count)
+        else:
+            payload = fake_role_design_payload(self.role_count, self.evidence_quote)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 class FakeProjectInitRouter:
@@ -141,18 +232,23 @@ class FakeProjectInitRouter:
 
 
 class SequenceProjectInitLLM(FakeProjectInitLLM):
-    def __init__(self, outputs: list[str]) -> None:
-        super().__init__(role_count=1)
-        self.outputs = outputs
+    """Injects scripted outputs for chosen stages; other calls delegate to the stage-aware base."""
+
+    def __init__(self, stage_scripts: dict[str, list[str]], role_count: int = 1) -> None:
+        super().__init__(role_count=role_count)
+        self.stage_scripts = {marker: list(outputs) for marker, outputs in stage_scripts.items()}
 
     def text(self, prompt: str, max_tokens: int = 1024) -> str:
-        self.prompts.append(prompt)
-        return self.outputs.pop(0)
+        for marker, outputs in self.stage_scripts.items():
+            if marker in prompt and outputs:
+                self.prompts.append(prompt)
+                return outputs.pop(0)
+        return super().text(prompt, max_tokens=max_tokens)
 
 
 class MessagesProjectInitLLM(FakeProjectInitLLM):
-    def __init__(self, role_count: int = 14) -> None:
-        super().__init__(role_count=role_count)
+    def __init__(self, role_count: int = 14, evidence_quote: str = FAKE_EVIDENCE_QUOTE) -> None:
+        super().__init__(role_count=role_count, evidence_quote=evidence_quote)
         self.messages_calls: list[dict] = []
 
     def messages(
@@ -268,7 +364,7 @@ def test_preview_project_from_bp_uses_json_mode_and_does_not_persist_jobs(
 
     assert response.status_code == 200
     assert response.json()["jobCount"] == 14
-    assert response.json()["jobs"][0]["title"] == "汉诺云智边缘 AI 岗位 0"
+    assert response.json()["jobs"][0]["title"] == "VLA 算法研究员"
     assert llm.messages_calls[0]["response_format"] == {"type": "json_object"}
     with session_factory() as session:
         assert session.get(Project, "project_hanno_ai_hardware") is None
@@ -280,7 +376,7 @@ def test_preview_project_roles_from_prompt_without_bp_file(
     session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    llm = MessagesProjectInitLLM(role_count=4)
+    llm = MessagesProjectInitLLM(role_count=4, evidence_quote="面向工业质检的边缘 AI 招聘项目")
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
 
     response = client.post(
@@ -298,8 +394,8 @@ def test_preview_project_roles_from_prompt_without_bp_file(
     payload = response.json()
     assert payload["jobCount"] == 4
     assert payload["generationMode"] == "prompt"
-    assert payload["researchTrace"][0]["stage"] == "项目输入"
-    assert "用户项目提示" in payload["researchTrace"][0]["summary"]
+    assert payload["researchTrace"][0]["stage"] == "业务承诺抽取"
+    assert any(item["stage"] == "Critic Gate" for item in payload["researchTrace"])
     assert "project_prompt:" in llm.prompts[0]
     assert "industry_research_prompt:" in llm.prompts[0]
     assert "bp_markdown:" not in llm.prompts[0]
@@ -318,7 +414,7 @@ def test_preview_project_from_bp_falls_back_when_llm_times_out(
     bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件、边缘计算、RAG 和私有化交付团队。", encoding="utf-8")
     llm = SlowProjectInitLLM(role_count=14)
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
-    monkeypatch.setattr(projects_router, "BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
+    monkeypatch.setattr(projects_router, "BP_PIPELINE_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
 
     response = client.post(
         "/projects/project_hanno_ai_hardware/preview-from-bp",
@@ -332,7 +428,8 @@ def test_preview_project_from_bp_falls_back_when_llm_times_out(
     payload = response.json()
     assert payload["jobCount"] == 14
     assert payload["jobs"][0]["title"] == "行业研究与解决方案负责人"
-    assert any("LLM" in item for item in payload["coverageGaps"])
+    assert payload["generationDegraded"] is True
+    assert any("timed out" in item or "LLM" in item for item in payload["coverageGaps"])
     with session_factory() as session:
         assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 0
 
@@ -348,7 +445,7 @@ def test_initialize_project_from_bp_falls_back_and_persists_when_llm_times_out(
     llm = SlowProjectInitLLM(role_count=14)
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
     monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
-    monkeypatch.setattr(projects_router, "BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
+    monkeypatch.setattr(projects_router, "BP_PIPELINE_CALL_TIMEOUT_SECONDS", 0.01, raising=False)
 
     response = client.post(
         "/projects/project_hanno_ai_hardware/initialize-from-bp",
@@ -375,12 +472,9 @@ def test_initialize_project_from_bp_retries_once_when_llm_json_is_malformed(
 ) -> None:
     bp_path = tmp_path / "bp_ai_hardware.md"
     bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
-    valid_output = FakeProjectInitLLM(role_count=1).text("seed")
     llm = SequenceProjectInitLLM(
-        [
-            '{"industry_reading":"x","roles":[{"role_id":"broken","title":"Broken"}]',
-            valid_output,
-        ]
+        {"stage_id: bp_claims": ['{"business_commitments":[{"id":"C1"']},
+        role_count=1,
     )
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
     monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
@@ -396,9 +490,9 @@ def test_initialize_project_from_bp_retries_once_when_llm_json_is_malformed(
 
     assert response.status_code == 200
     assert response.json()["jobCount"] == 1
-    assert len(llm.prompts) == 2
-    assert "校验失败原因" in llm.prompts[1]
-    assert "只输出符合 Schema 的合法 JSON" in llm.prompts[1]
+    repair_prompts = [prompt for prompt in llm.prompts if "上一次输出不合法" in prompt]
+    assert len(repair_prompts) == 1
+    assert "stage_id: bp_claims" in repair_prompts[0]
 
 
 def test_initialize_project_from_bp_allows_second_json_repair_retry(
@@ -410,11 +504,13 @@ def test_initialize_project_from_bp_allows_second_json_repair_retry(
     bp_path = tmp_path / "bp_ai_hardware.md"
     bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
     llm = SequenceProjectInitLLM(
-        [
-            '{"industry_reading":"x","roles":[{"role_id":"broken","title":"Broken"}]',
-            '{"industry_reading":"x","roles":[{"role_id":"still_broken","title":"Broken"}]',
-            FakeProjectInitLLM(role_count=1).text("seed"),
-        ]
+        {
+            "stage_id: bp_claims": [
+                '{"business_commitments":[{"id":"C1"',
+                '{"business_commitments":[],"existing_resources":[]}',
+            ]
+        },
+        role_count=1,
     )
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
     monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
@@ -430,9 +526,8 @@ def test_initialize_project_from_bp_allows_second_json_repair_retry(
 
     assert response.status_code == 200
     assert response.json()["jobCount"] == 1
-    assert len(llm.prompts) == 3
-    assert "输出紧凑 JSON" in llm.prompts[1]
-    assert "输出紧凑 JSON" in llm.prompts[2]
+    repair_prompts = [prompt for prompt in llm.prompts if "上一次输出不合法" in prompt]
+    assert len(repair_prompts) == 2
 
 
 def test_initialize_project_from_bp_retries_when_role_count_is_below_minimum(
@@ -444,10 +539,8 @@ def test_initialize_project_from_bp_retries_when_role_count_is_below_minimum(
     bp_path = tmp_path / "bp_ai_hardware.md"
     bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
     llm = SequenceProjectInitLLM(
-        [
-            FakeProjectInitLLM(role_count=7).text("seed"),
-            FakeProjectInitLLM(role_count=14).text("seed"),
-        ]
+        {"stage_id: bp_role_design": [json.dumps(fake_role_design_payload(7), ensure_ascii=False)]},
+        role_count=14,
     )
     monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
     monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
@@ -463,11 +556,11 @@ def test_initialize_project_from_bp_retries_when_role_count_is_below_minimum(
 
     assert response.status_code == 200
     assert response.json()["jobCount"] == 14
-    assert len(llm.prompts) == 2
-    assert "至少输出 14 个 roles" in llm.prompts[1]
+    redesign_prompts = [prompt for prompt in llm.prompts if "少于要求的 14" in prompt]
+    assert len(redesign_prompts) == 1
 
 
-def test_initialize_project_from_bp_uses_v2_prompt_and_persists_full_job_matrix(
+def test_initialize_project_from_bp_runs_pipeline_and_persists_full_job_matrix(
     client: TestClient,
     session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
@@ -491,10 +584,12 @@ def test_initialize_project_from_bp_uses_v2_prompt_and_persists_full_job_matrix(
     payload = response.json()
     assert payload["projectId"] == "project_hanno_ai_hardware"
     assert payload["jobCount"] == 14
-    assert payload["promptName"] == "bp_deconstructor_v2"
+    assert payload["promptName"] == "bp_pipeline_v1"
+    assert "stage_id: bp_claims" in llm.prompts[0]
     assert "JSON-only" in llm.prompts[0]
-    assert "不可编造" in llm.prompts[0]
-    assert "must_have_skills" in llm.prompts[0]
+    assert any("不可编造" in prompt for prompt in llm.prompts)
+    assert any("must_have_skills" in prompt for prompt in llm.prompts)
+    assert payload["claims"]["business_commitments"][0]["id"] == "C1"
 
     jobs_response = client.get("/projects/project_hanno_ai_hardware/jobs")
 
@@ -502,16 +597,21 @@ def test_initialize_project_from_bp_uses_v2_prompt_and_persists_full_job_matrix(
     jobs = jobs_response.json()
     assert len(jobs) == 14
     first_job = jobs[0]
-    assert first_job["title"] == "汉诺云智边缘 AI 岗位 0"
+    assert first_job["title"] == "VLA 算法研究员"
     assert first_job["seniority"] == "Senior"
-    assert first_job["responsibilities"] == ["负责边缘 AI 交付链路 0"]
-    assert first_job["mustHaveSkills"] == ["Edge AI", "PostgreSQL", "FastAPI"]
-    assert first_job["niceToHaveSkills"] == ["Docling", "SSE"]
+    assert first_job["responsibilities"] == ["设计视觉语言动作模型的训练与评测闭环"]
+    assert first_job["mustHaveSkills"] == ["VLA", "imitation learning"]
     assert first_job["targetCompanies"] == ["边缘计算公司", "智能硬件厂商"]
     assert first_job["exclusionSignals"] == ["仅做 Demo 无交付经验"]
-    assert first_job["interviewQuestions"] == ["请拆解一次现场边缘盒子部署故障。"]
-    assert first_job["scoringRubric"] == {"edge_delivery": 40, "ai_engineering": 35, "safety": 25}
-    assert first_job["searchStrategy"]["community"] == '"edge ai" AND FastAPI'
+    rationale = first_job["rationale"]
+    assert "C1" in rationale["whyNeeded"]
+    assert rationale["bpEvidence"] == [FAKE_EVIDENCE_QUOTE]
+    assert rationale["businessCommitments"] == ["C1"]
+    assert rationale["capabilityGaps"] == ["CAP0"]
+    assert rationale["hiringPriority"] == "P0"
+    assert rationale["confidence"] == 0.9
+    assert rationale["whyHireNotVendor"]
+    assert rationale["ifNotHiredRisk"]
 
     with session_factory() as session:
         project = session.get(Project, "project_hanno_ai_hardware")

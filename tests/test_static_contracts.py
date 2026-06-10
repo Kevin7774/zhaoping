@@ -94,18 +94,29 @@ def test_get_capabilities_for_role_includes_ids() -> None:
     }
 
 
-def test_job_deconstructor_v2_prompt_generates_schema_safe_comprehensive_dynamic_roles() -> None:
-    prompt = load_system_prompt("bp_deconstructor_v2")
+def test_bp_pipeline_prompts_replace_legacy_deconstructor_prompt() -> None:
+    legacy_prompt = Path("app/core/prompts/bp_deconstructor_v2.yaml")
 
-    assert "JSON-only" in prompt
-    assert "不得限制为 3 个岗位" in prompt
-    assert "行业研究" in prompt
-    assert "技术架构" in prompt
-    assert "硬件拓扑" in prompt
-    assert "产品交付" in prompt
-    assert "must_have_skills" in prompt
-    assert "search_strategy" in prompt
-    assert "不可编造" in prompt
+    assert not legacy_prompt.exists()
+
+    claims_prompt = load_system_prompt("bp_claims_v1")
+    capability_prompt = load_system_prompt("bp_capability_graph_v1")
+    gap_prompt = load_system_prompt("bp_gap_analysis_v1")
+    role_prompt = load_system_prompt("bp_role_designer_v1")
+    combined = "\n".join([claims_prompt, capability_prompt, gap_prompt, role_prompt])
+
+    assert "stage_id: bp_claims" in claims_prompt
+    assert "stage_id: bp_capability_graph" in capability_prompt
+    assert "stage_id: bp_gap_analysis" in gap_prompt
+    assert "stage_id: bp_role_design" in role_prompt
+    assert combined.count("JSON-only") >= 4
+    assert "quote 必须是输入材料中的逐字片段" in claims_prompt
+    assert "硬件研发（PCB、BOM、电源、结构、量产测试）" in capability_prompt
+    assert "resolution\": \"hire|vendor|partner|existing\"" in gap_prompt
+    assert "must_have_skills" in role_prompt
+    assert "search_strategy" in role_prompt
+    assert "why_hire_not_vendor" in role_prompt
+    assert "不可编造" in role_prompt
 
 
 def test_outreach_agent_v2_prompt_controls_tone_and_requires_evidence() -> None:
@@ -489,61 +500,99 @@ def test_orchestrator_meta_is_frontend_protocol_source() -> None:
 
 
 def test_frontend_surfaces_live_step_outputs_for_mobile() -> None:
-    app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+    project_page_source = Path("frontend/src/pages/ProjectDetailPage.tsx").read_text(encoding="utf-8")
+    live_summary_source = Path("frontend/src/features/projects/components/LiveTaskSummary.tsx").read_text(encoding="utf-8")
 
-    assert "LiveTaskSummary" in app_source
-    assert "实时产出" in app_source
-    assert "已完成步骤" in app_source
-    assert "卡住" not in app_source
+    assert "LiveTaskSummary" in project_page_source
+    assert "任务实时日志" in live_summary_source
+    assert "搜索运行追踪" in live_summary_source
+    assert "候选人线索入库" in live_summary_source
+    assert "卡住" not in project_page_source
 
 
 def test_frontend_polls_even_when_sse_stream_is_open_for_mobile_cloudflare() -> None:
-    hook_source = Path("frontend/src/hooks/useAgentOrchestrator.js").read_text(encoding="utf-8")
+    hook_source = Path("frontend/src/shared/hooks/useTaskStream.ts").read_text(encoding="utf-8")
 
     assert "const source = new EventSource(taskStreamUrl(taskId))" in hook_source
-    assert "sourceRef.current = source\n      startPolling(taskId)" in hook_source
+    assert "scheduleSnapshotRefresh()" in hook_source
+    assert "startFallbackPolling()" in hook_source
+    assert "Task stream disconnected; falling back to task polling." in hook_source
 
 
-def test_frontend_exposes_atomic_workflow_controls() -> None:
-    api_source = Path("frontend/src/api.js").read_text(encoding="utf-8")
-    app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
-    panel_source = Path("frontend/src/components/AtomicWorkflowPanel.jsx").read_text(encoding="utf-8")
+def test_frontend_uses_ts_entry_and_has_no_legacy_workbench() -> None:
+    index_source = Path("frontend/index.html").read_text(encoding="utf-8")
+    ts_main_source = Path("frontend/src/main.tsx").read_text(encoding="utf-8")
+    active_app_source = Path("frontend/src/app/App.tsx").read_text(encoding="utf-8")
+    legacy_paths = [
+        Path("frontend/src/main.jsx"),
+        Path("frontend/src/App.jsx"),
+        Path("frontend/src/api.js"),
+        Path("frontend/src/agent"),
+        Path("frontend/src/components"),
+        Path("frontend/src/hooks"),
+        Path("frontend/src/workbench"),
+        Path("frontend/src/App.css"),
+        Path("frontend/src/assets/react.svg"),
+        Path("frontend/src/assets/vite.svg"),
+        Path("frontend/src/assets/hero.png"),
+    ]
 
-    assert "createWorkflowSession" in api_source
-    assert "runWorkflowNode" in api_source
-    assert "skipWorkflowNode" in api_source
-    assert "retryWorkflowNode" in api_source
-    assert "AtomicWorkflowPanel" in app_source
-    assert "原子级控制" in panel_source
-    assert "单步运行" in panel_source
-    assert "跳过节点" in panel_source
-    assert "重跑节点" in panel_source
+    assert 'src="/src/main.tsx"' in index_source
+    assert 'import App from "./app/App"' in ts_main_source
+    assert "RouterProvider" in active_app_source
+    assert [str(path) for path in legacy_paths if path.exists()] == []
 
 
-def test_frontend_api_client_wraps_chat_workspace_endpoints() -> None:
-    api_source = Path("frontend/src/api.js").read_text(encoding="utf-8")
+def test_generated_runtime_artifacts_are_not_versioned() -> None:
+    forbidden_tracked_patterns = [
+        r"^artifacts/",
+        r"^e2e-hanno-report\.(json|md)$",
+        r"^test-results/",
+        r"^data/ocr_smoke\.png$",
+    ]
+    tracked_files = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+    forbidden_tracked = [
+        path
+        for path in tracked_files
+        if any(re.search(pattern, path) for pattern in forbidden_tracked_patterns)
+    ]
+    ignored_paths = [
+        "artifacts/e2e_evidence/e2e-run.json",
+        "artifacts/e2e_reports/report.md",
+        "artifacts/e2e_hanno/screenshots/project-detail.png",
+        "test-results/.last-run.json",
+        "data/ocr_smoke.png",
+    ]
+
+    assert forbidden_tracked == []
+    for path in ignored_paths:
+        assert subprocess.run(["git", "check-ignore", "-q", path], check=False).returncode == 0
+
+
+def test_active_frontend_api_client_wraps_project_workspace_endpoints() -> None:
+    api_source = Path("frontend/src/features/projects/api.ts").read_text(encoding="utf-8")
+    auth_source = Path("frontend/src/features/auth/api.ts").read_text(encoding="utf-8")
+    client_source = Path("frontend/src/shared/api/client.ts").read_text(encoding="utf-8")
     expected_functions = {
-        "fetchHealth": "/health",
-        "createSearchPlan": "/search/plan",
-        "runSearch": "/search/run",
-        "createSearchEvidence": "/search/evidence",
-        "createSearchBrief": "/search/brief",
-        "archiveSearchArtifact": "/search/archive",
-        "fetchRecentArchives": "/search/archive/recent",
-        "fetchArchiveDiff": "/search/archive/diff",
-        "runSearchWatchlist": "/search/watchlist/run",
-        "ingestResume": "/resumes/ingest",
-        "importLocalResume": "/resumes/local-import",
-        "matchJobs": "/jobs/match",
-        "evaluateRsi": "/rsi/evaluate",
-        "fetchReviewFeedback": "/review/feedback",
+        "getProject": "/projects/",
+        "listProjects": "/projects",
+        "previewProjectFromBp": "/preview-from-bp",
+        "initializeProjectFromBp": "/initialize-from-bp",
+        "runProjectScenario": "/scenarios/run",
+        "confirmTask": "/tasks/",
+        "querySegmentCandidates": "/segments/query",
+        "createOutreachDraft": "/outreach/draft",
+        "sendOutreachDraft": "/outreach/send",
+        "saveWeeklyReport": "/reports/weekly",
+        "getCandidateSearchSchedules": "/candidate-search-schedules",
     }
 
     for function_name, path in expected_functions.items():
-        assert f"export function {function_name}" in api_source
+        assert re.search(rf"export\s+(?:async\s+)?function\s+{function_name}\b", api_source)
         assert path in api_source
-    assert "return request(" in api_source
-    assert "async function handle" in api_source
+    assert "export async function loginWithCompanyEmail" in auth_source
+    assert "/auth/login" in auth_source
+    assert "setJwtTokenProvider" in client_source
 
 
 def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
@@ -596,20 +645,14 @@ def test_frontend_search_capability_chain_requires_human_confirmation() -> None:
 
 
 def test_frontend_chat_shell_recommends_without_auto_execution() -> None:
-    app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
-    chat_shell_source = Path("frontend/src/components/workbench/ChatShell.jsx").read_text(encoding="utf-8")
-    drawer_source = Path("frontend/src/components/workbench/CapabilityDrawer.jsx").read_text(encoding="utf-8")
+    registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
 
-    assert "ChatShell" in app_source
-    assert "CapabilityDrawer" in app_source
-    assert "dispatchWorkbench" in app_source
-    assert "suggestCapabilitiesForInput" in app_source
-    assert "executeCapability" in chat_shell_source
-    assert "onSubmitPrompt" in chat_shell_source
-    assert "推荐能力" in chat_shell_source
-    assert "执行" in chat_shell_source
-    assert "requiresConfirmation" in drawer_source
-    assert "写入" in drawer_source
+    assert "export function detectIntent" in registry_source
+    assert "export function getCapabilitiesByWorkspace" in registry_source
+    assert "export function suggestCapabilitiesForInput" in registry_source
+    assert "requiresConfirmation: true" in registry_source
+    assert "writeScope: 'optional_archive'" in registry_source
+    assert "ChatShell" not in registry_source
 
 
 def test_db_task_store_persists_audit_events_and_cancel() -> None:

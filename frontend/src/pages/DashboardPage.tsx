@@ -82,7 +82,7 @@ export function DashboardPage() {
   if (error) return <DataError message={error} onRetry={() => setReloadToken((current) => current + 1)} />;
 
   return (
-    <div className="pb-8">
+    <div className="min-w-0 pb-8">
       <PageHeader
         title="工作台"
         subtitle="项目是顶层隔离空间。先选择或创建项目，再进入该项目的岗位、候选人、周报和触达流程。"
@@ -97,7 +97,7 @@ export function DashboardPage() {
         ]}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <SectionPanel title="项目列表" subtitle="点击项目进入独立工作空间。">
           {projects.length === 0 ? (
             <div className="rounded-[12px] border border-dashed border-[#D1D5DB] bg-[#F9FAFB] px-5 py-8 text-center text-[13px] text-[#6B7280]">

@@ -1,3 +1,5 @@
+import { Fragment, useState } from "react";
+
 import type { Candidate } from "../types";
 
 type CandidateTableProps = {
@@ -13,6 +15,7 @@ type CandidateTableProps = {
   isLoadingMore?: boolean;
   loadedCount?: number;
   onLoadMore?: () => void;
+  onViewAll?: () => void;
   totalCount?: number | null;
 };
 
@@ -72,8 +75,10 @@ export function CandidateTable({
   isLoadingMore = false,
   loadedCount,
   onLoadMore,
+  onViewAll,
   totalCount = null,
 }: CandidateTableProps) {
+  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
   const visibleCount = candidates.length;
   const normalizedLoadedCount = loadedCount ?? visibleCount;
   const countSummary =
@@ -85,7 +90,12 @@ export function CandidateTable({
     <section className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
       <div className="flex items-center justify-between border-b border-[#EEF2F7] px-5 py-4">
         <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">候选人名单</h2>
-        <button type="button" className="text-[13px] font-medium text-[#2563EB]">
+        <button
+          type="button"
+          onClick={onViewAll}
+          disabled={!onViewAll}
+          className="text-[13px] font-medium text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-50"
+        >
           查看全部
         </button>
       </div>
@@ -120,7 +130,8 @@ export function CandidateTable({
                     : "候选人无邮箱";
 
                 return (
-                  <tr key={`${candidate.targetJobProfileId}-${candidate.candidateId}`} className="h-[58px] transition-colors hover:bg-[#FAFBFD]">
+                  <Fragment key={`${candidate.targetJobProfileId}-${candidate.candidateId}`}>
+                  <tr className="h-[58px] transition-colors hover:bg-[#FAFBFD]">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
@@ -167,6 +178,11 @@ export function CandidateTable({
                         ) : null}
                         <button
                           type="button"
+                          onClick={() =>
+                            setExpandedCandidateId((current) =>
+                              current === candidate.candidateId ? null : candidate.candidateId,
+                            )
+                          }
                           className="h-[30px] whitespace-nowrap rounded-lg border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
                         >
                           查看
@@ -185,6 +201,28 @@ export function CandidateTable({
                       </div>
                     </td>
                   </tr>
+                  {expandedCandidateId === candidate.candidateId ? (
+                    <tr>
+                      <td colSpan={6} className="bg-[#FAFBFD] px-5 py-3">
+                        <div className="space-y-2 rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] leading-[18px] text-[#374151]">
+                          {candidate.evidence.length ? (
+                            candidate.evidence.map((item) => (
+                              <div key={`${item.label}-${item.summary}`}>
+                                <span className="font-semibold text-[#111827]">{item.label}：</span>
+                                {item.summary}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-[#9CA3AF]">暂无证据摘要</div>
+                          )}
+                          {candidate.sourceUrl ? (
+                            <div className="break-all text-[#2563EB]">{candidate.sourceUrl}</div>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>

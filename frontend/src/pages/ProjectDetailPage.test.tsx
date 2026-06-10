@@ -174,7 +174,7 @@ describe("ProjectDetailPage backend hardening", () => {
         return jsonResponse({
           projectId: "project_2026_ai_team",
           projectName: "真实后端项目",
-          promptName: "bp_deconstructor_v2",
+          promptName: "bp_pipeline_v1",
           jobCount: 14,
           jobs: [
             {
@@ -197,7 +197,7 @@ describe("ProjectDetailPage backend hardening", () => {
         return jsonResponse({
           projectId: "project_2026_ai_team",
           projectName: "真实后端项目",
-          promptName: "bp_deconstructor_v2",
+          promptName: "bp_pipeline_v1",
           jobCount: 14,
           jobs: [
             {
@@ -450,6 +450,32 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(button.getAttribute("title")).toContain("缺少 Key");
   });
 
+  it("lets the user choose a search mode and sends provider preflight with candidate search", async () => {
+    mockBackend();
+
+    renderProjectPage();
+
+    await screen.findByRole("heading", { name: "真实后端项目" });
+    fireEvent.change(screen.getByLabelText("搜索模式"), { target: { value: "social_expansion" } });
+    fireEvent.click(screen.getByRole("button", { name: "找候选人" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/scenarios/run", expect.objectContaining({ method: "POST" })));
+    const scenarioCall = fetchMock.mock.calls.find(([url]) => url === "/api/scenarios/run");
+    const body = JSON.parse(String(scenarioCall?.[1]?.body));
+    expect(body).toMatchObject({
+      scenario: "B",
+      frontend_state: {
+        search_mode: "social_expansion",
+        action_explainability: {
+          actionId: "project.find_candidates",
+          apiRoute: "POST /scenarios/run",
+        },
+      },
+    });
+    expect(body.frontend_state.provider_preflight.length).toBeGreaterThan(0);
+    expect(await screen.findByText(/动作解释：找候选人/)).toBeTruthy();
+  });
+
   it("shows lead ingestion stats and refreshes candidates from the backend after candidate search", async () => {
     const refreshedCandidates = [
       ...candidatesPayload,
@@ -621,6 +647,29 @@ describe("ProjectDetailPage backend hardening", () => {
         nextActions: ["继续推进人工校准"],
       },
     });
+  });
+
+  it("shows an explicit error when a completed weekly report task cannot be parsed", async () => {
+    mockBackend({
+      taskSnapshots: {
+        task_D: {
+          task_id: "task_D",
+          status: "done",
+          result: {
+            message: "任务完成但未返回周报结构",
+          },
+          audit_events: [],
+        },
+      },
+    });
+
+    renderProjectPage();
+
+    await screen.findByRole("heading", { name: "真实后端项目" });
+    fireEvent.click(screen.getAllByRole("button", { name: "生成周报" })[0]);
+
+    expect(await screen.findByText(/周报解析失败/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/reports/weekly")).toBe(false);
   });
 
   it("opens HumanGate from an awaiting task snapshot and confirms through the task API", async () => {

@@ -39,12 +39,12 @@ export function HumanConfirmModal({
   const approveDisabled = busy || missingRequiredLeadPreview;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#111827]/45 px-4 py-6 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-[#111827]/45 px-3 py-4 backdrop-blur-[2px] sm:items-center sm:px-4 sm:py-6">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="human-confirm-title"
-        className="w-full max-w-[720px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.28)]"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.28)]"
       >
         <div className="border-b border-[#EEF2F7] bg-[#F9FAFB]/60 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
@@ -65,7 +65,7 @@ export function HumanConfirmModal({
           </div>
         </div>
 
-        <div className="space-y-4 px-6 py-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           <div className="rounded-[12px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
             <div className="text-[14px] font-semibold text-[#111827]">{candidateName || "AI Agent 请求确认"}</div>
             <p className="mt-1 text-[13px] leading-5 text-[#92400E]">{context}</p>
@@ -168,7 +168,7 @@ export function HumanConfirmModal({
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+        <div className="shrink-0 flex flex-col-reverse gap-3 border-t border-[#EEF2F7] bg-[#F9FAFB] px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
           {requiresLeadPreview ? (
             <p className="text-[12px] leading-5 text-[#6B7280] sm:mr-auto">确认后将把这些线索写入项目候选人库。</p>
           ) : null}

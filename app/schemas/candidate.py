@@ -72,6 +72,7 @@ class CandidateResponse(CandidateRequest):
     job_title: str
     match_score: int = Field(ge=0, le=100)
     pipeline_status: str
+    outreach_status: Literal["not_sent", "drafted", "sent"] | None = None
     job_evidence: list[str] | None = None
     source_task_id: str | None = Field(default=None, max_length=64)
 

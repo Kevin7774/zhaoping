@@ -111,6 +111,7 @@ def ensure_project_schema(engine) -> None:
                 "interview_questions": "JSON",
                 "scoring_rubric": "JSON",
                 "search_strategy": "JSON",
+                "rationale": "JSON",
             },
         )
     if "outreach_drafts" in table_names:
@@ -119,6 +120,7 @@ def ensure_project_schema(engine) -> None:
             "outreach_drafts",
             {
                 "strategy_tag": "VARCHAR(64)",
+                "created_by_user_id": "VARCHAR(64)",
             },
         )
     if "outreach_history" in table_names:
@@ -127,6 +129,8 @@ def ensure_project_schema(engine) -> None:
             "outreach_history",
             {
                 "strategy_tag": "VARCHAR(64)",
+                "sender_email": "VARCHAR(256)",
+                "sent_by_user_id": "VARCHAR(64)",
             },
         )
 

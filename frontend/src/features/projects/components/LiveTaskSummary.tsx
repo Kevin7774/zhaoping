@@ -23,6 +23,21 @@ type LeadIngestionStats = {
   rejectedReasons: Record<string, number>;
 };
 
+type SearchRunTrace = {
+  searchModeLabel: string;
+  resultCount: number;
+  selectedProviders: string[];
+  errorSummaries: string[];
+  providerBudget: {
+    selected: number;
+    skipped: number;
+  };
+  evidenceCounts: {
+    recommendedSources: number;
+    records: number;
+  };
+};
+
 export function LiveTaskSummary({
   taskId,
   events,
@@ -40,6 +55,7 @@ export function LiveTaskSummary({
   const status = taskSnapshot?.status ?? connectionState;
   const isTerminal = ["done", "error", "cancelled"].includes(taskSnapshot?.status ?? "");
   const leadIngestion = leadIngestionStatsFromResult(taskSnapshot?.result);
+  const searchRunTrace = searchRunTraceFromEvents(events) ?? searchRunTraceFromResult(taskSnapshot?.result);
 
   return (
     <aside className="rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
@@ -76,6 +92,7 @@ export function LiveTaskSummary({
           </button>
         </div>
         <div className="text-[13px] leading-5 text-[#374151]">{latestEvent?.message || "正在连接任务事件流..."}</div>
+        {searchRunTrace ? <SearchRunTraceSummary trace={searchRunTrace} /> : null}
         {leadIngestion ? <LeadIngestionSummary stats={leadIngestion} /> : null}
         <div className="max-h-32 space-y-2 overflow-auto">
           {events.slice(-5).map((event, index) => (
@@ -87,6 +104,48 @@ export function LiveTaskSummary({
         </div>
       </div>
     </aside>
+  );
+}
+
+function SearchRunTraceSummary({ trace }: { trace: SearchRunTrace }) {
+  return (
+    <section className="border-t border-[#EEF2F7] pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[12px] font-semibold text-[#6B7280]">搜索运行追踪</div>
+        <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-medium text-[#2563EB]">
+          {trace.searchModeLabel}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2">
+        <div>
+          <div className="text-[11px] text-[#9CA3AF]">实时命中</div>
+          <div className="text-[16px] font-semibold leading-6 text-[#111827]">{trace.resultCount}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#9CA3AF]">Provider</div>
+          <div className="text-[16px] font-semibold leading-6 text-[#111827]">{trace.providerBudget.selected}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#9CA3AF]">跳过/异常</div>
+          <div className="text-[16px] font-semibold leading-6 text-[#111827]">{trace.providerBudget.skipped}</div>
+        </div>
+      </div>
+      {trace.selectedProviders.length ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {trace.selectedProviders.slice(0, 6).map((provider) => (
+            <span key={provider} className="rounded-[6px] bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] text-[#374151]">
+              {provider}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {trace.errorSummaries.length ? (
+        <div className="mt-2 text-[11px] leading-[16px] text-[#B45309]">{trace.errorSummaries.slice(0, 3).join("；")}</div>
+      ) : null}
+      <div className="mt-2 text-[11px] leading-[16px] text-[#6B7280]">
+        推荐信源 {trace.evidenceCounts.recommendedSources} · 证据记录 {trace.evidenceCounts.records}
+      </div>
+    </section>
   );
 }
 
@@ -137,6 +196,43 @@ function leadIngestionStatsFromResult(result: unknown): LeadIngestionStats | nul
   };
 }
 
+function searchRunTraceFromEvents(events: TaskStreamEvent[]): SearchRunTrace | null {
+  for (const event of [...events].reverse()) {
+    const trace = normalizeSearchRunTrace(event.data?.search_run_trace);
+    if (trace) return trace;
+  }
+  return null;
+}
+
+function searchRunTraceFromResult(result: unknown): SearchRunTrace | null {
+  if (!isRecord(result)) return null;
+  return normalizeSearchRunTrace(result["搜索运行追踪"] ?? result.search_run_trace);
+}
+
+function normalizeSearchRunTrace(value: unknown): SearchRunTrace | null {
+  if (!isRecord(value)) return null;
+  const providers = isRecord(value.providers) ? value.providers : {};
+  const providerBudget = isRecord(value.provider_budget) ? value.provider_budget : {};
+  const evidenceCounts = isRecord(value.evidence_counts) ? value.evidence_counts : {};
+  const rawErrors = Array.isArray(providers.errors) ? providers.errors : [];
+  return {
+    searchModeLabel: readString(value.search_mode_label) || readString(value.search_mode) || "搜索模式未知",
+    resultCount: readNumber(value.result_count),
+    selectedProviders: readStringArray(providers.selected),
+    errorSummaries: rawErrors
+      .filter(isRecord)
+      .map((error) => `${readString(error.service) || "unknown"}: ${readString(error.reason) || "unknown"}`),
+    providerBudget: {
+      selected: readNumber(providerBudget.selected),
+      skipped: readNumber(providerBudget.skipped),
+    },
+    evidenceCounts: {
+      recommendedSources: readNumber(evidenceCounts.recommended_sources),
+      records: readNumber(evidenceCounts.records),
+    },
+  };
+}
+
 function readRejectedReasons(value: unknown) {
   if (!isRecord(value)) return {};
   return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, readNumber(count)]));
@@ -144,6 +240,15 @@ function readRejectedReasons(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

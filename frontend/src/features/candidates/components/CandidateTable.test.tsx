@@ -145,4 +145,34 @@ describe("CandidateTable", () => {
 
     expect(screen.getByText("已显示 1 · 已加载 50 / 共 137 条关联")).toBeTruthy();
   });
+
+  it("calls the parent view-all action from the header button", () => {
+    const onViewAll = vi.fn();
+
+    render(<CandidateTable candidates={[candidate]} onSendEmail={() => undefined} onViewAll={onViewAll} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "查看全部" }));
+
+    expect(onViewAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands candidate evidence when clicking the row view button", () => {
+    render(
+      <CandidateTable
+        candidates={[
+          {
+            ...candidate,
+            sourceUrl: "https://github.com/example/robot-vla",
+            evidence: [{ label: "GitHub", source: "github", summary: "维护 robot-vla 项目。" }],
+          },
+        ]}
+        onSendEmail={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看" }));
+
+    expect(screen.getByText("维护 robot-vla 项目。")).toBeTruthy();
+    expect(screen.getByText("https://github.com/example/robot-vla")).toBeTruthy();
+  });
 });

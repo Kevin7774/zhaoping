@@ -46,7 +46,7 @@ export function ReportsPage() {
   };
 
   return (
-    <div className="pb-8">
+    <div className="min-w-0 pb-8">
       <PageHeader
         title="招聘周报"
         subtitle="读取当前项目最新持久化周报，也可以启动后端周报任务；任务完成后项目页会保存报告。"
@@ -80,7 +80,7 @@ export function ReportsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <WeeklyReportCard
           report={report}
           onGenerate={generateReport}

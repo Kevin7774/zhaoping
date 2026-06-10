@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.routers.auth import router as auth_router
 from app.api.routers.outreach import router as outreach_router
 from app.api.routers.projects import router as projects_router
 from app.api.routers.reports import router as reports_router
@@ -82,6 +83,7 @@ app.add_middleware(
 )
 
 app.include_router(projects_router)
+app.include_router(auth_router)
 app.include_router(outreach_router)
 app.include_router(segments_router)
 app.include_router(reports_router)

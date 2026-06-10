@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.models.auth import Organization, User
 from app.models.base import ProjectBase
 from app.models.candidate import Candidate, CandidateSearchSchedule, JobCandidate
 from app.models.job import Job
@@ -13,10 +14,12 @@ __all__ = [
     "CandidateSearchSchedule",
     "Job",
     "JobCandidate",
+    "Organization",
     "OutreachDraft",
     "OutreachHistory",
     "Project",
     "ProjectBase",
     "Segment",
+    "User",
     "WeeklyReportRecord",
 ]

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,7 +39,7 @@ def create_weekly_report(
 def get_latest_weekly_report(
     project_id: str,
     session: Session = Depends(get_project_session),
-) -> WeeklyReportResponse:
+) -> WeeklyReportResponse | Response:
     _require_project(session, project_id)
     report = (
         session.execute(
@@ -52,7 +52,7 @@ def get_latest_weekly_report(
         .first()
     )
     if report is None:
-        raise HTTPException(status_code=404, detail=f"Weekly report not found for project: {project_id}")
+        return Response(status_code=204)
     return _report_response(report)
 
 

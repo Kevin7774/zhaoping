@@ -1,3 +1,0 @@
-E2E Resume Candidate
-
-Worked on VLA robot policy evaluation, data pipelines, and safe deployment.

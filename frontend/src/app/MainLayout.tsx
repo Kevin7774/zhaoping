@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { navigationItemsForProject } from "./navigation";
+import { getStoredAuthUser, loginWithCompanyEmail, signOut, type AuthUser } from "../features/auth/api";
 import { listProjects, type ProjectRecord } from "../features/projects/api";
 import { rememberActiveProjectId, useActiveProjectId } from "../pages/projectWorkspace";
 
@@ -37,6 +38,10 @@ export function MainLayout() {
   const navigationItems = navigationItemsForProject(activeProjectId);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,8 +73,31 @@ export function MainLayout() {
 
   const activeProjectName = projects.find((project) => project.projectId === activeProjectId)?.name ?? activeProjectId;
 
+  async function handleLogin() {
+    if (!loginEmail.trim()) {
+      setLoginError("请输入公司邮箱");
+      return;
+    }
+    setLoginBusy(true);
+    setLoginError(null);
+    try {
+      const session = await loginWithCompanyEmail(loginEmail);
+      setAuthUser(session.user);
+      setLoginEmail("");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "登录失败");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  function handleSignOut() {
+    signOut();
+    setAuthUser(null);
+  }
+
   return (
-    <div className="min-h-screen bg-[#F6F8FB] bg-[radial-gradient(1100px_circle_at_50%_-320px,rgba(37,99,235,0.06),transparent_60%)] text-[#111827]">
+    <div className="min-h-screen overflow-x-hidden bg-[#F6F8FB] bg-[radial-gradient(1100px_circle_at_50%_-320px,rgba(37,99,235,0.06),transparent_60%)] text-[#111827]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] border-r border-[#E5E7EB] bg-white lg:flex lg:flex-col">
         <div className="flex h-16 items-center gap-3 border-b border-[#F3F4F6] px-5">
           <div className="grid h-8 w-8 place-items-center rounded-[10px] bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-[13px] font-bold text-white shadow-[0_2px_6px_rgba(37,99,235,0.35)]">
@@ -112,8 +140,8 @@ export function MainLayout() {
       </aside>
 
       <div className="lg:pl-[232px]">
-        <header className="sticky top-0 z-20 h-16 border-b border-[#E5E7EB] bg-white/85 backdrop-blur-md">
-          <div className="flex h-full items-center justify-between gap-4 px-6">
+        <header className="sticky top-0 z-20 min-h-16 border-b border-[#E5E7EB] bg-white/85 backdrop-blur-md">
+          <div className="flex min-h-16 max-w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <div className="hidden min-w-0 text-[13px] leading-5 text-[#6B7280] md:block">
               招聘项目 <span className="mx-2 text-[#D1D5DB]">/</span> {activeProjectName}
             </div>
@@ -145,7 +173,7 @@ export function MainLayout() {
                 placeholder="搜索候选人、岗位、项目"
               />
             </label>
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
               <span
                 className={[
                   "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium",
@@ -155,27 +183,66 @@ export function MainLayout() {
                 <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
                 {apiOnline === false ? "API 未连接" : "API 在线"}
               </span>
+              {authUser ? (
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="hidden max-w-[180px] truncate rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[12px] font-medium text-[#374151] sm:inline">
+                    {authUser.email}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="h-[34px] rounded-[10px] border border-[#E5E7EB] bg-white px-2.5 text-[13px] font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                  >
+                    退出
+                  </button>
+                </div>
+              ) : (
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                  <label className="sr-only" htmlFor="company-email-login">
+                    公司邮箱
+                  </label>
+                  <input
+                    id="company-email-login"
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void handleLogin();
+                    }}
+                    placeholder="公司邮箱"
+                    className="h-[34px] w-[min(178px,48vw)] rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-2.5 text-[13px] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#BFDBFE] focus:bg-white focus:ring-2 focus:ring-[#EFF6FF]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleLogin()}
+                    disabled={loginBusy}
+                    title={loginError ?? undefined}
+                    className="h-[34px] rounded-[10px] border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 text-[13px] font-medium text-[#2563EB] transition hover:bg-[#DBEAFE] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loginBusy ? "登录中" : "登录"}
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#BFDBFE] hover:bg-[#F9FAFB] active:translate-y-px"
+                className="hidden h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#BFDBFE] hover:bg-[#F9FAFB] active:translate-y-px sm:inline"
               >
                 刷新数据
               </button>
               <Link
                 to="/dashboard"
-                className="inline-flex h-[38px] items-center rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white shadow-[0_1px_2px_rgba(37,99,235,0.28)] transition hover:bg-[#1D4ED8] active:translate-y-px"
+                className="hidden h-[38px] items-center rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white shadow-[0_1px_2px_rgba(37,99,235,0.28)] transition hover:bg-[#1D4ED8] active:translate-y-px sm:inline-flex"
               >
                 新建项目
               </Link>
-              <div className="grid h-8 w-8 place-items-center rounded-full border border-[#DBEAFE] bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#DBEAFE] bg-[#EFF6FF] text-[12px] font-semibold text-[#2563EB]">
                 HR
               </div>
             </div>
           </div>
         </header>
 
-        <main className="min-h-[calc(100dvh-64px)] px-6 py-6">
+        <main className="min-h-[calc(100dvh-64px)] max-w-full overflow-x-hidden px-4 py-6 sm:px-6">
           <Outlet />
         </main>
       </div>

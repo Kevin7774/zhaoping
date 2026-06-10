@@ -9,7 +9,7 @@ __pycache__/
 .env.*
 !.env.example
 
-artifacts/dev_logs/
+artifacts/
 
 qdrant_mvp_store/
 data/uploads/
@@ -21,4 +21,6 @@ data/runtime/
 data/workflow_artifacts/
 data/snapshots/
 data/e2e_test_results/
+data/ocr_smoke.png
+test-results/
 test_readme.md

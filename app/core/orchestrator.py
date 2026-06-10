@@ -12,8 +12,10 @@ task so the UI behaves like an agent runtime dashboard instead of a video player
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -185,6 +187,34 @@ MAX_LIVE_RECRUITING_PROVIDERS = 8
 
 LIVE_RESULT_SOURCE_KEYS = {
     *LIVE_RECRUITING_SEARCH_SERVICES,
+}
+
+DEFAULT_SEARCH_MODE = "live_recruiting"
+SEARCH_MODE_METADATA: dict[str, dict[str, Any]] = {
+    "planning_only": {
+        "label": "规划模式",
+        "live_services": (),
+        "external_request_policy": "blocked_by_mode",
+    },
+    "live_recruiting": {
+        "label": "实时招聘搜索",
+        "live_services": LIVE_RECRUITING_SEARCH_SERVICES,
+        "external_request_policy": "bounded_live",
+    },
+    "due_diligence": {
+        "label": "尽调深搜",
+        "live_services": LIVE_RECRUITING_SEARCH_SERVICES,
+        "external_request_policy": "bounded_live",
+    },
+    "social_expansion": {
+        "label": "社媒扩展",
+        "live_services": (
+            "x_recent_posts_search",
+            "agent_reach_social_search",
+            "crustdata_signal_search",
+        ),
+        "external_request_policy": "bounded_live",
+    },
 }
 
 TOP_DOWN_RESEARCH_LAYERS = (
@@ -1375,6 +1405,110 @@ def _apply_human_edits(ctx: Dict[str, Any], result: Dict[str, Any]) -> None:
         result["人工决策"] = human["decision"]
 
 
+def _search_mode_from_ctx(ctx: Dict[str, Any] | None) -> str:
+    state = (ctx or {}).get("frontend_state")
+    if not isinstance(state, dict):
+        return DEFAULT_SEARCH_MODE
+    return _normalize_search_mode(state.get("search_mode") or state.get("searchMode"))
+
+
+def _normalize_search_mode(value: Any) -> str:
+    mode = str(value or DEFAULT_SEARCH_MODE).strip()
+    return mode if mode in SEARCH_MODE_METADATA else DEFAULT_SEARCH_MODE
+
+
+def _search_mode_label(search_mode: str) -> str:
+    return str(SEARCH_MODE_METADATA[_normalize_search_mode(search_mode)]["label"])
+
+
+def _live_services_for_search_mode(search_mode: str) -> tuple[str, ...]:
+    services = SEARCH_MODE_METADATA[_normalize_search_mode(search_mode)]["live_services"]
+    return tuple(str(service) for service in services)
+
+
+def _external_request_policy(search_mode: str) -> str:
+    return str(SEARCH_MODE_METADATA[_normalize_search_mode(search_mode)]["external_request_policy"])
+
+
+def _empty_live_search_context(
+    query: str,
+    role_key: str | None,
+    search_mode: str,
+    provider_health: list[dict[str, Any]] | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    mode = _normalize_search_mode(search_mode)
+    errors = [{"service": "live_search", "reason": reason}] if reason else []
+    return {
+        "search_mode": mode,
+        "mode_label": _search_mode_label(mode),
+        "external_request_policy": _external_request_policy(mode),
+        "services": [],
+        "query": _live_query(query, role_key, "default"),
+        "results": [],
+        "errors": errors,
+        "result_count": 0,
+        "research_layers": _research_layer_summaries([], errors),
+        "provider_health": provider_health or [],
+        "provider_budget": {
+            "max_live_providers": MAX_LIVE_RECRUITING_PROVIDERS,
+            "selected": 0,
+            "skipped": len(provider_health or []) + len(errors),
+        },
+    }
+
+
+def _build_search_run_trace(
+    query: str,
+    search_mode: str,
+    recommended_sources: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    live_context: dict[str, Any],
+) -> dict[str, Any]:
+    mode = _normalize_search_mode(search_mode)
+    return {
+        "query": query,
+        "search_mode": mode,
+        "search_mode_label": str(live_context.get("mode_label") or _search_mode_label(mode)),
+        "external_request_policy": str(live_context.get("external_request_policy") or _external_request_policy(mode)),
+        "provider_budget": live_context.get("provider_budget")
+        or {
+            "max_live_providers": MAX_LIVE_RECRUITING_PROVIDERS,
+            "selected": len(live_context.get("services", [])),
+            "skipped": len(live_context.get("errors", [])),
+        },
+        "providers": {
+            "selected": live_context.get("services", []),
+            "health": live_context.get("provider_health", []),
+            "errors": live_context.get("errors", []),
+        },
+        "result_count": int(live_context.get("result_count") or 0),
+        "research_layers": live_context.get("research_layers", []),
+        "evidence_counts": {
+            "recommended_sources": len(recommended_sources),
+            "records": len(records),
+            "source_tiers": _count_record_field(records, "source_tier"),
+            "validation_statuses": _count_record_field(records, "validation_status"),
+        },
+        "next_actions": [
+            "补齐缺失 provider 的凭证或本地工具后重跑同一 search_mode。",
+            "优先复核 primary/verified 证据；needs_cross_check 只能作为线索。",
+            "将高置信来源写入候选人或情报归档前保留 source_url 和 validation_status。",
+        ],
+    }
+
+
+def _count_record_field(records: list[dict[str, Any]], field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for record in records:
+        value = record.get(field_name)
+        if not value:
+            continue
+        key = str(value)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _source_intelligence(
     user_input: str,
     role_key: str,
@@ -1386,6 +1520,7 @@ def _source_intelligence(
 
     role = ROBOT_ROLES_METADATA[role_key]
     capabilities = [capability["capability_name_zh"] for capability in get_capabilities_for_role(role_key)]
+    search_mode = _search_mode_from_ctx(ctx)
     query = " ".join(
         [
             user_input,
@@ -1403,6 +1538,8 @@ def _source_intelligence(
             "tool": "ServiceRouter.search",
             "query_preview": query[:240],
             "limit": limit,
+            "search_mode": search_mode,
+            "search_mode_label": _search_mode_label(search_mode),
         },
     )
     try:
@@ -1447,7 +1584,24 @@ def _source_intelligence(
             "query": query,
             "推荐信源": [],
             "证据记录": [],
-            "实时检索": {"services": [], "results": [], "errors": [], "result_count": 0},
+            "实时检索": _empty_live_search_context(
+                query,
+                role_key,
+                search_mode,
+                reason="search_provider_unavailable",
+            ),
+            "搜索运行追踪": _build_search_run_trace(
+                query=query,
+                search_mode=search_mode,
+                recommended_sources=[],
+                records=[],
+                live_context=_empty_live_search_context(
+                    query,
+                    role_key,
+                    search_mode,
+                    reason="search_provider_unavailable",
+                ),
+            ),
             "检索说明": f"搜索服务不可用，已回退到静态人才来源：{error_message}",
         }
 
@@ -1473,12 +1627,34 @@ def _source_intelligence(
         }
         for record in evidence.get("records", [])[:limit]
     ]
-    live_context = _live_search_context(router, query, role_key=role_key, per_service_limit=2)
+    if search_mode == "planning_only":
+        live_context = _empty_live_search_context(
+            query,
+            role_key,
+            search_mode,
+            reason="planning_only_selected",
+        )
+    else:
+        live_context = _live_search_context(
+            router,
+            query,
+            role_key=role_key,
+            per_service_limit=2,
+            search_mode=search_mode,
+        )
+    search_run_trace = _build_search_run_trace(
+        query=query,
+        search_mode=search_mode,
+        recommended_sources=recommended_sources,
+        records=records,
+        live_context=live_context,
+    )
     result = {
         "query": query,
         "推荐信源": recommended_sources,
         "证据记录": records,
         "实时检索": live_context,
+        "搜索运行追踪": search_run_trace,
         "研究框架": _top_down_research_framework(live_context),
         "检索说明": "该节点已使用 source catalog 规划、evidence 记录和选择性实时源检索；缺少密钥或请求失败的源会记录在实时检索 errors 中。",
     }
@@ -1493,6 +1669,7 @@ def _source_intelligence(
             "evidence_record_count": len(result["证据记录"]),
             "live_result_count": result["实时检索"]["result_count"],
             "live_errors": result["实时检索"].get("errors", [])[:8],
+            "search_run_trace": search_run_trace,
         },
     )
     return result
@@ -1629,18 +1806,21 @@ def _live_search_context(
     role_key: str | None = None,
     per_service_limit: int = 2,
     timeout_seconds: float = 6.0,
+    search_mode: str = DEFAULT_SEARCH_MODE,
 ) -> Dict[str, Any]:
+    mode = _normalize_search_mode(search_mode)
+    live_services = _live_services_for_search_mode(mode)
+    if not live_services:
+        return _empty_live_search_context(query, role_key, mode, reason="live_search_blocked_by_mode")
+
     providers = []
     skipped = []
-    for service_name in LIVE_RECRUITING_SEARCH_SERVICES:
-        try:
-            service = router.config.service(service_name)
-        except KeyError:
-            skipped.append({"service": service_name, "reason": "not_configured"})
-            continue
-        missing = _missing_required_credentials(service)
-        if missing:
-            skipped.append({"service": service_name, "reason": f"missing_credentials:{','.join(missing)}"})
+    provider_health = []
+    for service_name in live_services:
+        health = _search_service_health(router, service_name)
+        provider_health.append(health)
+        if health["status"] != "ready":
+            skipped.append({"service": service_name, "reason": _provider_skip_reason(health)})
             continue
         if len(providers) >= MAX_LIVE_RECRUITING_PROVIDERS:
             skipped.append({"service": service_name, "reason": "deferred_by_live_budget"})
@@ -1675,13 +1855,54 @@ def _live_search_context(
 
     bounded_results = results[: max(1, per_service_limit) * max(1, len(providers))]
     return {
+        "search_mode": mode,
+        "mode_label": _search_mode_label(mode),
+        "external_request_policy": _external_request_policy(mode),
         "services": [service_name for service_name, _ in providers],
         "query": _live_query(query, role_key, "default"),
         "results": bounded_results,
         "errors": errors,
         "result_count": len(results),
         "research_layers": _research_layer_summaries(bounded_results, errors),
+        "provider_health": provider_health,
+        "provider_budget": {
+            "max_live_providers": MAX_LIVE_RECRUITING_PROVIDERS,
+            "selected": len(providers),
+            "skipped": len(errors),
+        },
     }
+
+
+def _search_service_health(router, service_name: str) -> dict[str, Any]:
+    try:
+        service = router.config.service(service_name)
+    except KeyError:
+        return {"service": service_name, "status": "not_configured"}
+
+    missing_credentials = _missing_required_credentials(service)
+    missing_runtime = _missing_runtime_requirements(service)
+    if missing_credentials:
+        status = "missing_key"
+    elif missing_runtime:
+        status = "missing_tool"
+    else:
+        status = "ready"
+    return {
+        "service": service_name,
+        "provider": service.provider,
+        "status": status,
+        "missing_credentials": missing_credentials,
+        "missing_runtime": missing_runtime,
+    }
+
+
+def _provider_skip_reason(health: dict[str, Any]) -> str:
+    status = str(health.get("status") or "unavailable")
+    if status == "missing_key":
+        return "missing_credentials:" + ",".join(str(item) for item in health.get("missing_credentials", []))
+    if status == "missing_tool":
+        return "missing_tool:" + ",".join(str(item) for item in health.get("missing_runtime", []))
+    return status
 
 
 def _research_layer_summaries(
@@ -1760,8 +1981,6 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
 
 
 def _missing_required_credentials(service) -> list[str]:
-    import os
-
     settings = service.model_extra or {}
     required_env_fields = (
         "api_key_env",
@@ -1775,6 +1994,35 @@ def _missing_required_credentials(service) -> list[str]:
         env_name = settings.get(field_name)
         if env_name and not os.environ.get(str(env_name)):
             missing.append(str(env_name))
+    return missing
+
+
+def _missing_runtime_requirements(service) -> list[str]:
+    settings = service.model_extra or {}
+    missing: list[str] = []
+    required_command = settings.get("required_command")
+    if isinstance(required_command, str) and required_command and not shutil.which(required_command):
+        missing.append(required_command)
+
+    required_commands = settings.get("required_commands")
+    if isinstance(required_commands, list):
+        for command in required_commands:
+            if isinstance(command, str) and command and not shutil.which(command):
+                missing.append(command)
+
+    required_python_module = settings.get("required_python_module")
+    if (
+        isinstance(required_python_module, str)
+        and required_python_module
+        and importlib.util.find_spec(required_python_module) is None
+    ):
+        missing.append(required_python_module)
+
+    required_skill_path = settings.get("required_skill_path")
+    if isinstance(required_skill_path, str) and required_skill_path:
+        expanded_path = os.path.expanduser(required_skill_path)
+        if not os.path.exists(expanded_path):
+            missing.append(required_skill_path)
     return missing
 
 

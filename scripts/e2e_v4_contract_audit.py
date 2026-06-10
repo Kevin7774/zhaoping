@@ -15,8 +15,6 @@ from app.api.main import app
 
 REGISTRY_PATH = ROOT / "frontend/src/capabilities/capabilityRegistry.js"
 ACTIVE_API_PATH = ROOT / "frontend/src/features/projects/api.ts"
-LEGACY_API_PATH = ROOT / "frontend/src/api.js"
-LEGACY_APP_PATH = ROOT / "frontend/src/App.jsx"
 ACTIVE_TS_SOURCE_GLOBS = (
     "frontend/src/app/**/*.tsx",
     "frontend/src/pages/**/*.tsx",
@@ -164,10 +162,6 @@ def active_ts_uses(wrapper_names: set[str]) -> set[str]:
     return used
 
 
-def legacy_page_uses(wrapper_names: set[str], source: str) -> set[str]:
-    return {name for name in wrapper_names if re.search(r"\b" + re.escape(name) + r"\b", source)}
-
-
 def invert_wrappers(wrappers: dict[str, set[tuple[str, str]]], used_names: set[str]) -> dict[tuple[str, str], set[str]]:
     inverted: dict[tuple[str, str], set[str]] = {}
     for name, endpoints in wrappers.items():
@@ -183,8 +177,6 @@ def category_for(
     registry_exists: bool,
     active_wrapper: bool,
     active_page: bool,
-    legacy_wrapper: bool,
-    legacy_page: bool,
 ) -> str:
     if not openapi_exists and registry_exists:
         return "stale_registry"
@@ -194,8 +186,6 @@ def category_for(
         return "active_ts_productized"
     if active_wrapper:
         return "active_ts_wrapper_only"
-    if legacy_wrapper or legacy_page:
-        return "legacy_only"
     if registry_exists:
         return "registered_only"
     return "backend_only"
@@ -210,8 +200,6 @@ def risk_for(path: str, category: str) -> str:
         if any(path.startswith(prefix) for prefix in LOW_RISK_SYSTEM_PREFIXES):
             return "P2"
         return "P1"
-    if category == "legacy_only":
-        return "P1"
     return "P2"
 
 
@@ -222,8 +210,6 @@ def summarize_endpoint_names(endpoint_map: dict[tuple[str, str], set[str]], endp
 def main() -> None:
     registry_source = read(REGISTRY_PATH)
     active_source = read(ACTIVE_API_PATH)
-    legacy_source = read(LEGACY_API_PATH)
-    legacy_app_source = read(LEGACY_APP_PATH)
 
     openapi = openapi_endpoints()
     openapi_keys = {(item["method"], item["path"]) for item in openapi}
@@ -239,11 +225,6 @@ def main() -> None:
     active_endpoint_names.setdefault(("GET", "/tasks/{task_id}/stream"), set()).add("useTaskStream/taskStreamUrl")
     active_wrapper_endpoint_names.setdefault(("GET", "/tasks/{task_id}/stream"), set()).add("useTaskStream/taskStreamUrl")
 
-    legacy_wrappers = wrapper_endpoint_map(legacy_source)
-    legacy_used_names = legacy_page_uses(set(legacy_wrappers), legacy_app_source)
-    legacy_endpoint_names = invert_wrappers(legacy_wrappers, legacy_used_names)
-    legacy_wrapper_endpoint_names = invert_wrappers(legacy_wrappers, set(legacy_wrappers))
-
     matrix: list[dict[str, Any]] = []
     for item in openapi:
         endpoint = (item["method"], item["path"])
@@ -253,19 +234,11 @@ def main() -> None:
             for name in summarize_endpoint_names(active_endpoint_names, endpoint)
             if not name.endswith(" (wrapper)")
         ]
-        legacy_wrapper_names = summarize_endpoint_names(legacy_wrapper_endpoint_names, endpoint)
-        legacy_page_names = [
-            name
-            for name in summarize_endpoint_names(legacy_endpoint_names, endpoint)
-            if not name.endswith(" (wrapper)")
-        ]
         category = category_for(
             openapi_exists=True,
             registry_exists=item["path"] in registered_paths,
             active_wrapper=bool(active_wrapper_names),
             active_page=bool(active_page_names),
-            legacy_wrapper=bool(legacy_wrapper_names),
-            legacy_page=bool(legacy_page_names),
         )
         matrix.append(
             {
@@ -277,10 +250,6 @@ def main() -> None:
                 "active_ts_wrappers": active_wrapper_names,
                 "active_ts_page_uses": bool(active_page_names),
                 "active_ts_page_functions": active_page_names,
-                "legacy_api_wrapper_exists": bool(legacy_wrapper_names),
-                "legacy_api_wrappers": legacy_wrapper_names,
-                "legacy_page_uses": bool(legacy_page_names),
-                "legacy_page_functions": legacy_page_names,
                 "category": category,
                 "risk": risk_for(item["path"], category),
             }
@@ -299,10 +268,6 @@ def main() -> None:
                 "active_ts_wrappers": [],
                 "active_ts_page_uses": False,
                 "active_ts_page_functions": [],
-                "legacy_api_wrapper_exists": False,
-                "legacy_api_wrappers": [],
-                "legacy_page_uses": False,
-                "legacy_page_functions": [],
                 "category": category,
                 "risk": risk_for(path, category),
             }
@@ -315,11 +280,10 @@ def main() -> None:
         "capabilityRegistry_path_count": len(registered_paths),
         "active_ts_endpoint_count": sum(1 for item in matrix if item["openapi_exists"] and item["active_ts_page_uses"]),
         "active_ts_wrapper_endpoint_count": sum(1 for item in matrix if item["openapi_exists"] and item["active_ts_wrapper_exists"]),
-        "legacy_endpoint_count": sum(1 for item in matrix if item["openapi_exists"] and item["legacy_api_wrapper_exists"]),
         "backend_only_endpoint_count": sum(
             1
             for item in matrix
-            if item["openapi_exists"] and not item["active_ts_wrapper_exists"] and not item["legacy_api_wrapper_exists"]
+            if item["openapi_exists"] and not item["active_ts_wrapper_exists"]
         ),
         "registered_but_no_client_wrapper_count": sum(
             1
@@ -327,7 +291,6 @@ def main() -> None:
             if item["openapi_exists"]
             and item["capabilityRegistry_exists"]
             and not item["active_ts_wrapper_exists"]
-            and not item["legacy_api_wrapper_exists"]
         ),
         "missing_registry_count": sum(1 for item in matrix if item["category"] == "missing_registry"),
         "stale_registry_count": len(stale_registry),

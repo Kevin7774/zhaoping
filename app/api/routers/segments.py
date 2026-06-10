@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_project_session
-from app.models import Candidate, Job, JobCandidate, Project, Segment
+from app.models import Candidate, Job, JobCandidate, OutreachDraft, OutreachHistory, Project, Segment
 from app.schemas.candidate import CandidateResponse
 from app.schemas.segments import (
     SegmentCreateRequest,
@@ -102,6 +102,36 @@ def _query_candidates(session: Session, project_id: str, criteria: SegmentCriter
         query = query.where(Candidate.email.is_not(None), Candidate.email != "")
     elif criteria.has_email == "no":
         query = query.where((Candidate.email.is_(None)) | (Candidate.email == ""))
+    if criteria.source_platform and criteria.source_platform != "all":
+        query = query.where(Candidate.source_platform == criteria.source_platform)
+    if criteria.outreach_status and criteria.outreach_status != "all":
+        history_exists = (
+            select(OutreachHistory.id)
+            .where(
+                OutreachHistory.project_id == project_id,
+                OutreachHistory.job_id == Job.id,
+                OutreachHistory.candidate_id == Candidate.id,
+            )
+            .limit(1)
+            .exists()
+        )
+        draft_exists = (
+            select(OutreachDraft.id)
+            .where(
+                OutreachDraft.project_id == project_id,
+                OutreachDraft.job_id == Job.id,
+                OutreachDraft.candidate_id == Candidate.id,
+                OutreachDraft.status == "draft",
+            )
+            .limit(1)
+            .exists()
+        )
+        if criteria.outreach_status == "sent":
+            query = query.where(history_exists)
+        elif criteria.outreach_status == "drafted":
+            query = query.where(draft_exists, ~history_exists)
+        elif criteria.outreach_status == "not_sent":
+            query = query.where(~draft_exists, ~history_exists)
     if criteria.keyword:
         keyword = f"%{criteria.keyword.strip()}%"
         query = query.where(
@@ -140,7 +170,35 @@ def _candidate_response(job_candidate: JobCandidate, candidate: Candidate, job: 
         email=candidate.email,
         match_score=job_candidate.match_score,
         pipeline_status=job_candidate.pipeline_status,
+        outreach_status=_outreach_status(session=Session.object_session(job_candidate), project_id=job.project_id, job_id=job.id, candidate_id=candidate.id),
     )
+
+
+def _outreach_status(session: Session | None, project_id: str, job_id: str, candidate_id: str) -> str:
+    if session is None:
+        return "not_sent"
+    history_exists = session.scalar(
+        select(OutreachHistory.id)
+        .where(
+            OutreachHistory.project_id == project_id,
+            OutreachHistory.job_id == job_id,
+            OutreachHistory.candidate_id == candidate_id,
+        )
+        .limit(1)
+    )
+    if history_exists:
+        return "sent"
+    draft_exists = session.scalar(
+        select(OutreachDraft.id)
+        .where(
+            OutreachDraft.project_id == project_id,
+            OutreachDraft.job_id == job_id,
+            OutreachDraft.candidate_id == candidate_id,
+            OutreachDraft.status == "draft",
+        )
+        .limit(1)
+    )
+    return "drafted" if draft_exists else "not_sent"
 
 
 def _segment_response(segment: Segment, candidates: list[CandidateResponse]) -> SegmentResponse:

@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import queue
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
@@ -13,9 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.core.prompt_config import load_system_prompt
+from app.core.bp_pipeline import BpStageOutputError, run_bp_pipeline
 from app.core.router import get_router
-from app.core.workflow_context import retry_prompt
 from app.db.session import get_project_session, project_session_factory
 from app.models import Candidate, CandidateSearchSchedule, Job, JobCandidate, Project
 from app.schemas.candidate_search_schedule import (
@@ -31,57 +28,20 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectGenerationMode,
     ProjectResponse,
+    ProjectRoleRejection,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 PENDING_COMPLIANCE_REVIEW_STATUS = "pending_compliance_review"
 PIPELINE_STATUS_PRIORITY = (PENDING_COMPLIANCE_REVIEW_STATUS, "awaiting_human", "processing", "pending_outreach", "sourced", "done")
-BP_DECONSTRUCTOR_PROMPT_NAME = "bp_deconstructor_v2"
-BP_DECONSTRUCTOR_MAX_TOKENS = 6000
-BP_DECONSTRUCTOR_MAX_ATTEMPTS = 3
-BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS = 25.0
-BP_DECONSTRUCTOR_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": ["industry_reading", "technical_assumptions", "roles", "coverage_gaps"],
-    "properties": {
-        "industry_reading": {"type": "string"},
-        "technical_assumptions": {"type": "array", "items": {"type": "string"}},
-        "coverage_gaps": {"type": "array", "items": {"type": "string"}},
-        "research_trace": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["stage", "summary"],
-                "properties": {
-                    "stage": {"type": "string"},
-                    "summary": {"type": "string"},
-                    "evidence": {"type": "array", "items": {"type": "string"}},
-                    "assumptions": {"type": "array", "items": {"type": "string"}},
-                    "risk": {"type": "string"},
-                },
-            },
-        },
-        "roles": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": [
-                    "title",
-                    "seniority",
-                    "responsibilities",
-                    "must_have_skills",
-                    "nice_to_have_skills",
-                    "target_companies",
-                    "exclusion_signals",
-                    "interview_questions",
-                    "scoring_rubric",
-                    "search_strategy",
-                ],
-            },
-        },
-    },
-}
+# Five-stage pipeline: claims -> capability graph -> gap analysis -> role design -> critic gate.
+BP_PIPELINE_PROMPT_NAME = "bp_pipeline_v1"
+BP_PIPELINE_ROLE_MAX_TOKENS = 12000
+BP_PIPELINE_MAX_ATTEMPTS = 3
+# Per-stage budget; the five-stage pipeline makes up to 5 sequential LLM calls.
+# Live measurement 2026-06-10: the claims call alone took ~123s on the default provider.
+BP_PIPELINE_CALL_TIMEOUT_SECONDS = 180.0
 
 
 class JobStats(TypedDict):
@@ -116,7 +76,7 @@ def preview_project_from_bp(
     project_id: str,
     request: ProjectBpInitializeRequest,
 ) -> ProjectBpInitializeResponse:
-    matrix, jobs = _deconstruct_jobs_from_bp(project_id, request)
+    matrix, jobs = _build_jobs_from_bp_pipeline(project_id, request)
     return _bp_initialize_response(project_id, request, matrix, jobs)
 
 
@@ -129,7 +89,7 @@ def initialize_project_from_bp(
     project_id: str,
     request: ProjectBpInitializeRequest,
 ) -> ProjectBpInitializeResponse:
-    matrix, jobs = _deconstruct_jobs_from_bp(project_id, request)
+    matrix, jobs = _build_jobs_from_bp_pipeline(project_id, request)
     factory = project_session_factory()
     with factory() as session:
         existing_job_ids = set(session.scalars(select(Job.id).where(Job.project_id == project_id)).all())
@@ -358,7 +318,7 @@ def _project_response(project: Project, stats: dict[str, int]) -> ProjectRespons
     )
 
 
-def _deconstruct_jobs_from_bp(
+def _build_jobs_from_bp_pipeline(
     project_id: str,
     request: ProjectBpInitializeRequest,
 ) -> tuple[dict[str, Any], list[Job]]:
@@ -367,18 +327,25 @@ def _deconstruct_jobs_from_bp(
     industry_research_prompt = _clean_text(request.industry_research_prompt)
     _validate_generation_inputs(request.generation_mode, bp_text, project_prompt, industry_research_prompt)
 
-    prompt = _build_role_generation_prompt(
-        generation_mode=request.generation_mode,
+    source_sections = _generation_source_sections(
         bp_text=bp_text,
         project_prompt=project_prompt,
         industry_research_prompt=industry_research_prompt,
-        minimum_role_count=request.minimum_role_count,
     )
     try:
         llm = get_router().llm(request.llm_service)
-        matrix = _deconstruct_bp_matrix(llm, prompt, minimum_role_count=request.minimum_role_count)
+        matrix = run_bp_pipeline(
+            llm,
+            source_sections=source_sections,
+            minimum_role_count=request.minimum_role_count,
+            call_timeout_seconds=BP_PIPELINE_CALL_TIMEOUT_SECONDS,
+            max_attempts=BP_PIPELINE_MAX_ATTEMPTS,
+            roles_max_tokens=BP_PIPELINE_ROLE_MAX_TOKENS,
+        )
     except HTTPException:
         raise
+    except BpStageOutputError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except TimeoutError as exc:
         matrix = _fallback_bp_matrix(
             bp_text=bp_text,
@@ -399,7 +366,7 @@ def _deconstruct_jobs_from_bp(
         )
     roles = matrix.get("roles")
     if not isinstance(roles, list) or not roles:
-        raise HTTPException(status_code=502, detail="BP deconstructor returned no roles")
+        raise HTTPException(status_code=502, detail="BP pipeline returned no roles")
     return matrix, [_job_from_role(project_id, role, index) for index, role in enumerate(roles)]
 
 
@@ -414,7 +381,7 @@ def _bp_initialize_response(
     return ProjectBpInitializeResponse(
         project_id=project_id,
         project_name=request.project_name,
-        prompt_name=BP_DECONSTRUCTOR_PROMPT_NAME,
+        prompt_name=BP_PIPELINE_PROMPT_NAME,
         generation_mode=request.generation_mode,
         job_count=len(response_jobs),
         jobs=response_jobs,
@@ -422,6 +389,15 @@ def _bp_initialize_response(
         technical_assumptions=_string_list(matrix.get("technical_assumptions")),
         coverage_gaps=_string_list(matrix.get("coverage_gaps")),
         research_trace=_research_trace(matrix, request),
+        claims=_non_empty_dict(matrix.get("claims")),
+        capability_graph=_non_empty_dict(matrix.get("capability_graph")),
+        gap_analysis=_non_empty_dict(matrix.get("gap_analysis")),
+        rejected_roles=[
+            ProjectRoleRejection(title=str(item.get("title") or "未命名岗位"), reasons=_string_list(item.get("reasons")))
+            for item in matrix.get("rejected_roles") or []
+            if isinstance(item, dict)
+        ],
+        generation_degraded=bool(matrix.get("degraded")),
     )
 
 
@@ -601,6 +577,7 @@ def _job_response(job: Job, stats: JobStats) -> JobResponse:
         interview_questions=_non_empty_list(job.interview_questions),
         scoring_rubric=_non_empty_dict(job.scoring_rubric),
         search_strategy=_non_empty_dict(job.search_strategy),
+        rationale=_non_empty_dict(job.rationale),
     )
 
 
@@ -638,156 +615,20 @@ def _validate_generation_inputs(
         )
 
 
-def _build_role_generation_prompt(
+def _generation_source_sections(
     *,
-    generation_mode: ProjectGenerationMode,
     bp_text: str | None,
     project_prompt: str | None,
     industry_research_prompt: str | None,
-    minimum_role_count: int,
-) -> str:
-    system_prompt = load_system_prompt(BP_DECONSTRUCTOR_PROMPT_NAME)
-    if not system_prompt:
-        raise HTTPException(status_code=500, detail=f"Missing prompt: {BP_DECONSTRUCTOR_PROMPT_NAME}")
-    sections = [
-        f"generation_mode: {generation_mode}",
-        f"minimum_role_count: {minimum_role_count}",
-        (
-            "输出 JSON 必须包含 industry_reading、technical_assumptions、roles、coverage_gaps、research_trace。"
-            "research_trace 只写可审计摘要、证据、假设和风险；不要输出隐藏推理链、逐步内心推理或无法审计的臆测。"
-        ),
-        (
-            "岗位生成必须同时考虑业务需求、行业研究、技术架构、硬件/交付链路、候选人搜索可行性和面试评估维度。"
-            f"数量硬约束：至少输出 {minimum_role_count} 个 roles；不要用重复岗位凑数。"
-        ),
-    ]
+) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
     if bp_text:
-        sections.append("bp_markdown:\n" + bp_text)
+        sections.append(("bp_markdown", bp_text))
     if project_prompt:
-        sections.append("project_prompt:\n" + project_prompt)
+        sections.append(("project_prompt", project_prompt))
     if industry_research_prompt:
-        sections.append("industry_research_prompt:\n" + industry_research_prompt)
-    return f"{system_prompt}\n\n" + "\n\n".join(sections)
-
-
-def _parse_bp_deconstructor_output(raw_output: str) -> dict[str, Any]:
-    text = raw_output.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end > start:
-        text = text[start : end + 1]
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"BP deconstructor returned invalid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=502, detail="BP deconstructor returned non-object JSON")
-    return payload
-
-
-def _deconstruct_bp_matrix(
-    llm: Any,
-    initial_prompt: str,
-    *,
-    minimum_role_count: int,
-) -> dict[str, Any]:
-    prompt = initial_prompt
-    last_error = "unknown structured output error"
-    for _attempt in range(BP_DECONSTRUCTOR_MAX_ATTEMPTS):
-        output = _run_with_timeout(
-            lambda: _bp_deconstructor_text(llm, prompt),
-            timeout_seconds=BP_DECONSTRUCTOR_CALL_TIMEOUT_SECONDS,
-            label="BP deconstructor LLM",
-        )
-        try:
-            matrix = _parse_bp_deconstructor_output(output)
-            _validate_minimum_role_count(matrix, minimum_role_count=minimum_role_count)
-            return matrix
-        except HTTPException as exc:
-            last_error = str(exc.detail)
-            prompt = _bp_repair_prompt(output, last_error, minimum_role_count)
-    raise HTTPException(status_code=502, detail=f"BP deconstructor structured output failed: {last_error}")
-
-
-def _run_with_timeout(fn, *, timeout_seconds: float, label: str) -> Any:  # noqa: ANN001
-    result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
-
-    def target() -> None:
-        try:
-            result_queue.put(("ok", fn()))
-        except BaseException as exc:  # noqa: BLE001
-            result_queue.put(("error", exc))
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    if thread.is_alive():
-        raise TimeoutError(f"{label} timed out after {timeout_seconds:g}s")
-    status, payload = result_queue.get()
-    if status == "error":
-        raise payload
-    return payload
-
-
-def _bp_deconstructor_text(llm: Any, prompt: str) -> str:
-    messages = getattr(llm, "messages", None)
-    if callable(messages):
-        response = messages(
-            [{"role": "user", "content": prompt}],
-            max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        content = _message_response_content(response)
-        if content:
-            return content
-    return llm.text(prompt, max_tokens=BP_DECONSTRUCTOR_MAX_TOKENS)
-
-
-def _message_response_content(response: Any) -> str | None:
-    if isinstance(response, str):
-        return response
-    if not isinstance(response, dict):
-        return None
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return None
-    first_choice = choices[0]
-    if not isinstance(first_choice, dict):
-        return None
-    message = first_choice.get("message")
-    if isinstance(message, dict):
-        content = message.get("content")
-        return str(content).strip() if content else None
-    text = first_choice.get("text")
-    return str(text).strip() if text else None
-
-
-def _validate_minimum_role_count(matrix: dict[str, Any], *, minimum_role_count: int) -> None:
-    roles = matrix.get("roles")
-    role_count = len(roles) if isinstance(roles, list) else 0
-    if role_count < minimum_role_count:
-        raise HTTPException(
-            status_code=502,
-            detail=f"BP deconstructor returned {role_count} roles; expected at least {minimum_role_count}",
-        )
-
-
-def _bp_repair_prompt(last_output: str, validation_error: str, minimum_role_count: int) -> str:
-    repair = retry_prompt(
-        BP_DECONSTRUCTOR_SCHEMA,
-        last_output,
-        validation_error,
-    )
-    return (
-        f"{repair}\n\n"
-        "输出紧凑 JSON：每个数组保留 2-4 条最关键内容，search_strategy 每个字段使用一句 Boolean/关键词策略，"
-        "scoring_rubric 保留 3-5 个维度。\n"
-        f"数量硬约束：至少输出 {minimum_role_count} 个 roles；不要用重复岗位凑数。"
-    )
+        sections.append(("industry_research_prompt", industry_research_prompt))
+    return sections
 
 
 def _fallback_bp_matrix(
@@ -846,10 +687,22 @@ def _fallback_bp_matrix(
                     "academic": f'"{skills[0]}" AND evaluation AND deployment',
                     "industry": f'"{title}" OR "{target_companies[0]}"',
                 },
+                # Degraded output: no audited commitment->gap chain exists, say so explicitly.
+                "why_needed": f"降级产出（{reason}）：未完成承诺-能力-缺口审计链，仅按保守矩阵覆盖「{title}」交付链路。",
+                "bp_evidence": [],
+                "business_commitments": [],
+                "capability_gaps": [],
+                "why_hire_not_vendor": None,
+                "if_not_hired_risk": None,
+                "dependencies": [],
+                "first_90_day_outcomes": [],
+                "hiring_priority": "P2",
+                "confidence": 0.2,
             }
         )
     input_excerpt = _generation_input_excerpt(bp_text, project_prompt, industry_research_prompt)
     return {
+        "degraded": True,
         "industry_reading": f"基于输入材料生成保守岗位矩阵：{input_excerpt}",
         "technical_assumptions": [
             "输入材料涉及边缘计算、AI 应用、智能硬件和私有化交付，需要按产品、工程、硬件、交付和合规分层招聘。",
@@ -902,7 +755,7 @@ def _research_trace(matrix: dict[str, Any], request: ProjectBpInitializeRequest)
         {
             "stage": "岗位矩阵生成",
             "summary": "按行业研究、技术架构、硬件或软件交付、质量、安全和客户成功拆解岗位并生成评估维度。",
-            "evidence": [f"最少岗位数：{request.minimum_role_count}", f"Prompt：{BP_DECONSTRUCTOR_PROMPT_NAME}"],
+            "evidence": [f"最少岗位数：{request.minimum_role_count}", f"Prompt：{BP_PIPELINE_PROMPT_NAME}"],
             "assumptions": ["预览阶段不写数据库；只有确认覆盖后才重建项目岗位。"],
             "risk": "确认覆盖会清空旧岗位和旧岗位候选人关联。",
         },
@@ -1013,7 +866,29 @@ def _job_from_role(project_id: str, role: Any, index: int) -> Job:
         interview_questions=_string_list(role.get("interview_questions")),
         scoring_rubric=_object_dict(role.get("scoring_rubric")),
         search_strategy=_search_strategy(role),
+        rationale=_role_rationale(role),
     )
+
+
+def _role_rationale(role: dict[str, Any]) -> dict[str, Any] | None:
+    confidence: float | None
+    try:
+        confidence = max(0.0, min(float(role.get("confidence")), 1.0))
+    except (TypeError, ValueError):
+        confidence = None
+    rationale = {
+        "why_needed": _clean_text(role.get("why_needed")),
+        "bp_evidence": _string_list(role.get("bp_evidence")),
+        "business_commitments": _string_list(role.get("business_commitments")),
+        "capability_gaps": _string_list(role.get("capability_gaps")),
+        "why_hire_not_vendor": _clean_text(role.get("why_hire_not_vendor")),
+        "if_not_hired_risk": _clean_text(role.get("if_not_hired_risk")),
+        "dependencies": _string_list(role.get("dependencies")),
+        "first_90_day_outcomes": _string_list(role.get("first_90_day_outcomes")),
+        "hiring_priority": _clean_text(role.get("hiring_priority")),
+        "confidence": confidence,
+    }
+    return rationale if any(value not in (None, [], "") for value in rationale.values()) else None
 
 
 def _stable_job_id(project_id: str, role: dict[str, Any], index: int) -> str:

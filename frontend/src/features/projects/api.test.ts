@@ -180,7 +180,7 @@ describe("projects api", () => {
       jsonResponse({
         projectId: "project_hanno_ai_hardware",
         projectName: "汉诺云智招聘",
-        promptName: "bp_deconstructor_v2",
+        promptName: "bp_pipeline_v1",
         jobCount: 14,
         jobs: [
           {
@@ -412,6 +412,59 @@ describe("projects api", () => {
     });
   });
 
+  it("includes search mode, provider preflight, and action explanation when starting candidate search", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_B", scenario: "B", status: "processing" }));
+    const job = {
+      jobProfileId: "job_vla_algorithm",
+      roleName: "VLA / 具身智能算法工程师",
+      headcount: 2,
+      priorityLevel: "P0",
+      isAiNativeFriendly: true,
+      essentialCapabilities: [],
+      preferredCapabilities: [],
+      exclusionTags: [],
+      targetCompanyTypes: [],
+      targetSchoolsLabs: [],
+      salaryRangeMin: 0,
+      salaryRangeMax: 0,
+      funnel: [],
+    } satisfies JobProfile;
+
+    await runProjectScenario("project_2026_ai_team", job, "find_candidates", {
+      searchMode: "social_expansion",
+      providerPreflight: [
+        { service: "x_recent_posts_search", status: "missing_key", reason: "缺少 Key" },
+        { service: "agent_reach_social_search", status: "missing_tool", reason: "缺少运行工具" },
+      ],
+      actionExplanation: {
+        actionId: "project.find_candidates",
+        label: "找候选人",
+        apiRoute: "POST /scenarios/run",
+        inputSummary: "VLA / 具身智能算法工程师",
+        expectedOutput: "候选人线索、人机确认、任务审计事件",
+        capabilityGate: "Search API 已接入",
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      scenario: "B",
+      frontend_state: {
+        search_mode: "social_expansion",
+        searchMode: "social_expansion",
+        provider_preflight: [
+          { service: "x_recent_posts_search", status: "missing_key" },
+          { service: "agent_reach_social_search", status: "missing_tool" },
+        ],
+        action_explainability: {
+          actionId: "project.find_candidates",
+          apiRoute: "POST /scenarios/run",
+          expectedOutput: "候选人线索、人机确认、任务审计事件",
+        },
+      },
+    });
+  });
+
   it("starts weekly report through scenario D", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ task_id: "task_weekly", scenario: "D", status: "processing" }));
 
@@ -629,6 +682,16 @@ describe("projects api", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/projects/project_2026_ai_team/reports/latest",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("treats a 204 latest weekly report response as an empty report slot", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(getLatestWeeklyReport("project_hanno_ai_hardware")).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_hanno_ai_hardware/reports/latest",
       expect.objectContaining({ method: "GET" }),
     );
   });

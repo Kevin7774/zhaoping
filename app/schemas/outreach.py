@@ -38,6 +38,7 @@ class OutreachDraftResponse(CamelModel):
     body: str
     status: str
     strategy_tag: OutreachStrategyTag | None = None
+    created_by_user_id: str | None = None
     backend_generated: bool = True
     created_at: datetime
     updated_at: datetime
@@ -51,6 +52,8 @@ class OutreachHistoryRecord(CamelModel):
     draft_id: str | None = None
     segment_id: str | None = None
     email: str | None = None
+    sender_email: str | None = None
+    sent_by_user_id: str | None = None
     strategy_tag: OutreachStrategyTag | None = None
     subject: str
     body: str

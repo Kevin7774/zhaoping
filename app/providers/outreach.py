@@ -200,6 +200,7 @@ class CompliantEmailDeliveryProvider:
         subject: str,
         text_body: str,
         html_body: str | None = None,
+        sender_email: str | None = None,
         approved: bool = False,
     ) -> dict[str, Any]:
         if self.manual_approval_required and not approved:
@@ -213,7 +214,7 @@ class CompliantEmailDeliveryProvider:
             raise RuntimeError(f"Daily send limit reached: {self.daily_send_limit}")
 
         token = _require_env(self.token_env)
-        sender = _require_env(self.from_email_env)
+        sender = _normalize_sender_email(sender_email) or _require_env(self.from_email_env)
         unsubscribe_base_url = _require_env(self.unsubscribe_base_url_env)
         unsubscribe_url = f"{unsubscribe_base_url.rstrip('/')}?email={quote(recipient)}"
         text_with_unsubscribe = f"{text_body.rstrip()}\n\nUnsubscribe: {unsubscribe_url}"
@@ -308,6 +309,15 @@ class CompliantEmailDeliveryProvider:
         envelope = {"created_at": datetime.now(timezone.utc).isoformat(), **record}
         with path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(envelope, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _normalize_sender_email(value: str | None) -> str | None:
+    sender = str(value or "").strip().lower()
+    if not sender:
+        return None
+    if "@" not in sender or sender.startswith("@") or sender.endswith("@"):
+        raise RuntimeError("A valid sender email is required.")
+    return sender
 
 
 class PostmarkCompliantEmailProvider(CompliantEmailDeliveryProvider):

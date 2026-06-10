@@ -30,6 +30,8 @@ class Job(ProjectBase):
     interview_questions: Mapped[list[str] | None] = mapped_column(JSON)
     scoring_rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     search_strategy: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # Audit chain: business commitment -> capability gap -> hire decision.
+    rationale: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     project: Mapped["Project"] = relationship(back_populates="jobs")
     candidate_links: Mapped[list["JobCandidate"]] = relationship(back_populates="job", cascade="all, delete-orphan")

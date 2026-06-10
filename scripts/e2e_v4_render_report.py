@@ -49,19 +49,18 @@ def md_escape(value: Any) -> str:
 
 def endpoint_rows(matrix: list[dict[str, Any]]) -> list[str]:
     rows = [
-        "| method | path | openapi | registry | TS wrapper | TS page | legacy wrapper | category | risk |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| method | path | openapi | registry | TS wrapper | TS page | category | risk |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in sorted(matrix, key=lambda row: (row["path"], row["method"])):
         rows.append(
-            "| {method} | {path} | {openapi} | {registry} | {ts_wrapper} | {ts_page} | {legacy} | {category} | {risk} |".format(
+            "| {method} | {path} | {openapi} | {registry} | {ts_wrapper} | {ts_page} | {category} | {risk} |".format(
                 method=md_escape(item["method"]),
                 path=md_escape(item["path"]),
                 openapi="yes" if item["openapi_exists"] else "no",
                 registry="yes" if item["capabilityRegistry_exists"] else "no",
                 ts_wrapper=md_escape(", ".join(item.get("active_ts_wrappers", [])) or "no"),
                 ts_page=md_escape(", ".join(item.get("active_ts_page_functions", [])) or "no"),
-                legacy=md_escape(", ".join(item.get("legacy_api_wrappers", [])) or "no"),
                 category=md_escape(item["category"]),
                 risk=md_escape(item["risk"]),
             )
@@ -122,7 +121,7 @@ def main() -> None:
     backend_only = [
         item
         for item in matrix_payload["matrix"]
-        if item["openapi_exists"] and item["category"] in {"registered_only", "backend_only", "legacy_only"}
+        if item["openapi_exists"] and item["category"] in {"registered_only", "backend_only"}
     ]
     risk_list = [
         {
@@ -176,7 +175,6 @@ def main() -> None:
                     "scripts/e2e_v4_contract_audit.py",
                     "scripts/e2e_v4_api_probes.py",
                     "scripts/e2e_v4_render_report.py",
-                    "artifacts/e2e_evidence/runner/error-probes-v4.mjs",
                 ],
                 "whySafe": "Read/probe/report tooling only; product code and business logic unchanged.",
                 "testsAfter": "compileall-final PASS; probes all 200 except intentionally simulated 4xx/5xx error cases.",
@@ -227,7 +225,7 @@ def main() -> None:
             "",
             "- 真实入口链路: `frontend/index.html -> frontend/src/main.tsx -> frontend/src/app/App.tsx -> frontend/src/app/router.tsx -> /projects/project_2026_ai_team`",
             "- TS App: PASS",
-            "- legacy `frontend/src/App.jsx`: 未被 `main.tsx` 挂载，仅作为历史参考。",
+            "- Legacy JSX workbench: removed; current frontend uses the TS router entry only.",
             "",
             "## C. OpenAPI / Registry / Frontend Matrix",
             "",
@@ -320,7 +318,7 @@ def main() -> None:
             f"2. 当前 TS 24 endpoint 是否全部通过 E2E: {'PASS' if c['specified24EndpointsCovered'] else 'FAIL'}；当前实际 active TS endpoint count={c['actualActiveTsEndpointCount']}，包含额外 compliance-review。",
             f"3. OpenAPI 和 capabilityRegistry 是否对齐: {'PASS' if c['openapiRegistryAligned'] else 'FAIL'}",
             f"4. compliance-review 是否已补 registry: {'PASS' if c['complianceReviewRegistered'] else 'FAIL'}",
-            f"5. 后端已有但 TS 未接能力: 见 C 表，backend/registered/legacy only 共 {len(backend_only)} 个 method endpoint。",
+            f"5. 后端已有但 TS 未接能力: 见 C 表，backend/registered only 共 {len(backend_only)} 个 method endpoint。",
             "6. 找候选人是否已完成入库闭环: PASS，需要 HumanGate confirm 后完成。",
             f"7. 是否存在假数据: {'YES' if c['fakeDataFound'] else 'NO'}",
             f"8. 是否存在假成功: {'YES' if c['fakeSuccessFound'] else 'NO'}",

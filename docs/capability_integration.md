@@ -166,6 +166,15 @@ provider payloads. Runtime calls are bounded by a live-provider budget; skipped
 sources must be reported as `missing_credentials`, `missing_tool`,
 `manual_setup`, or `deferred_by_live_budget` instead of failing silently.
 
+Project scenario tasks may pass `frontend_state.search_mode` with one of
+`planning_only`, `live_recruiting`, `due_diligence`, or `social_expansion`.
+Search-driven steps must return a lightweight `搜索运行追踪` / `search_run_trace`
+object with the query, selected mode, provider health/preflight, selected and
+skipped provider counts, evidence tier/status counts, layer coverage, and next
+actions. `planning_only` must not call live providers. The frontend should send
+the selected mode plus a safe `provider_preflight` summary and display the trace
+from task audit events or final results.
+
 Keep planned/source-catalog entries in `app/skills/search_sources.py` aligned with concrete services in `config/services.toml`.
 
 ## Adding A Static Skill

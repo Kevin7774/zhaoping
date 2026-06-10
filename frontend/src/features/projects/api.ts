@@ -1,8 +1,9 @@
 import type { Candidate } from "../candidates/types";
-import type { FunnelStageKey, JobProfile, StepStatus } from "../jobs/types";
+import type { FunnelStageKey, JobProfile, JobRationale, StepStatus } from "../jobs/types";
 import type { FilterCriteria } from "./state";
 import { ApiError, apiClient } from "../../shared/api/client";
 import type { TaskSnapshot } from "../../shared/hooks/useTaskStream";
+import type { ActionExplanation, ProviderPreflightItem, SearchMode } from "./explainableAction";
 
 export type WeeklyReport = {
   conclusion?: string;
@@ -27,6 +28,12 @@ export type ProjectRecord = {
 
 export type RunProjectScenarioAction = "job_analysis" | "find_candidates" | "candidate_evaluation";
 
+export type ProjectScenarioRunOptions = {
+  searchMode?: SearchMode;
+  providerPreflight?: ProviderPreflightItem[];
+  actionExplanation?: ActionExplanation;
+};
+
 export type RunScenarioResponse = {
   task_id: string;
   scenario: string;
@@ -48,6 +55,15 @@ export type IntegrationCapabilityStatus = {
   connected?: boolean;
   connected_name_zh?: string;
   code_path?: string | null;
+  services?: Array<{
+    name?: string;
+    name_zh?: string;
+    status?: string;
+    connected?: boolean;
+    provider?: string;
+    code_path?: string | null;
+    is_default?: boolean;
+  }>;
 };
 
 export type IntegrationsStatusResponse = {
@@ -81,6 +97,7 @@ export type OutreachDraft = {
   body: string;
   status: string;
   strategyTag?: string | null;
+  createdByUserId?: string | null;
   backendGenerated: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -94,6 +111,8 @@ export type OutreachHistoryItem = {
   draftId?: string | null;
   segmentId?: string | null;
   email?: string | null;
+  senderEmail?: string | null;
+  sentByUserId?: string | null;
   strategyTag?: string | null;
   subject: string;
   body: string;
@@ -148,6 +167,11 @@ export type ProjectResearchTraceItem = {
   risk?: string | null;
 };
 
+export type ProjectRoleRejection = {
+  title: string;
+  reasons: string[];
+};
+
 export type ProjectBpInitializeResponse = {
   projectId: string;
   projectName: string;
@@ -159,6 +183,11 @@ export type ProjectBpInitializeResponse = {
   technicalAssumptions: string[];
   coverageGaps: string[];
   researchTrace: ProjectResearchTraceItem[];
+  claims?: Record<string, unknown> | null;
+  capabilityGraph?: Record<string, unknown> | null;
+  gapAnalysis?: Record<string, unknown> | null;
+  rejectedRoles?: ProjectRoleRejection[];
+  generationDegraded?: boolean;
 };
 
 export type ProjectCreateRequest = {
@@ -220,6 +249,7 @@ type JobBackendResponse = {
   interviewQuestions?: string[] | null;
   scoringRubric?: Record<string, unknown> | null;
   searchStrategy?: Record<string, unknown> | null;
+  rationale?: JobRationale | null;
   status?: string | null;
   pipelineStatus?: string | null;
   candidateCount?: number | null;
@@ -277,6 +307,8 @@ function mapBpInitializeResponse(
     technicalAssumptions: response.technicalAssumptions ?? [],
     coverageGaps: response.coverageGaps ?? [],
     researchTrace: response.researchTrace ?? [],
+    rejectedRoles: response.rejectedRoles ?? [],
+    generationDegraded: response.generationDegraded ?? false,
     jobs: response.jobs.map(mapJob),
   };
 }
@@ -450,7 +482,8 @@ export async function saveWeeklyReport(
 
 export async function getLatestWeeklyReport(projectId: string): Promise<WeeklyReportRecord | null> {
   try {
-    const response = await apiClient.get<WeeklyReportRecord>(`/projects/${encodeURIComponent(projectId)}/reports/latest`);
+    const response = await apiClient.get<WeeklyReportRecord | undefined>(`/projects/${encodeURIComponent(projectId)}/reports/latest`);
+    if (!response) return null;
     return mapWeeklyReportRecord(response);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
@@ -498,7 +531,12 @@ function inputForAction(action: RunProjectScenarioAction, job: JobProfile) {
   return `请对「${job.roleName}」岗位的候选人进行评估，重点关注团队约束、证据链和面试追问。`;
 }
 
-export function runProjectScenario(projectId: string, job: JobProfile, action: RunProjectScenarioAction) {
+export function runProjectScenario(
+  projectId: string,
+  job: JobProfile,
+  action: RunProjectScenarioAction,
+  options: ProjectScenarioRunOptions = {},
+) {
   const scenario = scenarioForAction(action);
 
   return apiClient.post<RunScenarioResponse>("/scenarios/run", {
@@ -513,6 +551,9 @@ export function runProjectScenario(projectId: string, job: JobProfile, action: R
       job_title: job.roleName,
       jobTitle: job.roleName,
       action,
+      ...(options.searchMode ? { search_mode: options.searchMode, searchMode: options.searchMode } : {}),
+      ...(options.providerPreflight ? { provider_preflight: options.providerPreflight } : {}),
+      ...(options.actionExplanation ? { action_explainability: options.actionExplanation } : {}),
     },
   });
 }
@@ -605,6 +646,7 @@ function mapJob(job: JobBackendResponse): JobProfile {
   return {
     jobProfileId: job.id,
     roleName: job.title || "—",
+    rationale: job.rationale ?? null,
     headcount,
     seniority: job.seniority ?? undefined,
     responsibilities: Array.isArray(job.responsibilities) ? job.responsibilities : [],
@@ -615,7 +657,7 @@ function mapJob(job: JobBackendResponse): JobProfile {
     interviewQuestions: Array.isArray(job.interviewQuestions) ? job.interviewQuestions : [],
     scoringRubric: job.scoringRubric ?? {},
     searchStrategy: job.searchStrategy ?? {},
-    priorityLevel: priorityFromHeadcount(headcount ?? 0),
+    priorityLevel: priorityFromRationale(job.rationale) ?? priorityFromHeadcount(headcount ?? 0),
     pipelineStatus: status,
     candidateCount,
     averageMatchScore: job.averageMatchScore ?? undefined,
@@ -700,6 +742,11 @@ function candidateStage(status: string): Candidate["stage"] {
   if (status === "screening" || status === "sourced") return status;
   if (status === "offer" || status === "offer_review") return "offer_review";
   return "technical_interview";
+}
+
+function priorityFromRationale(rationale: JobRationale | null | undefined): JobProfile["priorityLevel"] | null {
+  const priority = rationale?.hiringPriority?.toUpperCase();
+  return priority === "P0" || priority === "P1" || priority === "P2" ? priority : null;
 }
 
 function priorityFromHeadcount(headcount: number): JobProfile["priorityLevel"] {
