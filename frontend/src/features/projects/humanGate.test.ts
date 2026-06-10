@@ -69,6 +69,29 @@ describe("human gate request helpers", () => {
                 source_url: "https://github.com/alicewang/robot-vla",
                 evidence_summary: "Maintains robot-vla with diffusion policy examples.",
                 confidence: 0.86,
+                github_score: 91,
+                representative_repositories: [
+                  {
+                    full_name: "alice-robotics/agentic-rag-robot",
+                    url: "https://github.com/alice-robotics/agentic-rag-robot",
+                    language: "TypeScript",
+                    stars: 860,
+                    forks: 74,
+                    topics: ["agentic-workflow", "rag", "mcp"],
+                  },
+                ],
+                repository_evidence: [
+                  {
+                    source: "code",
+                    title: "alice-robotics/agentic-rag-robot:src/workflow.ts",
+                    url: "https://github.com/alice-robotics/agentic-rag-robot/blob/main/src/workflow.ts",
+                    snippet: "createAgenticWorkflow({ mcp, rag, fullstack })",
+                  },
+                ],
+                recent_activity: {
+                  recent_repository_count: 2,
+                  latest_repository_pushed_at: "2026-06-01T12:00:00Z",
+                },
                 matched_job: "VLA / 具身智能算法工程师",
                 compliance_status: "clear",
                 ingestion_action: "insert",
@@ -104,6 +127,29 @@ describe("human gate request helpers", () => {
       name: "Alice Wang",
       sourcePlatform: "github_repositories",
       evidenceSummary: "Maintains robot-vla with diffusion policy examples.",
+      githubScore: 91,
+      representativeRepositories: [
+        {
+          fullName: "alice-robotics/agentic-rag-robot",
+          url: "https://github.com/alice-robotics/agentic-rag-robot",
+          language: "TypeScript",
+          stars: 860,
+          forks: 74,
+          topics: ["agentic-workflow", "rag", "mcp"],
+        },
+      ],
+      repositoryEvidence: [
+        {
+          source: "code",
+          title: "alice-robotics/agentic-rag-robot:src/workflow.ts",
+          url: "https://github.com/alice-robotics/agentic-rag-robot/blob/main/src/workflow.ts",
+          snippet: "createAgenticWorkflow({ mcp, rag, fullstack })",
+        },
+      ],
+      recentActivity: {
+        recentRepositoryCount: 2,
+        latestRepositoryPushedAt: "2026-06-01T12:00:00Z",
+      },
       ingestionAction: "insert",
     });
   });

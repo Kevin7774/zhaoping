@@ -303,6 +303,7 @@ def preview_candidate_leads(
             "compliance_status": PENDING_COMPLIANCE_REVIEW_STATUS if lead.requires_compliance_review else "clear",
             "ingestion_action": ingestion_action,
         }
+        _attach_github_preview_fields(item, lead.raw_payload)
         if lead.email:
             item["email"] = "[redacted]"
         preview_items.append(item)
@@ -393,6 +394,19 @@ def ingest_candidate_leads(
 
 def _evidence_summary(evidence: list[str]) -> str:
     return "; ".join(item for item in evidence[:2] if item)[:240]
+
+
+def _attach_github_preview_fields(item: dict[str, Any], payload: Mapping[str, Any]) -> None:
+    for key in (
+        "github_score",
+        "representative_repositories",
+        "repository_evidence",
+        "recent_activity",
+        "scoring_signals",
+    ):
+        value = payload.get(key)
+        if value not in (None, "", [], {}):
+            item[key] = value
 
 
 def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:

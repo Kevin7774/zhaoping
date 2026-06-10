@@ -53,7 +53,11 @@ from app.providers.search import (
     GDELTDocNewsSearchProvider,
     GNewsFundingNewsProvider,
     GrantsGovOpportunitySearchProvider,
+    GitHubCandidateSearchProvider,
+    GitHubCodeSearchProvider,
     GitHubRepositorySearchProvider,
+    GitHubTopicSearchProvider,
+    GitHubUserSearchProvider,
     HuggingFaceModelSearchProvider,
     NHTSARecallSearchProvider,
     OFACSanctionsListSearchProvider,
@@ -259,6 +263,41 @@ class ServiceRouter:
                 endpoint=str(settings["endpoint"]),
                 token_env=str(settings["token_env"]) if "token_env" in settings else None,
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "search" and provider == "github_users":
+            return GitHubUserSearchProvider(
+                endpoint=str(settings["endpoint"]),
+                user_endpoint_template=str(settings.get("user_endpoint_template", "https://api.github.com/users/{login}")),
+                token_env=str(settings["token_env"]) if "token_env" in settings else None,
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "search" and provider == "github_code":
+            return GitHubCodeSearchProvider(
+                endpoint=str(settings["endpoint"]),
+                token_env=str(settings["token_env"]) if "token_env" in settings else None,
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "search" and provider == "github_topics":
+            return GitHubTopicSearchProvider(
+                endpoint=str(settings["endpoint"]),
+                token_env=str(settings["token_env"]) if "token_env" in settings else None,
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+            )
+
+        if service.type == "search" and provider == "github_candidates":
+            return GitHubCandidateSearchProvider(
+                users_endpoint=str(settings["users_endpoint"]),
+                repositories_endpoint=str(settings["repositories_endpoint"]),
+                code_endpoint=str(settings["code_endpoint"]),
+                user_endpoint_template=str(settings.get("user_endpoint_template", "https://api.github.com/users/{login}")),
+                user_repos_endpoint_template=str(settings.get("user_repos_endpoint_template", "https://api.github.com/users/{login}/repos")),
+                rate_limit_endpoint=str(settings.get("rate_limit_endpoint", "https://api.github.com/rate_limit")),
+                token_env=str(settings["token_env"]) if "token_env" in settings else None,
+                timeout_seconds=int(settings.get("timeout_seconds", 20)),
+                enrichment_repo_limit=int(settings.get("enrichment_repo_limit", 8)),
             )
 
         if service.type == "search" and provider == "huggingface_models":

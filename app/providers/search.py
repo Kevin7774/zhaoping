@@ -651,6 +651,351 @@ class BraveWebSearchProvider:
         }
 
 
+class _GitHubAPIClient:
+    def __init__(
+        self,
+        *,
+        token_env: str | None = "GITHUB_TOKEN",
+        timeout_seconds: int = 20,
+        api_version: str = "2022-11-28",
+    ) -> None:
+        self.token_env = token_env
+        self.timeout_seconds = timeout_seconds
+        self.api_version = api_version
+        self.last_rate_limit: dict[str, Any] = {}
+
+    def get_json(
+        self,
+        endpoint: str,
+        *,
+        params: dict[str, Any] | None = None,
+        accept: str = "application/vnd.github+json",
+        error_context: str = "GitHub API request",
+    ) -> Any:
+        headers = self.headers(accept=accept)
+
+        import requests
+
+        response = requests.get(
+            endpoint,
+            params=params or {},
+            headers=headers,
+            timeout=self.timeout_seconds,
+        )
+        self._record_rate_limit(response)
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise RuntimeError(f"{error_context} failed: {response.status_code} {response.text[:300]}") from exc
+        return response.json()
+
+    def headers(self, *, accept: str = "application/vnd.github+json") -> dict[str, str]:
+        headers = {
+            "Accept": accept,
+            "X-GitHub-Api-Version": self.api_version,
+        }
+        if self.token_env:
+            token = os.environ.get(self.token_env)
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    def _record_rate_limit(self, response: Any) -> None:
+        headers = getattr(response, "headers", {}) or {}
+        remaining = headers.get("X-RateLimit-Remaining")
+        resource = headers.get("X-RateLimit-Resource") or "core"
+        if remaining is None:
+            return
+        self.last_rate_limit = {
+            "resource": resource,
+            "limit": _safe_int(headers.get("X-RateLimit-Limit")),
+            "remaining": _safe_int(remaining),
+            "reset": _safe_int(headers.get("X-RateLimit-Reset")),
+        }
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _github_limit(limit: int, *, max_limit: int = 100) -> int:
+    return max(1, min(int(limit), max_limit))
+
+
+def _github_profile_url(login: str | None) -> str | None:
+    return f"https://github.com/{login}" if login else None
+
+
+def _github_query_tokens(query: str) -> list[str]:
+    ignored = {
+        "and",
+        "or",
+        "not",
+        "in",
+        "is",
+        "user",
+        "org",
+        "repo",
+        "language",
+        "topic",
+        "stars",
+        "forks",
+        "pushed",
+        "created",
+        "updated",
+    }
+    tokens = []
+    for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", query.casefold()):
+        if len(token) < 2 or token in ignored:
+            continue
+        tokens.append(token)
+    return _unique_ordered(tokens)
+
+
+def _unique_ordered(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        unique.append(text)
+    return unique
+
+
+def _github_text_fragment(item: dict[str, Any]) -> str:
+    text_matches = item.get("text_matches")
+    if isinstance(text_matches, list):
+        fragments = [
+            str(match.get("fragment", "")).strip()
+            for match in text_matches
+            if isinstance(match, dict) and str(match.get("fragment", "")).strip()
+        ]
+        if fragments:
+            return " ".join(fragments)[:700]
+    return str(item.get("description") or item.get("name") or item.get("path") or "")[:700]
+
+
+def _github_repository_summary(item: dict[str, Any]) -> dict[str, Any]:
+    topics = item.get("topics") if isinstance(item.get("topics"), list) else []
+    owner = item.get("owner") if isinstance(item.get("owner"), dict) else {}
+    return {
+        "full_name": item.get("full_name") or item.get("name") or "",
+        "url": item.get("html_url") or "",
+        "description": item.get("description") or "",
+        "language": item.get("language"),
+        "stars": _safe_int(item.get("stargazers_count")),
+        "forks": _safe_int(item.get("forks_count")),
+        "topics": [str(topic) for topic in topics[:12]],
+        "pushed_at": item.get("pushed_at"),
+        "updated_at": item.get("updated_at"),
+        "owner_login": owner.get("login"),
+        "owner_type": owner.get("type"),
+    }
+
+
+def _github_repository_key(repo: dict[str, Any]) -> tuple[str, str]:
+    return (str(repo.get("full_name") or ""), str(repo.get("url") or ""))
+
+
+def _github_code_hit_summary(item: dict[str, Any]) -> dict[str, Any]:
+    repository = item.get("repository") if isinstance(item.get("repository"), dict) else {}
+    owner = repository.get("owner") if isinstance(repository.get("owner"), dict) else {}
+    return {
+        "source": "code",
+        "repository_full_name": repository.get("full_name") or "",
+        "repository_url": repository.get("html_url") or "",
+        "owner_login": owner.get("login"),
+        "path": item.get("path") or item.get("name") or "",
+        "url": item.get("html_url") or "",
+        "fragment": _github_text_fragment(item),
+    }
+
+
+def _parse_github_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _recent_repo_count(repositories: list[dict[str, Any]], *, days: int = 180) -> int:
+    now = datetime.now(timezone.utc)
+    count = 0
+    for repo in repositories:
+        updated = _parse_github_datetime(repo.get("pushed_at") or repo.get("updated_at"))
+        if updated and (now - updated).days <= days:
+            count += 1
+    return count
+
+
+def _github_candidate_score(
+    *,
+    query_tokens: list[str],
+    profile: dict[str, Any],
+    repositories: list[dict[str, Any]],
+    code_hits: list[dict[str, Any]],
+) -> tuple[int, list[str], dict[str, Any]]:
+    haystack = " ".join(
+        [
+            str(profile.get("login") or ""),
+            str(profile.get("name") or ""),
+            str(profile.get("company") or ""),
+            str(profile.get("bio") or ""),
+            " ".join(str(repo.get("full_name") or "") for repo in repositories),
+            " ".join(str(repo.get("description") or "") for repo in repositories),
+            " ".join(" ".join(str(topic) for topic in repo.get("topics") or []) for repo in repositories),
+            " ".join(str(hit.get("fragment") or "") for hit in code_hits),
+        ]
+    ).casefold()
+    matched_keywords = [token for token in query_tokens if token in haystack]
+    stars = sum(_safe_int(repo.get("stars")) for repo in repositories)
+    forks = sum(_safe_int(repo.get("forks")) for repo in repositories)
+    recent_count = _recent_repo_count(repositories)
+    code_hit_count = len(code_hits)
+    public_repos = _safe_int(profile.get("public_repos"))
+    followers = _safe_int(profile.get("followers"))
+
+    score = 42
+    score += min(24, len(matched_keywords) * 6)
+    score += min(14, stars // 60)
+    score += min(8, forks // 20)
+    score += min(8, recent_count * 4)
+    score += min(6, code_hit_count * 3)
+    score += 4 if public_repos >= 5 else 0
+    score += 4 if followers >= 25 else 0
+    bounded = max(40, min(98, score))
+    signals = {
+        "matched_keyword_count": len(matched_keywords),
+        "total_stars": stars,
+        "total_forks": forks,
+        "recent_repository_count": recent_count,
+        "code_hit_count": code_hit_count,
+        "public_repos": public_repos,
+        "followers": followers,
+    }
+    return bounded, matched_keywords, signals
+
+
+def _github_skills(matched_keywords: list[str], repositories: list[dict[str, Any]]) -> list[str]:
+    values = list(matched_keywords)
+    for repo in repositories:
+        language = repo.get("language")
+        if language:
+            values.append(str(language))
+        values.extend(str(topic) for topic in repo.get("topics") or [])
+    return _unique_ordered(values)[:18]
+
+
+def _merge_github_repositories(repositories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    for repo in repositories:
+        key = _github_repository_key(repo)
+        if not any(key):
+            continue
+        existing = merged.get(key)
+        if existing is None or _safe_int(repo.get("stars")) > _safe_int(existing.get("stars")):
+            merged[key] = repo
+    return sorted(
+        merged.values(),
+        key=lambda item: (
+            -_safe_int(item.get("stars")),
+            str(item.get("pushed_at") or item.get("updated_at") or ""),
+            str(item.get("full_name") or ""),
+        ),
+    )
+
+
+class GitHubUserSearchProvider:
+    def __init__(
+        self,
+        endpoint: str = "https://api.github.com/search/users",
+        user_endpoint_template: str = "https://api.github.com/users/{login}",
+        token_env: str | None = "GITHUB_TOKEN",
+        timeout_seconds: int = 20,
+    ) -> None:
+        self.endpoint = endpoint
+        self.user_endpoint_template = user_endpoint_template
+        self._client = _GitHubAPIClient(token_env=token_env, timeout_seconds=timeout_seconds)
+
+    def search(self, query: str, limit: int = 5) -> list[dict]:
+        normalized_limit = _github_limit(limit)
+        payload = self._client.get_json(
+            self.endpoint,
+            params={
+                "q": query,
+                "per_page": normalized_limit,
+                "page": 1,
+                "sort": "followers",
+                "order": "desc",
+            },
+            error_context="GitHub user search",
+        )
+        items = (payload.get("items") or [])[:normalized_limit]
+        results = []
+        for rank, item in enumerate(items, start=1):
+            login = item.get("login")
+            profile = self._fetch_user(str(login)) if login else {}
+            results.append(self._to_result(query=query, rank=rank, item=item, profile=profile))
+        return results
+
+    def _fetch_user(self, login: str) -> dict[str, Any]:
+        endpoint = self.user_endpoint_template.format(login=quote_plus(login))
+        return self._client.get_json(endpoint, error_context=f"GitHub user profile {login}")
+
+    def _to_result(self, query: str, rank: int, item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+        login = str(profile.get("login") or item.get("login") or "")
+        html_url = profile.get("html_url") or item.get("html_url") or _github_profile_url(login)
+        query_tokens = _github_query_tokens(query)
+        score, matched_keywords, signals = _github_candidate_score(
+            query_tokens=query_tokens,
+            profile=profile or {"login": login},
+            repositories=[],
+            code_hits=[],
+        )
+        bio = str(profile.get("bio") or "")
+        evidence = [
+            f"GitHub profile {login}: public repos={_safe_int(profile.get('public_repos'))}, followers={_safe_int(profile.get('followers'))}.",
+        ]
+        if bio:
+            evidence.append(bio)
+        return {
+            "source_key": "github_users",
+            "name_zh": "GitHub 用户搜索",
+            "source_type": "developer_profile",
+            "source_platform": "github_users",
+            "query": query,
+            "rank": rank,
+            "title": profile.get("name") or login,
+            "url": html_url,
+            "source_url": html_url,
+            "github_url": html_url,
+            "name": profile.get("name") or login,
+            "current_company": profile.get("company"),
+            "location": profile.get("location"),
+            "email": profile.get("email"),
+            "homepage_url": profile.get("blog"),
+            "snippet": bio,
+            "evidence": evidence,
+            "skills": matched_keywords,
+            "matched_keywords": matched_keywords,
+            "confidence": round(score / 100, 2),
+            "github_score": score,
+            "scoring_signals": signals,
+            "followers": _safe_int(profile.get("followers")),
+            "public_repos": _safe_int(profile.get("public_repos")),
+            "updated_at": profile.get("updated_at"),
+            "rate_limit": dict(self._client.last_rate_limit),
+        }
+
+
 class GitHubRepositorySearchProvider:
     def __init__(
         self,
@@ -722,6 +1067,363 @@ class GitHubRepositorySearchProvider:
             "open_issues": item.get("open_issues_count"),
             "license": (item.get("license") or {}).get("spdx_id"),
             "topics": topics[:12],
+        }
+
+
+class GitHubCodeSearchProvider:
+    def __init__(
+        self,
+        endpoint: str = "https://api.github.com/search/code",
+        token_env: str | None = "GITHUB_TOKEN",
+        timeout_seconds: int = 20,
+    ) -> None:
+        self.endpoint = endpoint
+        self._client = _GitHubAPIClient(token_env=token_env, timeout_seconds=timeout_seconds)
+
+    def search(self, query: str, limit: int = 5) -> list[dict]:
+        normalized_limit = _github_limit(limit)
+        payload = self._client.get_json(
+            self.endpoint,
+            params={"q": query, "per_page": normalized_limit, "page": 1},
+            accept="application/vnd.github.text-match+json",
+            error_context="GitHub code search",
+        )
+        items = (payload.get("items") or [])[:normalized_limit]
+        return [
+            self._to_result(query=query, rank=rank, item=item)
+            for rank, item in enumerate(items, start=1)
+        ]
+
+    def _to_result(self, query: str, rank: int, item: dict[str, Any]) -> dict[str, Any]:
+        hit = _github_code_hit_summary(item)
+        owner_login = hit.get("owner_login")
+        github_url = _github_profile_url(str(owner_login)) if owner_login else None
+        title = f"{hit.get('repository_full_name')}:{hit.get('path')}"
+        matched_keywords = [
+            token
+            for token in _github_query_tokens(query)
+            if token in " ".join([str(hit.get("fragment") or ""), title]).casefold()
+        ]
+        return {
+            "source_key": "github_code",
+            "name_zh": "GitHub 代码搜索",
+            "source_type": "code_search",
+            "source_platform": "github_code",
+            "query": query,
+            "rank": rank,
+            "title": title,
+            "url": hit.get("url"),
+            "source_url": hit.get("url"),
+            "github_url": github_url,
+            "owner_login": owner_login,
+            "repository_full_name": hit.get("repository_full_name"),
+            "repository_url": hit.get("repository_url"),
+            "path": hit.get("path"),
+            "snippet": hit.get("fragment"),
+            "evidence": [f"Code match in {title}: {hit.get('fragment')}".strip()],
+            "skills": matched_keywords,
+            "matched_keywords": matched_keywords,
+            "confidence": max(0.58, min(0.86, round(0.76 - (rank - 1) * 0.04, 2))),
+            "rate_limit": dict(self._client.last_rate_limit),
+        }
+
+
+class GitHubTopicSearchProvider:
+    def __init__(
+        self,
+        endpoint: str = "https://api.github.com/search/topics",
+        token_env: str | None = "GITHUB_TOKEN",
+        timeout_seconds: int = 20,
+    ) -> None:
+        self.endpoint = endpoint
+        self._client = _GitHubAPIClient(token_env=token_env, timeout_seconds=timeout_seconds)
+
+    def search(self, query: str, limit: int = 5) -> list[dict]:
+        normalized_limit = _github_limit(limit)
+        payload = self._client.get_json(
+            self.endpoint,
+            params={"q": query, "per_page": normalized_limit, "page": 1},
+            error_context="GitHub topic search",
+        )
+        items = (payload.get("items") or [])[:normalized_limit]
+        return [
+            self._to_result(query=query, rank=rank, item=item)
+            for rank, item in enumerate(items, start=1)
+        ]
+
+    def _to_result(self, query: str, rank: int, item: dict[str, Any]) -> dict[str, Any]:
+        name = str(item.get("name") or "")
+        title = item.get("display_name") or name
+        url = item.get("html_url") or (f"https://github.com/topics/{name}" if name else "")
+        snippet = item.get("short_description") or item.get("description") or ""
+        return {
+            "source_key": "github_topics",
+            "name_zh": "GitHub Topic 搜索",
+            "source_type": "code_topic",
+            "query": query,
+            "rank": rank,
+            "title": title,
+            "url": url,
+            "snippet": snippet,
+            "topic": name,
+            "created_by": item.get("created_by"),
+            "featured": item.get("featured"),
+            "curated": item.get("curated"),
+            "confidence": max(0.5, min(0.8, round(0.72 - (rank - 1) * 0.03, 2))),
+            "rate_limit": dict(self._client.last_rate_limit),
+        }
+
+
+class GitHubCandidateSearchProvider:
+    def __init__(
+        self,
+        users_endpoint: str = "https://api.github.com/search/users",
+        repositories_endpoint: str = "https://api.github.com/search/repositories",
+        code_endpoint: str = "https://api.github.com/search/code",
+        user_endpoint_template: str = "https://api.github.com/users/{login}",
+        user_repos_endpoint_template: str = "https://api.github.com/users/{login}/repos",
+        rate_limit_endpoint: str = "https://api.github.com/rate_limit",
+        token_env: str | None = "GITHUB_TOKEN",
+        timeout_seconds: int = 20,
+        enrichment_repo_limit: int = 8,
+    ) -> None:
+        self.users_endpoint = users_endpoint
+        self.repositories_endpoint = repositories_endpoint
+        self.code_endpoint = code_endpoint
+        self.user_endpoint_template = user_endpoint_template
+        self.user_repos_endpoint_template = user_repos_endpoint_template
+        self.rate_limit_endpoint = rate_limit_endpoint
+        self.enrichment_repo_limit = max(1, min(int(enrichment_repo_limit), 30))
+        self._client = _GitHubAPIClient(token_env=token_env, timeout_seconds=timeout_seconds)
+
+    def search(self, query: str, limit: int = 5) -> list[dict]:
+        normalized_limit = _github_limit(limit, max_limit=20)
+        candidates: dict[str, dict[str, Any]] = {}
+        order: list[str] = []
+
+        def ensure_candidate(login: str | None) -> dict[str, Any] | None:
+            if not login:
+                return None
+            normalized = str(login).strip()
+            if not normalized:
+                return None
+            key = normalized.casefold()
+            if key not in candidates:
+                candidates[key] = {
+                    "login": normalized,
+                    "user_item": {},
+                    "repositories": [],
+                    "code_hits": [],
+                    "source_hits": [],
+                }
+                order.append(key)
+            return candidates[key]
+
+        for item in self._search_users(query, normalized_limit):
+            candidate = ensure_candidate(item.get("login"))
+            if candidate is None:
+                continue
+            candidate["user_item"] = item
+            candidate["source_hits"].append({"source": "user", "url": item.get("html_url")})
+
+        for item in self._search_repositories(query, normalized_limit):
+            owner = item.get("owner") if isinstance(item.get("owner"), dict) else {}
+            candidate = ensure_candidate(owner.get("login"))
+            if candidate is None:
+                continue
+            repo_summary = _github_repository_summary(item)
+            candidate["repositories"].append(repo_summary)
+            candidate["source_hits"].append(
+                {
+                    "source": "repository",
+                    "url": repo_summary.get("url"),
+                    "title": repo_summary.get("full_name"),
+                    "snippet": repo_summary.get("description"),
+                }
+            )
+
+        for item in self._search_code(query, normalized_limit):
+            hit = _github_code_hit_summary(item)
+            candidate = ensure_candidate(hit.get("owner_login"))
+            if candidate is None:
+                continue
+            candidate["code_hits"].append(hit)
+            candidate["source_hits"].append(
+                {
+                    "source": "code",
+                    "url": hit.get("url"),
+                    "title": f"{hit.get('repository_full_name')}:{hit.get('path')}",
+                    "snippet": hit.get("fragment"),
+                }
+            )
+
+        results = []
+        query_tokens = _github_query_tokens(query)
+        for key in order:
+            candidate = candidates[key]
+            login = str(candidate["login"])
+            profile = self._fetch_user(login)
+            repos = [
+                *candidate["repositories"],
+                *[_github_repository_summary(repo) for repo in self._fetch_user_repos(login)],
+            ]
+            merged_repos = _merge_github_repositories(repos)
+            result = self._to_candidate_result(
+                query=query,
+                query_tokens=query_tokens,
+                profile=profile or candidate.get("user_item") or {"login": login},
+                repositories=merged_repos,
+                code_hits=candidate["code_hits"],
+                source_hits=candidate["source_hits"],
+            )
+            results.append(result)
+
+        return sorted(results, key=lambda item: (-int(item.get("github_score") or 0), str(item.get("github_url") or "")))[:normalized_limit]
+
+    def rate_limit_status(self) -> dict[str, Any]:
+        return self._client.get_json(self.rate_limit_endpoint, error_context="GitHub rate limit status")
+
+    def _search_users(self, query: str, limit: int) -> list[dict[str, Any]]:
+        payload = self._client.get_json(
+            self.users_endpoint,
+            params={"q": query, "per_page": limit, "page": 1, "sort": "followers", "order": "desc"},
+            error_context="GitHub candidate user search",
+        )
+        return list((payload.get("items") or [])[:limit])
+
+    def _search_repositories(self, query: str, limit: int) -> list[dict[str, Any]]:
+        payload = self._client.get_json(
+            self.repositories_endpoint,
+            params={"q": query, "per_page": limit, "page": 1, "sort": "stars", "order": "desc"},
+            error_context="GitHub candidate repository search",
+        )
+        return list((payload.get("items") or [])[:limit])
+
+    def _search_code(self, query: str, limit: int) -> list[dict[str, Any]]:
+        payload = self._client.get_json(
+            self.code_endpoint,
+            params={"q": query, "per_page": limit, "page": 1},
+            accept="application/vnd.github.text-match+json",
+            error_context="GitHub candidate code search",
+        )
+        return list((payload.get("items") or [])[:limit])
+
+    def _fetch_user(self, login: str) -> dict[str, Any]:
+        endpoint = self.user_endpoint_template.format(login=quote_plus(login))
+        return self._client.get_json(endpoint, error_context=f"GitHub candidate profile {login}")
+
+    def _fetch_user_repos(self, login: str) -> list[dict[str, Any]]:
+        endpoint = self.user_repos_endpoint_template.format(login=quote_plus(login))
+        payload = self._client.get_json(
+            endpoint,
+            params={"per_page": self.enrichment_repo_limit, "sort": "updated", "direction": "desc"},
+            error_context=f"GitHub candidate repositories {login}",
+        )
+        return payload if isinstance(payload, list) else []
+
+    def _to_candidate_result(
+        self,
+        *,
+        query: str,
+        query_tokens: list[str],
+        profile: dict[str, Any],
+        repositories: list[dict[str, Any]],
+        code_hits: list[dict[str, Any]],
+        source_hits: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        login = str(profile.get("login") or "")
+        github_url = profile.get("html_url") or _github_profile_url(login)
+        score, matched_keywords, signals = _github_candidate_score(
+            query_tokens=query_tokens,
+            profile=profile,
+            repositories=repositories,
+            code_hits=code_hits,
+        )
+        representative_repositories = repositories[:5]
+        repository_evidence = [
+            {
+                "source": hit.get("source") or "repository",
+                "title": hit.get("title"),
+                "url": hit.get("url"),
+                "snippet": hit.get("snippet"),
+            }
+            for hit in source_hits
+            if hit.get("source") in {"repository", "code"} and (hit.get("url") or hit.get("snippet"))
+        ][:8]
+        for repo in representative_repositories:
+            repository_evidence.append(
+                {
+                    "source": "repository",
+                    "title": repo.get("full_name"),
+                    "url": repo.get("url"),
+                    "snippet": repo.get("description"),
+                }
+            )
+        evidence = [
+            f"GitHub profile {login}: score={score}, public repos={_safe_int(profile.get('public_repos'))}, followers={_safe_int(profile.get('followers'))}.",
+        ]
+        bio = str(profile.get("bio") or "").strip()
+        if bio:
+            evidence.append(bio)
+        for repo in representative_repositories[:3]:
+            repo_line = (
+                f"{repo.get('full_name')} ({repo.get('language') or 'unknown'}): "
+                f"{_safe_int(repo.get('stars'))} stars, {_safe_int(repo.get('forks'))} forks. "
+                f"{repo.get('description') or ''}"
+            ).strip()
+            evidence.append(repo_line)
+        for hit in code_hits[:2]:
+            evidence.append(f"Code evidence {hit.get('repository_full_name')}:{hit.get('path')} - {hit.get('fragment')}")
+
+        return {
+            "source_key": "github_candidates",
+            "name_zh": "GitHub 候选人搜索",
+            "source_type": "developer_profile",
+            "source_platform": "github_candidates",
+            "query": query,
+            "title": profile.get("name") or login,
+            "url": github_url,
+            "source_url": github_url,
+            "github_url": github_url,
+            "name": profile.get("name") or login,
+            "current_company": profile.get("company"),
+            "location": profile.get("location"),
+            "email": profile.get("email"),
+            "homepage_url": profile.get("blog"),
+            "snippet": bio or (repository_evidence[0].get("snippet") if repository_evidence else ""),
+            "published_at": profile.get("created_at"),
+            "updated_at": profile.get("updated_at"),
+            "evidence": _unique_ordered([str(item) for item in evidence if item])[:10],
+            "skills": _github_skills(matched_keywords, representative_repositories),
+            "matched_keywords": matched_keywords,
+            "confidence": round(score / 100, 2),
+            "github_score": score,
+            "scoring_signals": signals,
+            "representative_repositories": representative_repositories,
+            "repository_evidence": repository_evidence[:10],
+            "recent_activity": {
+                "recent_repository_count": signals["recent_repository_count"],
+                "latest_repository_pushed_at": next(
+                    (repo.get("pushed_at") for repo in representative_repositories if repo.get("pushed_at")),
+                    None,
+                ),
+            },
+            "followers": _safe_int(profile.get("followers")),
+            "public_repos": _safe_int(profile.get("public_repos")),
+            "rate_limit": dict(self._client.last_rate_limit),
+            "raw_payload": {
+                "profile": {
+                    "login": login,
+                    "html_url": github_url,
+                    "company": profile.get("company"),
+                    "location": profile.get("location"),
+                    "public_repos": profile.get("public_repos"),
+                    "followers": profile.get("followers"),
+                },
+                "representative_repositories": representative_repositories,
+                "repository_evidence": repository_evidence[:10],
+                "scoring_signals": signals,
+            },
         }
 
 
@@ -4911,6 +5613,10 @@ class DueDiligenceFederatedSearchProvider:
             "grants_gov_opportunities",
             "standards_certifications",
             "datasets_benchmarks",
+            "github_candidates",
+            "github_users",
+            "github_code",
+            "github_topics",
         }:
             return "primary_or_authoritative"
         if source_key in {
@@ -4925,8 +5631,8 @@ class DueDiligenceFederatedSearchProvider:
             "app_traffic_product_analytics",
         }:
             return "licensed_or_structured_database"
-        if source_type in {"open_web", "academic", "regulatory_filings", "patent", "sanctions", "code_repository", "model_repository", "company_registry", "litigation", "financial_facts", "investment_adviser_registry", "financial_institution_registry", "insider_transactions", "ownership_activism", "regulatory_policy", "product_safety_recall", "fda_enforcement_recall", "fda_device_clearance", "fda_device_adverse_event", "fda_device_classification", "fda_device_registration_listing", "consumer_finance_complaint", "vehicle_safety_recall", "environmental_compliance", "clinical_trial_registry", "healthcare_payments", "trade_flows", "macroeconomic_time_series", "funding_news", "regulatory_enforcement", "job_salary", "identity_enrichment", "market_signal", "social_platform_search", "adaptive_web_scraping", "browser_automation", "supervised_browser_operation", "chrome_cdp_web_access"}:
-            return "primary_or_authoritative" if source_type in {"academic", "regulatory_filings", "patent", "sanctions", "code_repository", "model_repository", "company_registry", "litigation", "financial_facts", "investment_adviser_registry", "financial_institution_registry", "insider_transactions", "ownership_activism", "regulatory_policy", "product_safety_recall", "fda_enforcement_recall", "fda_device_clearance", "fda_device_adverse_event", "fda_device_classification", "fda_device_registration_listing", "consumer_finance_complaint", "vehicle_safety_recall", "environmental_compliance", "clinical_trial_registry", "healthcare_payments", "trade_flows", "macroeconomic_time_series", "regulatory_enforcement"} else "secondary_or_open_web"
+        if source_type in {"open_web", "academic", "regulatory_filings", "patent", "sanctions", "code_repository", "code_search", "code_topic", "developer_profile", "model_repository", "company_registry", "litigation", "financial_facts", "investment_adviser_registry", "financial_institution_registry", "insider_transactions", "ownership_activism", "regulatory_policy", "product_safety_recall", "fda_enforcement_recall", "fda_device_clearance", "fda_device_adverse_event", "fda_device_classification", "fda_device_registration_listing", "consumer_finance_complaint", "vehicle_safety_recall", "environmental_compliance", "clinical_trial_registry", "healthcare_payments", "trade_flows", "macroeconomic_time_series", "funding_news", "regulatory_enforcement", "job_salary", "identity_enrichment", "market_signal", "social_platform_search", "adaptive_web_scraping", "browser_automation", "supervised_browser_operation", "chrome_cdp_web_access"}:
+            return "primary_or_authoritative" if source_type in {"academic", "regulatory_filings", "patent", "sanctions", "code_repository", "code_search", "code_topic", "developer_profile", "model_repository", "company_registry", "litigation", "financial_facts", "investment_adviser_registry", "financial_institution_registry", "insider_transactions", "ownership_activism", "regulatory_policy", "product_safety_recall", "fda_enforcement_recall", "fda_device_clearance", "fda_device_adverse_event", "fda_device_classification", "fda_device_registration_listing", "consumer_finance_complaint", "vehicle_safety_recall", "environmental_compliance", "clinical_trial_registry", "healthcare_payments", "trade_flows", "macroeconomic_time_series", "regulatory_enforcement"} else "secondary_or_open_web"
         if any(token in purpose for token in ("新闻", "媒体", "社区", "论坛")):
             return "secondary_or_open_web"
         if source_key == "expert_network_interviews":
@@ -5178,7 +5884,11 @@ class DueDiligenceFederatedSearchProvider:
                 "datasets_benchmarks",
                 "openalex_works_search",
                 "patentsview_patents",
+                "github_candidates",
+                "github_users",
                 "github_repositories",
+                "github_code",
+                "github_topics",
                 "huggingface_models",
                 "scrapling_adaptive_scrape",
             },
@@ -5269,8 +5979,8 @@ class DueDiligenceFederatedSearchProvider:
             "market_and_funding": {"market_data", "investment_adviser_registry", "financial_institution_registry", "trade_flows", "macroeconomic_time_series", "funding_news", "grant_opportunity"},
             "macro_market_context": {"macroeconomic_time_series", "trade_flows"},
             "non_dilutive_funding": {"grant_opportunity", "procurement_awards", "procurement_opportunity"},
-            "technical_evidence": {"academic", "patent", "code_repository", "model_repository", "adaptive_web_scraping"},
-            "people_and_hiring": {"professional_profile", "recruiting", "job_salary", "social_platform_search", "browser_automation", "supervised_browser_operation", "chrome_cdp_web_access"},
+            "technical_evidence": {"academic", "patent", "code_repository", "code_search", "code_topic", "developer_profile", "model_repository", "adaptive_web_scraping"},
+            "people_and_hiring": {"professional_profile", "developer_profile", "recruiting", "job_salary", "social_platform_search", "browser_automation", "supervised_browser_operation", "chrome_cdp_web_access"},
             "community_signal": {"community", "news_media", "open_web", "social_platform_search", "adaptive_web_scraping", "browser_automation", "supervised_browser_operation", "chrome_cdp_web_access"},
             "regulatory_enforcement": {
                 "sanctions",
@@ -5428,6 +6138,10 @@ class DueDiligenceFederatedSearchProvider:
             "PatentsViewPatentSearchProvider": ("patentsview_patents", "PatentsView 专利", "patent"),
             "OFACSanctionsListSearchProvider": ("ofac_sanctions_lists", "OFAC 制裁清单", "sanctions"),
             "GitHubRepositorySearchProvider": ("github_repositories", "GitHub 代码仓库", "code_repository"),
+            "GitHubCandidateSearchProvider": ("github_candidates", "GitHub 候选人搜索", "developer_profile"),
+            "GitHubUserSearchProvider": ("github_users", "GitHub 用户搜索", "developer_profile"),
+            "GitHubCodeSearchProvider": ("github_code", "GitHub 代码搜索", "code_search"),
+            "GitHubTopicSearchProvider": ("github_topics", "GitHub Topic 搜索", "code_topic"),
             "HuggingFaceModelSearchProvider": ("huggingface_models", "Hugging Face 模型库", "model_repository"),
             "CompaniesHouseCompanySearchProvider": ("companies_house_search", "Companies House 公司注册", "company_registry"),
             "CourtListenerSearchProvider": ("courtlistener_search", "CourtListener 司法检索", "litigation"),

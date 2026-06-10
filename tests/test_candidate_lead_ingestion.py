@@ -356,6 +356,57 @@ def test_candidate_lead_preview_redacts_email_and_reports_ingestion_action(
         assert session.scalar(select(func.count(JobCandidate.id))) == 1
 
 
+def test_candidate_lead_preview_keeps_github_score_and_repository_evidence(
+    session_factory: sessionmaker[Session],
+) -> None:
+    from app.core.candidate_lead_ingestion import preview_candidate_leads
+
+    lead = {
+        **github_lead(),
+        "source_platform": "github_candidates",
+        "source_url": "https://github.com/alice-robotics",
+        "github_score": 91,
+        "representative_repositories": [
+            {
+                "full_name": "alice-robotics/agentic-rag-robot",
+                "url": "https://github.com/alice-robotics/agentic-rag-robot",
+                "language": "TypeScript",
+                "stars": 860,
+                "forks": 74,
+                "topics": ["agentic-workflow", "rag", "mcp"],
+            }
+        ],
+        "repository_evidence": [
+            {
+                "source": "code",
+                "title": "alice-robotics/agentic-rag-robot:src/workflow.ts",
+                "url": "https://github.com/alice-robotics/agentic-rag-robot/blob/main/src/workflow.ts",
+                "snippet": "createAgenticWorkflow({ mcp, rag, fullstack })",
+            }
+        ],
+        "recent_activity": {"recent_repository_count": 2, "latest_repository_pushed_at": "2026-06-01T12:00:00Z"},
+        "scoring_signals": {"total_stars": 980, "matched_keyword_count": 4},
+    }
+
+    with session_factory() as session:
+        preview = preview_candidate_leads(
+            session,
+            project_id="project_2026_ai_team",
+            job_id="job_vla_algorithm",
+            raw_leads=[lead],
+            limit=5,
+        )
+
+    item = preview["leads"][0]
+    assert item["github_score"] == 91
+    assert item["representative_repositories"][0]["full_name"] == "alice-robotics/agentic-rag-robot"
+    assert item["repository_evidence"][0]["source"] == "code"
+    assert item["recent_activity"]["recent_repository_count"] == 2
+    assert item["scoring_signals"]["total_stars"] == 980
+    assert item["email"] == "[redacted]"
+    assert "alice@example.com" not in str(preview)
+
+
 def test_scenario_b_awaiting_payload_contains_lead_preview(
     client: TestClient,
     session_factory: sessionmaker[Session],

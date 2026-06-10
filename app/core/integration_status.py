@@ -165,6 +165,10 @@ SERVICE_NAME_ZH = {
     "web_access_cdp_search": "Web-access Chrome 联网",
     "brave_web_search": "Brave 开放网页搜索",
     "github_repositories": "GitHub 代码仓库搜索",
+    "github_candidates": "GitHub 候选人搜索",
+    "github_users": "GitHub 用户搜索",
+    "github_code": "GitHub 代码搜索",
+    "github_topics": "GitHub Topic 搜索",
     "huggingface_models": "Hugging Face 模型搜索",
     "pdl_people_search": "People Data Labs 人员补全",
     "x_recent_posts_search": "X recent posts 搜索",
@@ -248,6 +252,10 @@ PROVIDER_CODE_PATHS = {
     ("search", "agent_reach_social"): "app/providers/search.py",
     ("search", "external_search_tool"): "app/providers/search.py",
     ("search", "github_repositories"): "app/providers/search.py",
+    ("search", "github_candidates"): "app/providers/search.py",
+    ("search", "github_users"): "app/providers/search.py",
+    ("search", "github_code"): "app/providers/search.py",
+    ("search", "github_topics"): "app/providers/search.py",
     ("search", "huggingface_models"): "app/providers/search.py",
     ("search", "people_data_labs_people"): "app/providers/search.py",
     ("search", "x_recent_posts"): "app/providers/search.py",
@@ -350,6 +358,8 @@ def _service_status(config: AppConfig, service: ServiceConfig) -> dict[str, Any]
 
     if service.provider == "disabled":
         status = "disabled"
+    elif _is_disabled_by_env(settings):
+        status = "disabled"
     elif missing_credentials:
         status = "missing_key"
     elif missing_runtime:
@@ -446,6 +456,8 @@ def _provider_code_path(service: ServiceConfig) -> str | None:
 def _credential_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:
     credentials: list[dict[str, Any]] = []
     for field_name, env_name in sorted(settings.items()):
+        if field_name == "enabled_env":
+            continue
         if not field_name.endswith("_env") or not isinstance(env_name, str) or not env_name:
             continue
         credentials.append(
@@ -457,6 +469,14 @@ def _credential_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return credentials
+
+
+def _is_disabled_by_env(settings: dict[str, Any]) -> bool:
+    enabled_env = settings.get("enabled_env")
+    if not isinstance(enabled_env, str) or not enabled_env:
+        return False
+    value = os.getenv(enabled_env)
+    return value is not None and value.strip().lower() in {"0", "false", "no", "off"}
 
 
 def _runtime_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:

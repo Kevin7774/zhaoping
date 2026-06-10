@@ -78,6 +78,25 @@ describe("HumanConfirmModal", () => {
               sourceUrl: "https://github.com/alicewang/robot-vla",
               evidenceSummary: "Maintains robot-vla with diffusion policy examples.",
               confidence: 0.86,
+              githubScore: 91,
+              representativeRepositories: [
+                {
+                  fullName: "alice-robotics/agentic-rag-robot",
+                  url: "https://github.com/alice-robotics/agentic-rag-robot",
+                  language: "TypeScript",
+                  stars: 860,
+                  forks: 74,
+                  topics: ["agentic-workflow", "rag", "mcp"],
+                },
+              ],
+              repositoryEvidence: [
+                {
+                  source: "code",
+                  title: "alice-robotics/agentic-rag-robot:src/workflow.ts",
+                  url: "https://github.com/alice-robotics/agentic-rag-robot/blob/main/src/workflow.ts",
+                  snippet: "createAgenticWorkflow({ mcp, rag, fullstack })",
+                },
+              ],
               matchedJob: "VLA / 具身智能算法工程师",
               complianceStatus: "clear",
               ingestionAction: "insert",
@@ -93,6 +112,10 @@ describe("HumanConfirmModal", () => {
     expect(screen.getByText("即将入库的候选线索")).toBeTruthy();
     expect(screen.getByText("Alice Wang")).toBeTruthy();
     expect(screen.getByText("github_repositories")).toBeTruthy();
+    expect(screen.getByText("GitHub 91")).toBeTruthy();
+    expect(screen.getByText("alice-robotics/agentic-rag-robot")).toBeTruthy();
+    expect(screen.getByText("TypeScript · 860 stars · 74 forks")).toBeTruthy();
+    expect(screen.getByText("createAgenticWorkflow({ mcp, rag, fullstack })")).toBeTruthy();
     expect(screen.getByText("Maintains robot-vla with diffusion policy examples.")).toBeTruthy();
     expect(screen.getByText("确认后将把这些线索写入项目候选人库。")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "通过" }));

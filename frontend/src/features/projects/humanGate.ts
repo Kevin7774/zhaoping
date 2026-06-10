@@ -45,9 +45,35 @@ export type LeadPreviewItem = {
   sourceUrl?: string;
   evidenceSummary?: string;
   confidence?: number;
+  githubScore?: number;
+  representativeRepositories?: LeadRepositoryPreview[];
+  repositoryEvidence?: LeadRepositoryEvidence[];
+  recentActivity?: LeadRecentActivity;
+  scoringSignals?: Record<string, unknown>;
   matchedJob?: string;
   complianceStatus?: string;
   ingestionAction?: string;
+};
+
+export type LeadRepositoryPreview = {
+  fullName?: string;
+  url?: string;
+  language?: string;
+  stars?: number;
+  forks?: number;
+  topics: string[];
+};
+
+export type LeadRepositoryEvidence = {
+  source?: string;
+  title?: string;
+  url?: string;
+  snippet?: string;
+};
+
+export type LeadRecentActivity = {
+  recentRepositoryCount?: number;
+  latestRepositoryPushedAt?: string;
 };
 
 type AwaitingPayload = {
@@ -97,11 +123,60 @@ function normalizeLeadPreview(value: unknown): LeadPreview | undefined {
         sourceUrl: readString(item, ["source_url", "sourceUrl"]),
         evidenceSummary: readString(item, ["evidence_summary", "evidenceSummary"]),
         confidence: readOptionalNumber(item, ["confidence"]),
+        githubScore: readOptionalNumber(item, ["github_score", "githubScore"]),
+        representativeRepositories: normalizeRepositories(item.representative_repositories ?? item.representativeRepositories),
+        repositoryEvidence: normalizeRepositoryEvidence(item.repository_evidence ?? item.repositoryEvidence),
+        recentActivity: normalizeRecentActivity(item.recent_activity ?? item.recentActivity),
+        scoringSignals: normalizeScoringSignals(item.scoring_signals ?? item.scoringSignals),
         matchedJob: readString(item, ["matched_job", "matchedJob"]),
         complianceStatus: readString(item, ["compliance_status", "complianceStatus"]),
         ingestionAction: readString(item, ["ingestion_action", "ingestionAction"]),
       })),
   };
+}
+
+function normalizeRepositories(value: unknown): LeadRepositoryPreview[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const repos = value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      fullName: readString(item, ["full_name", "fullName", "name"]),
+      url: readString(item, ["url", "html_url", "htmlUrl"]),
+      language: readString(item, ["language"]),
+      stars: readOptionalNumber(item, ["stars", "stargazers_count", "stargazersCount"]),
+      forks: readOptionalNumber(item, ["forks", "forks_count", "forksCount"]),
+      topics: readStringArray(item, ["topics"]),
+    }))
+    .filter((item) => item.fullName || item.url);
+  return repos.length ? repos : undefined;
+}
+
+function normalizeRepositoryEvidence(value: unknown): LeadRepositoryEvidence[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const evidence = value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      source: readString(item, ["source"]),
+      title: readString(item, ["title"]),
+      url: readString(item, ["url"]),
+      snippet: readString(item, ["snippet", "fragment"]),
+    }))
+    .filter((item) => item.title || item.snippet || item.url);
+  return evidence.length ? evidence : undefined;
+}
+
+function normalizeRecentActivity(value: unknown): LeadRecentActivity | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const recentRepositoryCount = readOptionalNumber(record, ["recent_repository_count", "recentRepositoryCount"]);
+  const latestRepositoryPushedAt = readString(record, ["latest_repository_pushed_at", "latestRepositoryPushedAt"]);
+  if (recentRepositoryCount === undefined && !latestRepositoryPushedAt) return undefined;
+  return { recentRepositoryCount, latestRepositoryPushedAt };
+}
+
+function normalizeScoringSignals(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
 }
 
 function normalizeSearchTrace(value: unknown): LeadSearchTrace | undefined {

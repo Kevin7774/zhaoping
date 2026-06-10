@@ -186,6 +186,18 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("github_repositories").provider == "github_repositories"
     assert config.service("github_repositories").model_extra["endpoint"] == "https://api.github.com/search/repositories"
     assert config.service("github_repositories").model_extra["token_env"] == "GITHUB_TOKEN"
+    assert config.service("github_candidates").provider == "github_candidates"
+    assert config.service("github_candidates").model_extra["users_endpoint"] == "https://api.github.com/search/users"
+    assert config.service("github_candidates").model_extra["repositories_endpoint"] == "https://api.github.com/search/repositories"
+    assert config.service("github_candidates").model_extra["code_endpoint"] == "https://api.github.com/search/code"
+    assert config.service("github_candidates").model_extra["token_env"] == "GITHUB_TOKEN"
+    assert config.service("github_candidates").model_extra["token_required"] is True
+    assert config.service("github_users").provider == "github_users"
+    assert config.service("github_users").model_extra["endpoint"] == "https://api.github.com/search/users"
+    assert config.service("github_code").provider == "github_code"
+    assert config.service("github_code").model_extra["endpoint"] == "https://api.github.com/search/code"
+    assert config.service("github_topics").provider == "github_topics"
+    assert config.service("github_topics").model_extra["endpoint"] == "https://api.github.com/search/topics"
     assert config.service("huggingface_models").provider == "huggingface_models"
     assert config.service("huggingface_models").model_extra["endpoint"] == "https://huggingface.co/api/models"
     assert config.service("huggingface_models").model_extra["token_env"] == "HF_TOKEN"
@@ -309,7 +321,11 @@ def test_service_config_defaults_exist() -> None:
         "grants_gov_opportunities",
         "patentsview_patents",
         "ofac_sanctions_lists",
+        "github_candidates",
         "github_repositories",
+        "github_code",
+        "github_topics",
+        "github_users",
         "huggingface_models",
         "pdl_people_search",
         "x_recent_posts_search",
@@ -2172,6 +2188,238 @@ def test_github_repository_search_provider_maps_repositories(monkeypatch: pytest
     assert results[0]["title"] == "robotics/foundation-model"
     assert results[0]["stars"] == 1200
     assert results[0]["topics"] == ["robotics", "foundation-model"]
+
+
+def test_github_candidate_search_provider_enriches_people_repositories_and_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    class Response:
+        status_code = 200
+        text = ""
+        headers = {
+            "X-RateLimit-Limit": "30",
+            "X-RateLimit-Remaining": "29",
+            "X-RateLimit-Reset": "1770000000",
+            "X-RateLimit-Resource": "search",
+        }
+
+        def __init__(self, payload) -> None:
+            self.payload = payload
+
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+        def json(self):
+            return self.payload
+
+    def fake_get(url: str, *, params: dict | None = None, headers: dict, timeout: int) -> Response:
+        calls.append({"url": url, "params": params or {}, "headers": headers, "timeout": timeout})
+        if url == "https://api.github.com/search/users":
+            return Response(
+                {
+                    "items": [
+                        {
+                            "login": "alice-robotics",
+                            "html_url": "https://github.com/alice-robotics",
+                            "score": 1.0,
+                            "type": "User",
+                        }
+                    ]
+                }
+            )
+        if url == "https://api.github.com/search/repositories":
+            return Response(
+                {
+                    "items": [
+                        {
+                            "full_name": "alice-robotics/agentic-rag-robot",
+                            "html_url": "https://github.com/alice-robotics/agentic-rag-robot",
+                            "description": "Agentic workflow and RAG system for robot manipulation.",
+                            "owner": {"login": "alice-robotics", "type": "User"},
+                            "language": "TypeScript",
+                            "stargazers_count": 860,
+                            "forks_count": 74,
+                            "topics": ["agentic-workflow", "rag", "robotics", "mcp"],
+                            "pushed_at": "2026-06-01T12:00:00Z",
+                            "updated_at": "2026-06-01T12:00:00Z",
+                        }
+                    ]
+                }
+            )
+        if url == "https://api.github.com/search/code":
+            return Response(
+                {
+                    "items": [
+                        {
+                            "name": "workflow.ts",
+                            "path": "src/workflow.ts",
+                            "html_url": "https://github.com/alice-robotics/agentic-rag-robot/blob/main/src/workflow.ts",
+                            "repository": {
+                                "full_name": "alice-robotics/agentic-rag-robot",
+                                "html_url": "https://github.com/alice-robotics/agentic-rag-robot",
+                                "owner": {"login": "alice-robotics", "type": "User"},
+                            },
+                            "text_matches": [
+                                {
+                                    "fragment": "createAgenticWorkflow({ mcp, rag, fullstack })",
+                                    "matches": [{"text": "mcp"}, {"text": "rag"}],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        if url == "https://api.github.com/users/alice-robotics":
+            return Response(
+                {
+                    "login": "alice-robotics",
+                    "name": "Alice Robotics",
+                    "html_url": "https://github.com/alice-robotics",
+                    "company": "Open Robot Lab",
+                    "location": "San Francisco",
+                    "email": "alice@example.com",
+                    "bio": "Building agentic workflow, MCP, RAG and fullstack robot tooling.",
+                    "followers": 128,
+                    "public_repos": 24,
+                    "blog": "https://alice.example",
+                    "updated_at": "2026-06-02T00:00:00Z",
+                }
+            )
+        if url == "https://api.github.com/users/alice-robotics/repos":
+            return Response(
+                [
+                    {
+                        "full_name": "alice-robotics/agentic-rag-robot",
+                        "html_url": "https://github.com/alice-robotics/agentic-rag-robot",
+                        "description": "Agentic workflow and RAG system for robot manipulation.",
+                        "language": "TypeScript",
+                        "stargazers_count": 860,
+                        "forks_count": 74,
+                        "topics": ["agentic-workflow", "rag", "robotics", "mcp"],
+                        "pushed_at": "2026-06-01T12:00:00Z",
+                        "updated_at": "2026-06-01T12:00:00Z",
+                    },
+                    {
+                        "full_name": "alice-robotics/mcp-fullstack-saas",
+                        "html_url": "https://github.com/alice-robotics/mcp-fullstack-saas",
+                        "description": "Fullstack SaaS MCP integration examples.",
+                        "language": "TypeScript",
+                        "stargazers_count": 120,
+                        "forks_count": 12,
+                        "topics": ["mcp", "fullstack", "saas"],
+                        "pushed_at": "2026-05-20T12:00:00Z",
+                        "updated_at": "2026-05-20T12:00:00Z",
+                    },
+                ]
+            )
+        raise AssertionError(f"unexpected GitHub URL: {url}")
+
+    import requests
+
+    monkeypatch.setenv("GITHUB_TOKEN", "unit-github-token")
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    router = ServiceRouter(load_app_config())
+    results = router.search("github_candidates").search('"Agentic workflow" MCP RAG fullstack', limit=3)
+
+    assert calls[0]["headers"]["Authorization"] == "Bearer unit-github-token"
+    assert {call["url"] for call in calls} >= {
+        "https://api.github.com/search/users",
+        "https://api.github.com/search/repositories",
+        "https://api.github.com/search/code",
+        "https://api.github.com/users/alice-robotics",
+        "https://api.github.com/users/alice-robotics/repos",
+    }
+    assert results[0]["source_key"] == "github_candidates"
+    assert results[0]["source_type"] == "developer_profile"
+    assert results[0]["source_platform"] == "github_candidates"
+    assert results[0]["name"] == "Alice Robotics"
+    assert results[0]["github_url"] == "https://github.com/alice-robotics"
+    assert results[0]["email"] == "alice@example.com"
+    assert results[0]["confidence"] >= 0.8
+    assert results[0]["github_score"] >= 80
+    assert results[0]["representative_repositories"][0]["full_name"] == "alice-robotics/agentic-rag-robot"
+    assert results[0]["repository_evidence"][0]["source"] in {"repository", "code"}
+    assert {"agentic", "mcp", "rag", "fullstack"}.intersection(set(results[0]["matched_keywords"]))
+    assert results[0]["rate_limit"]["remaining"] == 29
+
+
+def test_github_code_and_topic_search_providers_map_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    class Response:
+        status_code = 200
+        text = ""
+        headers = {"X-RateLimit-Remaining": "8", "X-RateLimit-Resource": "code_search"}
+
+        def __init__(self, payload) -> None:
+            self.payload = payload
+
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+        def json(self):
+            return self.payload
+
+    def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
+        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        if url == "https://api.github.com/search/code":
+            return Response(
+                {
+                    "items": [
+                        {
+                            "name": "agent.ts",
+                            "path": "src/agent.ts",
+                            "html_url": "https://github.com/alice/agentic/blob/main/src/agent.ts",
+                            "repository": {
+                                "full_name": "alice/agentic",
+                                "html_url": "https://github.com/alice/agentic",
+                                "owner": {"login": "alice", "type": "User"},
+                            },
+                            "text_matches": [{"fragment": "MCP RAG workflow"}],
+                        }
+                    ]
+                }
+            )
+        if url == "https://api.github.com/search/topics":
+            return Response(
+                {
+                    "items": [
+                        {
+                            "name": "agentic-workflow",
+                            "display_name": "Agentic Workflow",
+                            "short_description": "Agent workflow systems",
+                            "description": "Repositories about agent workflow systems.",
+                            "created_by": "github",
+                            "featured": True,
+                            "curated": True,
+                        }
+                    ]
+                }
+            )
+        raise AssertionError(f"unexpected GitHub URL: {url}")
+
+    import requests
+
+    monkeypatch.setenv("GITHUB_TOKEN", "unit-github-token")
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    router = ServiceRouter(load_app_config())
+    code_results = router.search("github_code").search("MCP RAG", limit=2)
+    topic_results = router.search("github_topics").search("agentic workflow", limit=2)
+
+    assert code_results[0]["source_key"] == "github_code"
+    assert code_results[0]["source_type"] == "code_search"
+    assert code_results[0]["owner_login"] == "alice"
+    assert code_results[0]["github_url"] == "https://github.com/alice"
+    assert code_results[0]["repository_full_name"] == "alice/agentic"
+    assert "MCP RAG workflow" in code_results[0]["snippet"]
+    assert topic_results[0]["source_key"] == "github_topics"
+    assert topic_results[0]["source_type"] == "code_topic"
+    assert topic_results[0]["url"] == "https://github.com/topics/agentic-workflow"
+    assert calls[0]["headers"]["Authorization"] == "Bearer unit-github-token"
 
 
 def test_huggingface_model_search_provider_maps_models(monkeypatch: pytest.MonkeyPatch) -> None:

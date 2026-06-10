@@ -242,6 +242,57 @@ token_env = "GITHUB_TOKEN"
 timeout_seconds = 20
 description = "Live GitHub repository search provider for open-source adoption, stars, forks, topics, maintainers, and code ecosystem signals."
 
+[services.github_candidates]
+type = "search"
+provider = "github_candidates"
+users_endpoint = "https://api.github.com/search/users"
+repositories_endpoint = "https://api.github.com/search/repositories"
+code_endpoint = "https://api.github.com/search/code"
+user_endpoint_template = "https://api.github.com/users/{login}"
+user_repos_endpoint_template = "https://api.github.com/users/{login}/repos"
+rate_limit_endpoint = "https://api.github.com/rate_limit"
+token_env = "GITHUB_TOKEN"
+token_required = true
+enabled_env = "GITHUB_SEARCH_ENABLED"
+enabled_default = true
+enrichment_repo_limit = 8
+timeout_seconds = 20
+description = "Live GitHub candidate search provider that combines users, repositories, code matches, profile enrichment, repository evidence, deterministic scoring, and public contact compliance flags."
+
+[services.github_users]
+type = "search"
+provider = "github_users"
+endpoint = "https://api.github.com/search/users"
+user_endpoint_template = "https://api.github.com/users/{login}"
+token_env = "GITHUB_TOKEN"
+token_required = true
+enabled_env = "GITHUB_SEARCH_ENABLED"
+enabled_default = true
+timeout_seconds = 20
+description = "Live GitHub user search provider for public developer profiles, organizations, public email, location, followers, and profile bio signals."
+
+[services.github_code]
+type = "search"
+provider = "github_code"
+endpoint = "https://api.github.com/search/code"
+token_env = "GITHUB_TOKEN"
+token_required = true
+enabled_env = "GITHUB_SEARCH_ENABLED"
+enabled_default = true
+timeout_seconds = 20
+description = "Live GitHub code search provider for code snippets, repository owners, paths, and keyword evidence."
+
+[services.github_topics]
+type = "search"
+provider = "github_topics"
+endpoint = "https://api.github.com/search/topics"
+token_env = "GITHUB_TOKEN"
+token_required = true
+enabled_env = "GITHUB_SEARCH_ENABLED"
+enabled_default = true
+timeout_seconds = 20
+description = "Live GitHub topic search provider for open-source ecosystem topics and query expansion."
+
 [services.huggingface_models]
 type = "search"
 provider = "huggingface_models"
@@ -590,7 +641,7 @@ type = "search"
 provider = "due_diligence_federated"
 source_catalog_service = "talent_source_catalog"
 web_search_service = "brave_web_search"
-live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "census_international_trade", "fred_series_search", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usajobs_search", "usaspending_awards", "sam_gov_opportunities", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_repositories", "huggingface_models", "pdl_people_search", "x_recent_posts_search", "crustdata_signal_search", "companies_house_search", "courtlistener_search", "agent_reach_social_search", "education_competition_monitor", "scrapling_adaptive_scrape", "browser_use_agent_search", "claude_chrome_supervised_search", "web_access_cdp_search"]
+live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "census_international_trade", "fred_series_search", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usajobs_search", "usaspending_awards", "sam_gov_opportunities", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_candidates", "github_repositories", "github_code", "github_topics", "github_users", "huggingface_models", "pdl_people_search", "x_recent_posts_search", "crustdata_signal_search", "companies_house_search", "courtlistener_search", "agent_reach_social_search", "education_competition_monitor", "scrapling_adaptive_scrape", "browser_use_agent_search", "claude_chrome_supervised_search", "web_access_cdp_search"]
 web_enabled_by_default = false
 live_enabled_by_default = false
 description = "Compliance-first federated intelligence search for financial due diligence, primary/secondary market research, recruiting, technical evidence, and source coverage planning."

@@ -173,7 +173,11 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "openalex_authors_search",
     "openalex_institutions_search",
     "semantic_scholar_authors_search",
+    "github_candidates",
+    "github_users",
     "github_repositories",
+    "github_code",
+    "github_topics",
     "huggingface_models",
     "pdl_people_search",
     "x_recent_posts_search",
@@ -272,7 +276,14 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
     },
     "code_model": {
         "label": "代码/模型",
-        "services": ("github_repositories", "huggingface_models"),
+        "services": (
+            "github_candidates",
+            "github_repositories",
+            "github_code",
+            "github_topics",
+            "github_users",
+            "huggingface_models",
+        ),
     },
     "people_database": {
         "label": "人脉数据库",
@@ -394,7 +405,11 @@ TOP_DOWN_RESEARCH_LAYERS = (
         "purpose": "用论文、代码、模型和机构证据验证岗位能力是不是赛道真实需求。",
         "services": (
             "openalex_works_search",
+            "github_candidates",
+            "github_users",
             "github_repositories",
+            "github_code",
+            "github_topics",
             "huggingface_models",
         ),
     },
@@ -406,6 +421,8 @@ TOP_DOWN_RESEARCH_LAYERS = (
             "pdl_people_search",
             "openalex_authors_search",
             "semantic_scholar_authors_search",
+            "github_candidates",
+            "github_users",
             "github_repositories",
             "agent_reach_social_search",
         ),
@@ -2358,6 +2375,20 @@ def _search_service_health(router, service_name: str) -> dict[str, Any]:
     except KeyError:
         return {"service": service_name, "status": "not_configured"}
 
+    settings = service.model_extra or {}
+    enabled_env = settings.get("enabled_env")
+    if isinstance(enabled_env, str) and enabled_env:
+        enabled_value = os.environ.get(enabled_env)
+        if enabled_value is not None and enabled_value.strip().lower() in {"0", "false", "no", "off"}:
+            return {
+                "service": service_name,
+                "provider": service.provider,
+                "status": "disabled",
+                "disabled_by": enabled_env,
+                "missing_credentials": [],
+                "missing_runtime": [],
+            }
+
     missing_credentials = _missing_required_credentials(service)
     missing_runtime = _missing_runtime_requirements(service)
     if missing_credentials:
@@ -2442,7 +2473,7 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         )
         keywords = " ".join(keyword for keyword in build_search_keywords(role_key) if keyword.isascii())
         role_query = f"robotics {capability_terms} {keywords}".strip()
-    if role_key == "vla_embodied_expert" and service_name == "github_repositories":
+    if role_key == "vla_embodied_expert" and service_name in {"github_candidates", "github_users", "github_repositories", "github_code"}:
         return "robotics diffusion policy language:Python"
     if role_key == "vla_embodied_expert" and service_name == "openalex_works_search":
         return "robot foundation model"
@@ -2452,8 +2483,10 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         return f"{role_query} demo hiring has:links -is:retweet"
     if service_name in {"agent_reach_social_search", "crustdata_signal_search"}:
         return f"{role_query} hiring demo team"
-    if service_name == "github_repositories":
+    if service_name in {"github_candidates", "github_users", "github_repositories", "github_code"}:
         return f"{role_query} language:Python"
+    if service_name == "github_topics":
+        return role_query
     if service_name == "huggingface_models":
         return "robotics" if role_key == "vla_embodied_expert" else role_query
     if service_name == "gdelt_doc_news":
@@ -2477,6 +2510,9 @@ def _missing_required_credentials(service) -> list[str]:
         env_name = settings.get(field_name)
         if env_name and not os.environ.get(str(env_name)):
             missing.append(str(env_name))
+    token_env = settings.get("token_env")
+    if settings.get("token_required") and token_env and not os.environ.get(str(token_env)):
+        missing.append(str(token_env))
     return missing
 
 
@@ -2521,6 +2557,25 @@ def _summarize_live_result(item: dict[str, Any]) -> dict[str, Any]:
         "rank": item.get("rank"),
     }
     for field_name in (
+        "name",
+        "source_platform",
+        "source_url",
+        "github_url",
+        "linkedin_url",
+        "homepage_url",
+        "email",
+        "evidence",
+        "skills",
+        "matched_keywords",
+        "confidence",
+        "github_score",
+        "representative_repositories",
+        "repository_evidence",
+        "recent_activity",
+        "scoring_signals",
+        "followers",
+        "public_repos",
+        "rate_limit",
         "owner_login",
         "owner_type",
         "author",

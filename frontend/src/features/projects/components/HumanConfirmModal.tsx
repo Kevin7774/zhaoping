@@ -137,8 +137,42 @@ export function HumanConfirmModal({
                         {lead.confidence !== undefined ? (
                           <span className="text-[12px] font-medium text-[#047857]">{Math.round(lead.confidence * 100)}%</span>
                         ) : null}
+                        {lead.githubScore !== undefined ? (
+                          <span className="text-[12px] font-medium text-[#1D4ED8]">GitHub {Math.round(lead.githubScore)}</span>
+                        ) : null}
                       </div>
                       <p className="mt-1 text-[12px] leading-[18px] text-[#4B5563]">{lead.evidenceSummary || "暂无证据摘要"}</p>
+                      {lead.representativeRepositories?.length ? (
+                        <div className="mt-2 space-y-1.5 rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-2">
+                          {lead.representativeRepositories.slice(0, 2).map((repo, repoIndex) => (
+                            <div key={`${repo.fullName || repo.url || repoIndex}-${repoIndex}`}>
+                              <div className="truncate text-[12px] font-semibold text-[#111827]">{repo.fullName || repo.url}</div>
+                              <div className="mt-0.5 text-[11px] text-[#6B7280]">
+                                {repo.language || "unknown"} · {repo.stars ?? 0} stars · {repo.forks ?? 0} forks
+                              </div>
+                              {repo.topics.length ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {repo.topics.slice(0, 4).map((topic) => (
+                                    <span key={`${repo.fullName || repo.url}-${topic}`} className="rounded-[6px] bg-white px-1.5 py-0.5 text-[10px] text-[#4B5563]">
+                                      {topic}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {lead.repositoryEvidence?.length ? (
+                        <div className="mt-2 space-y-1">
+                          {lead.repositoryEvidence.slice(0, 2).map((evidence, evidenceIndex) => (
+                            <div key={`${evidence.title || evidence.url || evidenceIndex}-${evidenceIndex}`} className="rounded-[8px] bg-[#EFF6FF] px-2.5 py-1.5">
+                              {evidence.title ? <div className="truncate text-[11px] font-medium text-[#1E3A8A]">{evidence.title}</div> : null}
+                              {evidence.snippet ? <div className="mt-0.5 text-[11px] leading-[16px] text-[#1E40AF]">{evidence.snippet}</div> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#6B7280]">
                         <span>岗位：{lead.matchedJob || "未匹配"}</span>
                         <span>动作：{lead.ingestionAction || "unknown"}</span>
