@@ -25,7 +25,13 @@ from app.schemas.candidate_search_schedule import (
 )
 from app.schemas.candidate import CandidateComplianceReviewRequest, CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
-from app.schemas.project import ProjectBpInitializeRequest, ProjectBpInitializeResponse, ProjectCreate, ProjectResponse
+from app.schemas.project import (
+    ProjectBpInitializeRequest,
+    ProjectBpInitializeResponse,
+    ProjectCreate,
+    ProjectGenerationMode,
+    ProjectResponse,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,6 +48,20 @@ BP_DECONSTRUCTOR_SCHEMA: dict[str, Any] = {
         "industry_reading": {"type": "string"},
         "technical_assumptions": {"type": "array", "items": {"type": "string"}},
         "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+        "research_trace": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["stage", "summary"],
+                "properties": {
+                    "stage": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "evidence": {"type": "array", "items": {"type": "string"}},
+                    "assumptions": {"type": "array", "items": {"type": "string"}},
+                    "risk": {"type": "string"},
+                },
+            },
+        },
         "roles": {
             "type": "array",
             "items": {
@@ -97,7 +117,7 @@ def preview_project_from_bp(
     request: ProjectBpInitializeRequest,
 ) -> ProjectBpInitializeResponse:
     matrix, jobs = _deconstruct_jobs_from_bp(project_id, request)
-    return _bp_initialize_response(project_id, request.project_name, matrix, jobs)
+    return _bp_initialize_response(project_id, request, matrix, jobs)
 
 
 @router.post(
@@ -127,7 +147,7 @@ def initialize_project_from_bp(
         session.add_all(jobs)
         session.commit()
 
-    return _bp_initialize_response(project_id, request.project_name, matrix, jobs)
+    return _bp_initialize_response(project_id, request, matrix, jobs)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -342,23 +362,41 @@ def _deconstruct_jobs_from_bp(
     project_id: str,
     request: ProjectBpInitializeRequest,
 ) -> tuple[dict[str, Any], list[Job]]:
-    bp_path = Path(request.bp_file_path)
-    if not bp_path.is_file():
-        raise HTTPException(status_code=404, detail=f"BP file not found: {request.bp_file_path}")
-    bp_text = bp_path.read_text(encoding="utf-8")
-    if not bp_text.strip():
-        raise HTTPException(status_code=422, detail="BP file is empty")
+    bp_text = _bp_text_from_request(request)
+    project_prompt = _clean_text(request.project_prompt)
+    industry_research_prompt = _clean_text(request.industry_research_prompt)
+    _validate_generation_inputs(request.generation_mode, bp_text, project_prompt, industry_research_prompt)
 
-    prompt = _build_bp_deconstructor_prompt(bp_text)
+    prompt = _build_role_generation_prompt(
+        generation_mode=request.generation_mode,
+        bp_text=bp_text,
+        project_prompt=project_prompt,
+        industry_research_prompt=industry_research_prompt,
+        minimum_role_count=request.minimum_role_count,
+    )
     try:
         llm = get_router().llm(request.llm_service)
         matrix = _deconstruct_bp_matrix(llm, prompt, minimum_role_count=request.minimum_role_count)
     except HTTPException:
         raise
     except TimeoutError as exc:
-        matrix = _fallback_bp_matrix(bp_text, minimum_role_count=request.minimum_role_count, reason=str(exc))
+        matrix = _fallback_bp_matrix(
+            bp_text=bp_text,
+            project_prompt=project_prompt,
+            industry_research_prompt=industry_research_prompt,
+            generation_mode=request.generation_mode,
+            minimum_role_count=request.minimum_role_count,
+            reason=str(exc),
+        )
     except Exception as exc:
-        matrix = _fallback_bp_matrix(bp_text, minimum_role_count=request.minimum_role_count, reason=f"LLM failed: {exc}")
+        matrix = _fallback_bp_matrix(
+            bp_text=bp_text,
+            project_prompt=project_prompt,
+            industry_research_prompt=industry_research_prompt,
+            generation_mode=request.generation_mode,
+            minimum_role_count=request.minimum_role_count,
+            reason=f"LLM failed: {exc}",
+        )
     roles = matrix.get("roles")
     if not isinstance(roles, list) or not roles:
         raise HTTPException(status_code=502, detail="BP deconstructor returned no roles")
@@ -367,7 +405,7 @@ def _deconstruct_jobs_from_bp(
 
 def _bp_initialize_response(
     project_id: str,
-    project_name: str,
+    request: ProjectBpInitializeRequest,
     matrix: dict[str, Any],
     jobs: list[Job],
 ) -> ProjectBpInitializeResponse:
@@ -375,13 +413,15 @@ def _bp_initialize_response(
     response_jobs = [_job_response(job, empty_stats) for job in jobs]
     return ProjectBpInitializeResponse(
         project_id=project_id,
-        project_name=project_name,
+        project_name=request.project_name,
         prompt_name=BP_DECONSTRUCTOR_PROMPT_NAME,
+        generation_mode=request.generation_mode,
         job_count=len(response_jobs),
         jobs=response_jobs,
         industry_reading=_clean_text(matrix.get("industry_reading")),
         technical_assumptions=_string_list(matrix.get("technical_assumptions")),
         coverage_gaps=_string_list(matrix.get("coverage_gaps")),
+        research_trace=_research_trace(matrix, request),
     )
 
 
@@ -564,16 +604,70 @@ def _job_response(job: Job, stats: JobStats) -> JobResponse:
     )
 
 
-def _build_bp_deconstructor_prompt(bp_text: str) -> str:
+def _bp_text_from_request(request: ProjectBpInitializeRequest) -> str | None:
+    if request.generation_mode == "prompt":
+        return None
+    bp_file_path = _clean_text(request.bp_file_path)
+    if not bp_file_path:
+        if request.generation_mode == "bp_file":
+            raise HTTPException(status_code=422, detail="bpFilePath is required for bp_file generation")
+        return None
+    bp_path = Path(bp_file_path)
+    if not bp_path.is_file():
+        raise HTTPException(status_code=404, detail=f"BP file not found: {bp_file_path}")
+    bp_text = bp_path.read_text(encoding="utf-8")
+    if not bp_text.strip():
+        raise HTTPException(status_code=422, detail="BP file is empty")
+    return bp_text
+
+
+def _validate_generation_inputs(
+    generation_mode: ProjectGenerationMode,
+    bp_text: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+) -> None:
+    if generation_mode == "bp_file" and not bp_text:
+        raise HTTPException(status_code=422, detail="bpFilePath is required for bp_file generation")
+    if generation_mode == "prompt" and not (project_prompt or industry_research_prompt):
+        raise HTTPException(status_code=422, detail="projectPrompt or industryResearchPrompt is required for prompt generation")
+    if generation_mode == "bp_plus_prompt" and not (bp_text or project_prompt or industry_research_prompt):
+        raise HTTPException(
+            status_code=422,
+            detail="bpFilePath, projectPrompt, or industryResearchPrompt is required for bp_plus_prompt generation",
+        )
+
+
+def _build_role_generation_prompt(
+    *,
+    generation_mode: ProjectGenerationMode,
+    bp_text: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+    minimum_role_count: int,
+) -> str:
     system_prompt = load_system_prompt(BP_DECONSTRUCTOR_PROMPT_NAME)
     if not system_prompt:
         raise HTTPException(status_code=500, detail=f"Missing prompt: {BP_DECONSTRUCTOR_PROMPT_NAME}")
-    return (
-        f"{system_prompt}\n\n"
-        "输入 BP 如下。只输出一个 JSON 对象；不要 Markdown，不要代码围栏，不要解释。\n"
-        "bp_markdown:\n"
-        f"{bp_text}"
-    )
+    sections = [
+        f"generation_mode: {generation_mode}",
+        f"minimum_role_count: {minimum_role_count}",
+        (
+            "输出 JSON 必须包含 industry_reading、technical_assumptions、roles、coverage_gaps、research_trace。"
+            "research_trace 只写可审计摘要、证据、假设和风险；不要输出隐藏推理链、逐步内心推理或无法审计的臆测。"
+        ),
+        (
+            "岗位生成必须同时考虑业务需求、行业研究、技术架构、硬件/交付链路、候选人搜索可行性和面试评估维度。"
+            f"数量硬约束：至少输出 {minimum_role_count} 个 roles；不要用重复岗位凑数。"
+        ),
+    ]
+    if bp_text:
+        sections.append("bp_markdown:\n" + bp_text)
+    if project_prompt:
+        sections.append("project_prompt:\n" + project_prompt)
+    if industry_research_prompt:
+        sections.append("industry_research_prompt:\n" + industry_research_prompt)
+    return f"{system_prompt}\n\n" + "\n\n".join(sections)
 
 
 def _parse_bp_deconstructor_output(raw_output: str) -> dict[str, Any]:
@@ -696,7 +790,15 @@ def _bp_repair_prompt(last_output: str, validation_error: str, minimum_role_coun
     )
 
 
-def _fallback_bp_matrix(bp_text: str, *, minimum_role_count: int, reason: str) -> dict[str, Any]:
+def _fallback_bp_matrix(
+    *,
+    bp_text: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+    generation_mode: ProjectGenerationMode,
+    minimum_role_count: int,
+    reason: str,
+) -> dict[str, Any]:
     role_specs = [
         ("industry_solution_lead", "行业研究与解决方案负责人", "Lead", ["拆解 BP 的目标行业、客户场景和交付边界", "把行业痛点转成岗位矩阵、解决方案包和售前验证清单"], ["行业研究", "解决方案架构", "B2B 交付"], ["咨询公司 AI/IoT 团队", "政企数字化服务商"]),
         ("edge_ai_architect", "边缘 AI 架构师", "Senior", ["设计边缘计算、模型推理、设备接入和云端管理的总体架构", "定义边缘盒子、工控机、GPU/NPU 和现场网络的技术选型"], ["Edge AI", "边缘计算", "系统架构"], ["边缘计算平台公司", "智能硬件厂商"]),
@@ -746,16 +848,148 @@ def _fallback_bp_matrix(bp_text: str, *, minimum_role_count: int, reason: str) -
                 },
             }
         )
-    bp_excerpt = " ".join(bp_text.split())[:180]
+    input_excerpt = _generation_input_excerpt(bp_text, project_prompt, industry_research_prompt)
     return {
-        "industry_reading": f"基于 BP 摘要生成保守岗位矩阵：{bp_excerpt}",
+        "industry_reading": f"基于输入材料生成保守岗位矩阵：{input_excerpt}",
         "technical_assumptions": [
-            "BP 涉及边缘计算、AI 应用、智能硬件和私有化交付，需要按产品、工程、硬件、交付和合规分层招聘。",
+            "输入材料涉及边缘计算、AI 应用、智能硬件和私有化交付，需要按产品、工程、硬件、交付和合规分层招聘。",
             "当前矩阵为 LLM 超时或不可用时的保守 fallback，适合先启动项目空间，后续可再次用 LLM 精修。",
         ],
         "roles": roles,
         "coverage_gaps": [reason, "fallback 未读取外部行业资料；建议在 LLM 可用时重新预览岗位矩阵。"],
+        "research_trace": [
+            {
+                "stage": "项目输入",
+                "summary": _generation_input_summary(generation_mode, bp_text, project_prompt, industry_research_prompt),
+                "evidence": _generation_input_evidence(bp_text, project_prompt, industry_research_prompt),
+                "assumptions": ["未调用外部行业资料；fallback 只按内置岗位矩阵保守覆盖关键链路。"],
+                "risk": reason,
+            },
+            {
+                "stage": "岗位矩阵生成",
+                "summary": "按行业研究、云边架构、硬件交付、AI 应用、质量、安全和客户成功拆出岗位。",
+                "evidence": ["内置保守岗位矩阵", f"最少岗位数：{minimum_role_count}"],
+                "assumptions": ["后续应在 LLM 可用时重新生成，以补齐更精细的行业和公司搜索策略。"],
+                "risk": "fallback 结果可用于启动项目，但不应作为最终招聘方案。",
+            },
+        ],
     }
+
+
+def _research_trace(matrix: dict[str, Any], request: ProjectBpInitializeRequest) -> list[dict[str, Any]]:
+    model_trace = _coerce_research_trace(matrix.get("research_trace") or matrix.get("researchTrace"))
+    if model_trace:
+        return model_trace
+    project_prompt = _clean_text(request.project_prompt)
+    industry_research_prompt = _clean_text(request.industry_research_prompt)
+    bp_reference = _clean_text(f"BP 文件：{request.bp_file_path}") if request.bp_file_path else None
+    return [
+        {
+            "stage": "项目输入",
+            "summary": _generation_input_summary(
+                request.generation_mode,
+                bp_reference,
+                project_prompt,
+                industry_research_prompt,
+            ),
+            "evidence": _request_input_evidence(request),
+            "assumptions": [
+                "岗位矩阵来自用户确认的项目输入；未在此接口中写入候选人或触达记录。",
+                "行业研究偏好仅作为岗位拆解方向，不代表已经完成外部事实检索。",
+            ],
+            "risk": "如果输入材料过短，岗位边界和搜索策略需要人工复核。",
+        },
+        {
+            "stage": "岗位矩阵生成",
+            "summary": "按行业研究、技术架构、硬件或软件交付、质量、安全和客户成功拆解岗位并生成评估维度。",
+            "evidence": [f"最少岗位数：{request.minimum_role_count}", f"Prompt：{BP_DECONSTRUCTOR_PROMPT_NAME}"],
+            "assumptions": ["预览阶段不写数据库；只有确认覆盖后才重建项目岗位。"],
+            "risk": "确认覆盖会清空旧岗位和旧岗位候选人关联。",
+        },
+    ]
+
+
+def _coerce_research_trace(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    trace: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        stage = _clean_text(item.get("stage"))
+        summary = _clean_text(item.get("summary"))
+        if not stage or not summary:
+            continue
+        trace.append(
+            {
+                "stage": stage,
+                "summary": summary,
+                "evidence": _string_list(item.get("evidence") or item.get("source_evidence")),
+                "assumptions": _string_list(item.get("assumptions") or item.get("technical_assumptions")),
+                "risk": _clean_text(item.get("risk") or item.get("limitation")),
+            }
+        )
+    return trace
+
+
+def _generation_input_excerpt(
+    bp_text: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+) -> str:
+    materials = [text for text in [bp_text, project_prompt, industry_research_prompt] if text]
+    if not materials:
+        return "未提供有效输入材料"
+    return " / ".join(" ".join(text.split())[:180] for text in materials)
+
+
+def _generation_input_summary(
+    generation_mode: ProjectGenerationMode,
+    bp_text_or_reference: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+) -> str:
+    parts = [f"生成模式：{generation_mode}"]
+    if bp_text_or_reference:
+        parts.append(f"BP 输入：{_short_text(bp_text_or_reference, 120)}")
+    if project_prompt:
+        parts.append(f"用户项目提示：{_short_text(project_prompt, 120)}")
+    if industry_research_prompt:
+        parts.append(f"行业研究偏好：{_short_text(industry_research_prompt, 120)}")
+    return "；".join(parts)
+
+
+def _generation_input_evidence(
+    bp_text: str | None,
+    project_prompt: str | None,
+    industry_research_prompt: str | None,
+) -> list[str]:
+    evidence: list[str] = []
+    if bp_text:
+        evidence.append("BP 内容片段")
+    if project_prompt:
+        evidence.append("用户项目提示词")
+    if industry_research_prompt:
+        evidence.append("行业研究偏好")
+    return evidence or ["无有效输入材料"]
+
+
+def _request_input_evidence(request: ProjectBpInitializeRequest) -> list[str]:
+    evidence: list[str] = []
+    if request.bp_file_path:
+        evidence.append(f"BP 文件路径：{request.bp_file_path}")
+    if _clean_text(request.project_prompt):
+        evidence.append("用户项目提示词")
+    if _clean_text(request.industry_research_prompt):
+        evidence.append("行业研究偏好")
+    return evidence or ["无有效输入材料"]
+
+
+def _short_text(value: str, limit: int) -> str:
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "..."
 
 
 def _job_from_role(project_id: str, role: Any, index: int) -> Job:

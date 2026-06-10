@@ -14,6 +14,29 @@ export type LeadPreview = {
   totalCount: number;
   omittedCount: number;
   leads: LeadPreviewItem[];
+  searchTrace?: LeadSearchTrace;
+};
+
+export type LeadSearchTrace = {
+  query?: string;
+  services: string[];
+  resultCount: number;
+  errors: LeadSearchTraceError[];
+  researchLayers: LeadResearchLayer[];
+};
+
+export type LeadSearchTraceError = {
+  service?: string;
+  reason?: string;
+};
+
+export type LeadResearchLayer = {
+  id: string;
+  nameZh: string;
+  purpose?: string;
+  services: string[];
+  resultCount: number;
+  errorCount: number;
 };
 
 export type LeadPreviewItem = {
@@ -65,6 +88,7 @@ function normalizeLeadPreview(value: unknown): LeadPreview | undefined {
   return {
     totalCount: readNumber(record, ["total_count", "totalCount"]),
     omittedCount: readNumber(record, ["omitted_count", "omittedCount"]),
+    searchTrace: normalizeSearchTrace(record.search_trace ?? record.searchTrace),
     leads: rawLeads
       .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
       .map((item) => ({
@@ -80,6 +104,38 @@ function normalizeLeadPreview(value: unknown): LeadPreview | undefined {
   };
 }
 
+function normalizeSearchTrace(value: unknown): LeadSearchTrace | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const rawErrors = Array.isArray(record.errors) ? record.errors : [];
+  const rawLayers = Array.isArray(record.research_layers)
+    ? record.research_layers
+    : Array.isArray(record.researchLayers)
+      ? record.researchLayers
+      : [];
+  return {
+    query: readString(record, ["query"]),
+    services: readStringArray(record, ["services"]),
+    resultCount: readNumber(record, ["result_count", "resultCount"]),
+    errors: rawErrors
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .map((item) => ({
+        service: readString(item, ["service"]),
+        reason: readString(item, ["reason"]),
+      })),
+    researchLayers: rawLayers
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .map((item) => ({
+        id: readString(item, ["id"]) ?? "unknown_layer",
+        nameZh: readString(item, ["name_zh", "nameZh", "name"]) ?? "未知研究层",
+        purpose: readString(item, ["purpose"]),
+        services: readStringArray(item, ["services"]),
+        resultCount: readNumber(item, ["result_count", "resultCount"]),
+        errorCount: readNumber(item, ["error_count", "errorCount"]),
+      })),
+  };
+}
+
 function readString(value: unknown, keys: string[]) {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
@@ -88,6 +144,15 @@ function readString(value: unknown, keys: string[]) {
     if (typeof item === "string" && item.trim()) return item;
   }
   return undefined;
+}
+
+function readStringArray(value: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const item = value[key];
+    if (!Array.isArray(item)) continue;
+    return item.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()));
+  }
+  return [];
 }
 
 function readNumber(value: Record<string, unknown>, keys: string[]) {

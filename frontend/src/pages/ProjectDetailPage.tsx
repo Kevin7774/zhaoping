@@ -34,6 +34,7 @@ import {
   type OutreachDraft,
   type OutreachHistoryItem,
   type ProjectBpInitializeResponse,
+  type ProjectGenerationMode,
   type ProjectRecord,
   type RunProjectScenarioAction,
   type SegmentRecord,
@@ -56,6 +57,12 @@ type LoadingState = "idle" | "loading" | "ready" | "error";
 
 const CANDIDATE_PAGE_SIZE = 50;
 const DEFAULT_BP_FILE_PATH = "data/input/projects/bp_ai_hardware.md";
+
+const generationModeLabel: Record<ProjectGenerationMode, string> = {
+  bp_file: "仅 BP",
+  prompt: "仅提示词",
+  bp_plus_prompt: "BP + 提示词",
+};
 
 const projectStatusLabel: Record<string, string> = {
   active: "进行中",
@@ -316,7 +323,10 @@ export function ProjectDetailPage() {
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
   const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
   const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
+  const [bpGenerationMode, setBpGenerationMode] = useState<ProjectGenerationMode>("bp_plus_prompt");
   const [bpFilePath, setBpFilePath] = useState(DEFAULT_BP_FILE_PATH);
+  const [bpProjectPrompt, setBpProjectPrompt] = useState("");
+  const [bpIndustryResearchPrompt, setBpIndustryResearchPrompt] = useState("");
   const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(14);
   const [bpPreview, setBpPreview] = useState<ProjectBpInitializeResponse | null>(null);
   const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
@@ -463,6 +473,11 @@ export function ProjectDetailPage() {
     setMatchingJobId(null);
     setCandidateSearchSchedules([]);
     setScheduleBusyJobId(null);
+    setBpGenerationMode("bp_plus_prompt");
+    setBpFilePath(DEFAULT_BP_FILE_PATH);
+    setBpProjectPrompt("");
+    setBpIndustryResearchPrompt("");
+    setBpMinimumRoleCount(14);
     setBpPreview(null);
     setBpBusy(null);
     setBpError(null);
@@ -592,32 +607,62 @@ export function ProjectDetailPage() {
   const taskWeeklyReport = activeTaskAction === "weekly_report" ? weeklyReportFromTaskResult(taskSnapshot?.result) : null;
   const weeklyReport = taskWeeklyReport ?? persistedWeeklyReport ?? project?.weeklyReport ?? emptyWeeklyReport();
 
+  const validateBpGenerationRequest = useCallback(() => {
+    const hasBpFile = bpFilePath.trim().length > 0;
+    const hasProjectPrompt = bpProjectPrompt.trim().length > 0;
+    const hasIndustryPrompt = bpIndustryResearchPrompt.trim().length > 0;
+    if (bpGenerationMode === "bp_file" && !hasBpFile) return "请填写 BP 文件路径。";
+    if (bpGenerationMode === "prompt" && !hasProjectPrompt && !hasIndustryPrompt) {
+      return "提示词模式需要填写项目提示词或行业研究偏好。";
+    }
+    if (bpGenerationMode === "bp_plus_prompt" && !hasBpFile && !hasProjectPrompt && !hasIndustryPrompt) {
+      return "BP + 提示词模式需要至少提供 BP 文件路径、项目提示词或行业研究偏好。";
+    }
+    return null;
+  }, [bpFilePath, bpGenerationMode, bpIndustryResearchPrompt, bpProjectPrompt]);
+
   const bpRequest = useCallback(
-    () => ({
-      projectName: project?.name ?? projectId,
-      bpFilePath,
-      minimumRoleCount: bpMinimumRoleCount,
-    }),
-    [bpFilePath, bpMinimumRoleCount, project?.name, projectId],
+    () => {
+      const request = {
+        projectName: project?.name ?? projectId,
+        generationMode: bpGenerationMode,
+        minimumRoleCount: bpMinimumRoleCount,
+        ...(bpGenerationMode !== "prompt" && bpFilePath.trim() ? { bpFilePath: bpFilePath.trim() } : {}),
+        ...(bpProjectPrompt.trim() ? { projectPrompt: bpProjectPrompt.trim() } : {}),
+        ...(bpIndustryResearchPrompt.trim() ? { industryResearchPrompt: bpIndustryResearchPrompt.trim() } : {}),
+      };
+      return request;
+    },
+    [bpFilePath, bpGenerationMode, bpIndustryResearchPrompt, bpMinimumRoleCount, bpProjectPrompt, project?.name, projectId],
   );
 
   const handlePreviewBpJobs = async () => {
+    const validationError = validateBpGenerationRequest();
+    if (validationError) {
+      setBpError(validationError);
+      return;
+    }
     setBpBusy("preview");
     setBpError(null);
     try {
       const preview = await previewProjectFromBp(projectId, bpRequest());
       setBpPreview(preview);
-      setToast(`已预览 ${preview.jobCount} 个岗位，确认后才会覆盖当前岗位。`);
+      setToast(`已预览 ${preview.jobCount} 个岗位矩阵，确认后才会覆盖当前岗位。`);
     } catch (error) {
-      setBpError(error instanceof Error ? error.message : "BP 岗位预览失败");
+      setBpError(error instanceof Error ? error.message : "岗位矩阵预览失败");
     } finally {
       setBpBusy(null);
     }
   };
 
   const handleConfirmBpJobs = async () => {
+    const validationError = validateBpGenerationRequest();
+    if (validationError) {
+      setBpError(validationError);
+      return;
+    }
     const roleCount = bpPreview?.jobCount ?? bpMinimumRoleCount;
-    const confirmed = window.confirm(`将覆盖项目 ${projectId} 当前岗位，并清空这些岗位的候选人关联。确认写入 ${roleCount} 个 BP 岗位？`);
+    const confirmed = window.confirm(`将覆盖项目 ${projectId} 当前岗位，并清空这些岗位的候选人关联。确认写入 ${roleCount} 个岗位？`);
     if (!confirmed) return;
     setBpBusy("confirm");
     setBpError(null);
@@ -625,9 +670,9 @@ export function ProjectDetailPage() {
       const initialized = await initializeProjectFromBp(projectId, bpRequest());
       setBpPreview(initialized);
       await loadProjectData(filterCriteria);
-      setToast(`已从 BP 写入 ${initialized.jobCount} 个岗位。`);
+      setToast(`已写入 ${initialized.jobCount} 个岗位。`);
     } catch (error) {
-      setBpError(error instanceof Error ? error.message : "BP 岗位写入失败");
+      setBpError(error instanceof Error ? error.message : "岗位矩阵写入失败");
     } finally {
       setBpBusy(null);
     }
@@ -1065,9 +1110,9 @@ export function ProjectDetailPage() {
       <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
           <div>
-            <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">BP 智能生成岗位</h2>
+            <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位智能生成</h2>
             <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
-              预览不会写入数据库；确认覆盖后会重建当前项目岗位，并清空旧岗位候选人关联。
+              可从 BP、项目提示词或两者结合生成岗位矩阵；预览不会写入数据库，确认覆盖后才会重建当前项目岗位。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1077,7 +1122,7 @@ export function ProjectDetailPage() {
               disabled={bpBusy !== null}
               className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {bpBusy === "preview" ? "生成中" : "从 BP 智能生成岗位"}
+              {bpBusy === "preview" ? "生成中" : "预览岗位矩阵"}
             </button>
             <button
               type="button"
@@ -1089,13 +1134,32 @@ export function ProjectDetailPage() {
             </button>
           </div>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(280px,1fr)_180px]">
+        <div className="mt-4 grid gap-4 lg:grid-cols-[180px_minmax(260px,1fr)_160px]">
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            生成方式
+            <select
+              value={bpGenerationMode}
+              onChange={(event) => {
+                setBpGenerationMode(event.currentTarget.value as ProjectGenerationMode);
+                setBpPreview(null);
+              }}
+              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+            >
+              <option value="bp_plus_prompt">BP + 提示词</option>
+              <option value="bp_file">仅 BP</option>
+              <option value="prompt">仅提示词</option>
+            </select>
+          </label>
           <label className="text-[12px] font-medium text-[#6B7280]">
             BP 文件路径
             <input
               value={bpFilePath}
-              onChange={(event) => setBpFilePath(event.currentTarget.value)}
-              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+              disabled={bpGenerationMode === "prompt"}
+              onChange={(event) => {
+                setBpFilePath(event.currentTarget.value);
+                setBpPreview(null);
+              }}
+              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF]"
             />
           </label>
           <label className="text-[12px] font-medium text-[#6B7280]">
@@ -1105,8 +1169,39 @@ export function ProjectDetailPage() {
               min={1}
               max={64}
               value={bpMinimumRoleCount}
-              onChange={(event) => setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 14)))}
+              onChange={(event) => {
+                setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 14)));
+                setBpPreview(null);
+              }}
               className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
+            />
+          </label>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            项目提示词
+            <textarea
+              value={bpProjectPrompt}
+              onChange={(event) => {
+                setBpProjectPrompt(event.currentTarget.value);
+                setBpPreview(null);
+              }}
+              rows={4}
+              placeholder="例如：我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。"
+              className="mt-1 min-h-[96px] w-full resize-y rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-2 text-[13px] leading-5 text-[#111827]"
+            />
+          </label>
+          <label className="text-[12px] font-medium text-[#6B7280]">
+            行业研究偏好
+            <textarea
+              value={bpIndustryResearchPrompt}
+              onChange={(event) => {
+                setBpIndustryResearchPrompt(event.currentTarget.value);
+                setBpPreview(null);
+              }}
+              rows={4}
+              placeholder="例如：重点关注行业场景、竞品团队、交付链路、合规约束和候选人搜索策略。"
+              className="mt-1 min-h-[96px] w-full resize-y rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-2 text-[13px] leading-5 text-[#111827]"
             />
           </label>
         </div>
@@ -1115,12 +1210,24 @@ export function ProjectDetailPage() {
           <div className="mt-4 rounded-[12px] bg-[#F9FAFB] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-[13px] font-semibold text-[#111827]">
-                预览岗位 {bpPreview.jobCount} 个 · {bpPreview.promptName}
+                预览岗位 {bpPreview.jobCount} 个 · {generationModeLabel[bpPreview.generationMode] ?? bpPreview.generationMode} ·{" "}
+                {bpPreview.promptName}
               </div>
               <div className="text-[12px] text-[#6B7280]">{bpPreview.projectName}</div>
             </div>
             {bpPreview.industryReading ? (
               <p className="mt-2 text-[12px] leading-[18px] text-[#6B7280]">{bpPreview.industryReading}</p>
+            ) : null}
+            {bpPreview.researchTrace.length ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {bpPreview.researchTrace.map((item) => (
+                  <div key={`${item.stage}-${item.summary}`} className="rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
+                    <div className="text-[12px] font-semibold text-[#111827]">{item.stage}</div>
+                    <div className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">{item.summary}</div>
+                    {item.risk ? <div className="mt-1 text-[12px] leading-[18px] text-[#92400E]">{item.risk}</div> : null}
+                  </div>
+                ))}
+              </div>
             ) : null}
             <div className="mt-3 grid max-h-[320px] gap-2 overflow-auto md:grid-cols-2">
               {bpPreview.jobs.map((job) => (

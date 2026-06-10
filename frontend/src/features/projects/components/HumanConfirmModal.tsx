@@ -83,6 +83,52 @@ export function HumanConfirmModal({
               </div>
               {leadPreview ? (
                 <div className="mt-3 space-y-2">
+                  {leadPreview.searchTrace ? (
+                    <div className="rounded-[10px] border border-[#DBEAFE] bg-[#EFF6FF] px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-[13px] font-semibold text-[#1E3A8A]">Top-down 搜索链路</h4>
+                        <span className="text-[11px] font-medium text-[#1D4ED8]">
+                          {leadPreview.searchTrace.resultCount} 总命中 / {leadPreview.searchTrace.errors.length} 异常
+                        </span>
+                      </div>
+                      {leadPreview.searchTrace.query ? (
+                        <p className="mt-1 truncate text-[11px] text-[#1E40AF]">Query：{leadPreview.searchTrace.query}</p>
+                      ) : null}
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {leadPreview.searchTrace.researchLayers.map((layer) => (
+                          <div key={layer.id} className="rounded-[8px] border border-[#BFDBFE] bg-white px-2.5 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[12px] font-semibold text-[#111827]">{layer.nameZh}</span>
+                              <span className="whitespace-nowrap text-[11px] text-[#2563EB]">
+                                {layer.resultCount} 命中 / {layer.errorCount} 异常
+                              </span>
+                            </div>
+                            {layer.purpose ? (
+                              <p className="mt-1 text-[11px] leading-[16px] text-[#4B5563]">{layer.purpose}</p>
+                            ) : null}
+                            {layer.services.length ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {layer.services.map((service) => (
+                                  <span key={`${layer.id}-${service}`} className="rounded-[6px] bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] text-[#374151]">
+                                    {service}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      {leadPreview.searchTrace.errors.length ? (
+                        <div className="mt-2 space-y-1">
+                          {leadPreview.searchTrace.errors.slice(0, 4).map((error, index) => (
+                            <div key={`${error.service || "unknown"}-${index}`} className="text-[11px] leading-[16px] text-[#B45309]">
+                              {error.service || "unknown"}: {error.reason || "unknown_error"}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {leadPreview.leads.map((lead, index) => (
                     <article key={`${lead.sourceUrl || lead.name || index}-${index}`} className="rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-[#111827]">

@@ -46,6 +46,22 @@ describe("human gate request helpers", () => {
           lead_preview: {
             total_count: 1,
             omitted_count: 0,
+            search_trace: {
+              query: "robotics VLA",
+              services: ["github_repositories", "pdl_people_search"],
+              result_count: 3,
+              errors: [{ service: "pdl_people_search", reason: "missing_credentials:PDL_API_KEY" }],
+              research_layers: [
+                {
+                  id: "people_network",
+                  name_zh: "人才网络",
+                  purpose: "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
+                  services: ["github_repositories", "pdl_people_search"],
+                  result_count: 3,
+                  error_count: 1,
+                },
+              ],
+            },
             leads: [
               {
                 name: "Alice Wang",
@@ -71,6 +87,19 @@ describe("human gate request helpers", () => {
 
     expect(request?.requiresLeadPreview).toBe(true);
     expect(request?.leadPreview?.totalCount).toBe(1);
+    expect(request?.leadPreview?.searchTrace).toMatchObject({
+      query: "robotics VLA",
+      services: ["github_repositories", "pdl_people_search"],
+      resultCount: 3,
+      researchLayers: [
+        {
+          id: "people_network",
+          nameZh: "人才网络",
+          resultCount: 3,
+          errorCount: 1,
+        },
+      ],
+    });
     expect(request?.leadPreview?.leads[0]).toMatchObject({
       name: "Alice Wang",
       sourcePlatform: "github_repositories",

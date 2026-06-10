@@ -286,7 +286,18 @@ def test_extract_candidate_leads_from_search_and_structured_outputs() -> None:
                         "owner_type": "User",
                         "company": "Robot Lab",
                         "topics": ["robotics", "VLA"],
-                    }
+                    },
+                    {
+                        "source_key": "pdl_people_search",
+                        "title": "Ada Lovelace",
+                        "url": "https://www.linkedin.com/in/ada-robotics",
+                        "snippet": "Robotics lead at Physical Intelligence.",
+                        "job_title": "Robotics Lead",
+                        "company": "Physical Intelligence",
+                        "location": "San Francisco",
+                        "skills": ["robot learning", "manipulation"],
+                        "rank": 2,
+                    },
                 ]
             }
         },
@@ -294,10 +305,14 @@ def test_extract_candidate_leads_from_search_and_structured_outputs() -> None:
 
     leads = extract_candidate_leads(payload)
 
-    assert len(leads) == 2
+    assert len(leads) == 3
     assert leads[0]["name"] == "Alice Wang"
     assert leads[1]["name"] == "bob"
     assert leads[1]["github_url"] == "https://github.com/bob"
+    assert leads[2]["name"] == "Ada Lovelace"
+    assert leads[2]["title"] == "Robotics Lead"
+    assert leads[2]["current_company"] == "Physical Intelligence"
+    assert leads[2]["linkedin_url"] == "https://www.linkedin.com/in/ada-robotics"
 
 
 def test_candidate_lead_preview_redacts_email_and_reports_ingestion_action(
@@ -368,6 +383,30 @@ def test_scenario_b_awaiting_payload_contains_lead_preview(
     assert first["matched_job"] == "VLA / 具身智能算法工程师"
     assert first["compliance_status"] == "clear"
     assert first["ingestion_action"] == "insert"
+    assert payload["lead_preview"]["search_trace"] == {
+        "query": "robotics VLA",
+        "services": ["github_repositories"],
+        "result_count": 2,
+        "errors": [],
+        "research_layers": [
+            {
+                "id": "people_network",
+                "name_zh": "人才网络",
+                "purpose": "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
+                "services": ["github_repositories"],
+                "result_count": 2,
+                "error_count": 0,
+            }
+        ],
+    }
+
+
+def test_recruiting_live_search_services_cover_top_down_people_and_social_sources() -> None:
+    assert "pdl_people_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "crustdata_signal_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "x_recent_posts_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "agent_reach_social_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "semantic_scholar_authors_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
 
 
 def test_scenario_b_reject_does_not_ingest_candidate_leads(
@@ -470,6 +509,16 @@ def fake_source_intelligence(*args, **kwargs) -> dict:  # noqa: ANN002, ANN003
             ],
             "errors": [],
             "result_count": 2,
+            "research_layers": [
+                {
+                    "id": "people_network",
+                    "name_zh": "人才网络",
+                    "purpose": "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
+                    "services": ["github_repositories"],
+                    "result_count": 2,
+                    "error_count": 0,
+                }
+            ],
         },
         "检索说明": "test",
     }

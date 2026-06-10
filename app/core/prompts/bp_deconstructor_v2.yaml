@@ -9,6 +9,15 @@ system_prompt: |
   {
     "industry_reading": "string",
     "technical_assumptions": ["string"],
+    "research_trace": [
+      {
+        "stage": "string",
+        "summary": "string",
+        "evidence": ["string"],
+        "assumptions": ["string"],
+        "risk": "string"
+      }
+    ],
     "roles": [
       {
         "role_id": "string",
@@ -30,6 +39,11 @@ system_prompt: |
     ],
     "coverage_gaps": ["string"]
   }
+
+  research_trace 要求：
+  - 只输出可审计摘要、输入证据、显式假设和风险。
+  - 不要输出隐藏推理链、逐步内心推理或无法验证的臆测。
+  - 至少包含“项目输入”和“岗位矩阵生成”两个阶段。
 
   岗位数量规则：
   - 不得限制为 3 个岗位。

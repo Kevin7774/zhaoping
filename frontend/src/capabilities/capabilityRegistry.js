@@ -226,11 +226,14 @@ export const CAPABILITY_REGISTRY = [
     id: 'project_workspace',
     title: '多项目工作台',
     workspace: 'workflow',
-    description: '列出项目、创建隔离项目，并从 BP 预览或写入岗位矩阵。',
+    description: '列出项目、创建隔离项目，并从 BP、项目提示词或两者结合预览/写入岗位矩阵。',
     inputs: [
       { name: 'projectId', label: 'projectId', type: 'text', required: false },
       { name: 'projectName', label: '项目名称', type: 'text', required: false },
+      { name: 'generationMode', label: '生成方式', type: 'select', required: false },
       { name: 'bpFilePath', label: 'BP 文件路径', type: 'text', required: false },
+      { name: 'projectPrompt', label: '项目提示词', type: 'textarea', required: false },
+      { name: 'industryResearchPrompt', label: '行业研究偏好', type: 'textarea', required: false },
     ],
     apiCalls: [
       { method: 'GET', path: '/projects', client: 'listProjects' },

@@ -138,15 +138,27 @@ export type JobMatchResponse = {
   [key: string]: unknown;
 };
 
+export type ProjectGenerationMode = "bp_file" | "prompt" | "bp_plus_prompt";
+
+export type ProjectResearchTraceItem = {
+  stage: string;
+  summary: string;
+  evidence: string[];
+  assumptions: string[];
+  risk?: string | null;
+};
+
 export type ProjectBpInitializeResponse = {
   projectId: string;
   projectName: string;
   promptName: string;
+  generationMode: ProjectGenerationMode;
   jobCount: number;
   jobs: JobProfile[];
   industryReading?: string | null;
   technicalAssumptions: string[];
   coverageGaps: string[];
+  researchTrace: ProjectResearchTraceItem[];
 };
 
 export type ProjectCreateRequest = {
@@ -157,7 +169,10 @@ export type ProjectCreateRequest = {
 
 export type ProjectBpRequest = {
   projectName: string;
-  bpFilePath: string;
+  generationMode?: ProjectGenerationMode;
+  bpFilePath?: string;
+  projectPrompt?: string;
+  industryResearchPrompt?: string;
   llmService?: string | null;
   minimumRoleCount?: number;
 };
@@ -258,6 +273,10 @@ function mapBpInitializeResponse(
 ): ProjectBpInitializeResponse {
   return {
     ...response,
+    generationMode: response.generationMode ?? "bp_file",
+    technicalAssumptions: response.technicalAssumptions ?? [],
+    coverageGaps: response.coverageGaps ?? [],
+    researchTrace: response.researchTrace ?? [],
     jobs: response.jobs.map(mapJob),
   };
 }

@@ -275,6 +275,39 @@ def test_preview_project_from_bp_uses_json_mode_and_does_not_persist_jobs(
         assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 0
 
 
+def test_preview_project_roles_from_prompt_without_bp_file(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = MessagesProjectInitLLM(role_count=4)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+
+    response = client.post(
+        "/projects/project_prompt_generated/preview-from-bp",
+        json={
+            "projectName": "提示词生成项目",
+            "generationMode": "prompt",
+            "projectPrompt": "我要搭建一个面向工业质检的边缘 AI 招聘项目，需要算法、硬件、交付和行业研究岗位。",
+            "industryResearchPrompt": "重点拆解工业质检、边缘盒子、现场交付和数据闭环。",
+            "minimumRoleCount": 4,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobCount"] == 4
+    assert payload["generationMode"] == "prompt"
+    assert payload["researchTrace"][0]["stage"] == "项目输入"
+    assert "用户项目提示" in payload["researchTrace"][0]["summary"]
+    assert "project_prompt:" in llm.prompts[0]
+    assert "industry_research_prompt:" in llm.prompts[0]
+    assert "bp_markdown:" not in llm.prompts[0]
+    with session_factory() as session:
+        assert session.get(Project, "project_prompt_generated") is None
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_prompt_generated")) == 0
+
+
 def test_preview_project_from_bp_falls_back_when_llm_times_out(
     client: TestClient,
     session_factory: sessionmaker[Session],

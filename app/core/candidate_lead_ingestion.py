@@ -398,15 +398,36 @@ def _evidence_summary(evidence: list[str]) -> str:
 def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
     url = _clean_url(_first_present(result, URL_FIELDS))
     owner_login = _clean_string(result.get("owner_login") or result.get("author"), "name")
+    source_key = result.get("source_key") or result.get("source_platform") or result.get("source_name")
+    is_people_source = str(source_key or "").casefold() in {
+        "pdl_people_search",
+        "openalex_authors_search",
+        "semantic_scholar_authors_search",
+        "agent_reach_social_search",
+        "x_recent_posts_search",
+    }
     evidence = _string_list([result.get("title"), result.get("snippet") or result.get("description")])
     skills = _string_list(result.get("topics") or result.get("tags") or result.get("matched_keywords"))
+    company = _first_present(
+        result,
+        (
+            "company",
+            "current_company",
+            "organization",
+            "institution",
+            "affiliation",
+            "institutions",
+            "affiliations",
+            "lab",
+        ),
+    )
     lead = {
         "name": owner_login or _name_from_title(result.get("title")),
-        "current_company": _first_present(result, ("company", "organization", "institution", "affiliation", "lab")),
-        "title": result.get("title"),
+        "current_company": _first_string(company),
+        "title": _first_present(result, ("job_title", "headline", "position")) if is_people_source else result.get("title"),
         "location": result.get("location"),
         "email": result.get("email"),
-        "source_platform": result.get("source_key") or result.get("source_platform") or result.get("source_name") or "search_result",
+        "source_platform": source_key or "search_result",
         "source_url": url,
         "evidence": evidence,
         "skills": skills,
@@ -421,6 +442,11 @@ def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
     elif url:
         lead["homepage_url"] = url
     return lead
+
+
+def _first_string(value: Any) -> str | None:
+    values = _string_list(value)
+    return values[0] if values else None
 
 
 def _record_rejected_reasons(result: dict[str, Any], reasons: list[str]) -> None:

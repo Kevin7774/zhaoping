@@ -100,6 +100,55 @@ describe("HumanConfirmModal", () => {
     expect(onApprove).toHaveBeenCalledWith("{}", "approve");
   });
 
+  it("shows the top-down search trace behind Scenario B lead preview", () => {
+    render(
+      <HumanConfirmModal
+        open
+        busy={false}
+        context="请确认目标公司与触达策略，可通过或填写调整意见。"
+        draft="{}"
+        requiresLeadPreview
+        leadPreview={{
+          totalCount: 1,
+          omittedCount: 0,
+          searchTrace: {
+            query: "robotics VLA",
+            services: ["github_repositories", "pdl_people_search"],
+            resultCount: 3,
+            errors: [{ service: "pdl_people_search", reason: "missing_credentials:PDL_API_KEY" }],
+            researchLayers: [
+              {
+                id: "people_network",
+                nameZh: "人才网络",
+                purpose: "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
+                services: ["github_repositories", "pdl_people_search"],
+                resultCount: 3,
+                errorCount: 1,
+              },
+            ],
+          },
+          leads: [
+            {
+              name: "Alice Wang",
+              sourcePlatform: "github_repositories",
+              sourceUrl: "https://github.com/alicewang/robot-vla",
+            },
+          ],
+        }}
+        onApprove={() => undefined}
+        onReject={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Top-down 搜索链路")).toBeTruthy();
+    expect(screen.getByText("人才网络")).toBeTruthy();
+    expect(screen.getByText("3 命中 / 1 异常")).toBeTruthy();
+    expect(screen.getAllByText("github_repositories").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("pdl_people_search").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("pdl_people_search: missing_credentials:PDL_API_KEY")).toBeTruthy();
+  });
+
   it("disables approve actions when Scenario B lead preview is missing", () => {
     const onApprove = vi.fn();
 

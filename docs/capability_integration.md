@@ -157,6 +157,15 @@ The search stack now includes executable or routable providers for recruiting, a
 - `opencli_crawl_scrape`: local OpenCLI web reader using `opencli web read --url {url} -f json`. The CLI can be installed while Browser Bridge remains disconnected; live browser-backed reads require the Chrome/Chromium extension.
 - `public_web_snapshot_monitor`: writes timestamped snapshot manifests under `data/snapshots/public_web/` using `firecrawl_scrape` as the primary scrape provider and optional `browserbase_session` metadata.
 
+Scenario B candidate sourcing exposes a top-down research trace in the HumanGate
+lead preview. The backend groups live sources into market map, technical
+evidence, people network, social signal, and school/competition layers. The
+trace includes query, services attempted, result counts, missing credentials,
+timeouts, and layer-level coverage without exposing secret values or raw
+provider payloads. Runtime calls are bounded by a live-provider budget; skipped
+sources must be reported as `missing_credentials`, `missing_tool`,
+`manual_setup`, or `deferred_by_live_budget` instead of failing silently.
+
 Keep planned/source-catalog entries in `app/skills/search_sources.py` aligned with concrete services in `config/services.toml`.
 
 ## Adding A Static Skill

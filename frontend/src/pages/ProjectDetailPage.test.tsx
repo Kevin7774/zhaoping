@@ -362,7 +362,7 @@ describe("ProjectDetailPage backend hardening", () => {
     renderProjectPage();
 
     expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "从 BP 智能生成岗位" }));
+    fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
 
     expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "确认覆盖岗位" }));
@@ -372,6 +372,33 @@ describe("ProjectDetailPage backend hardening", () => {
         "/api/projects/project_2026_ai_team/initialize-from-bp",
         expect.objectContaining({ method: "POST" }),
       );
+    });
+  });
+
+  it("sends prompt and industry research context when generating project roles", async () => {
+    mockBackend();
+
+    renderProjectPage();
+
+    expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "岗位智能生成" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("项目提示词"), {
+      target: { value: "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。" },
+    });
+    fireEvent.change(screen.getByLabelText("行业研究偏好"), {
+      target: { value: "重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
+
+    await waitFor(() => {
+      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
+      expect(previewCall).toBeTruthy();
+      expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
+        generationMode: "bp_plus_prompt",
+        projectPrompt: "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。",
+        industryResearchPrompt: "重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。",
+      });
     });
   });
 

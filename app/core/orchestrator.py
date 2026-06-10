@@ -167,19 +167,68 @@ class Step:
 
 LIVE_RECRUITING_SEARCH_SERVICES = (
     "openalex_works_search",
+    "openalex_authors_search",
+    "openalex_institutions_search",
+    "semantic_scholar_authors_search",
     "github_repositories",
     "huggingface_models",
-    "gdelt_doc_news",
+    "pdl_people_search",
+    "x_recent_posts_search",
+    "crustdata_signal_search",
     "brave_web_search",
+    "agent_reach_social_search",
+    "gdelt_doc_news",
+    "gnews_funding_news",
+    "education_competition_monitor",
 )
+MAX_LIVE_RECRUITING_PROVIDERS = 8
 
 LIVE_RESULT_SOURCE_KEYS = {
-    "openalex_works_search",
-    "github_repositories",
-    "huggingface_models",
-    "gdelt_doc_news",
-    "brave_web_search",
+    *LIVE_RECRUITING_SEARCH_SERVICES,
 }
+
+TOP_DOWN_RESEARCH_LAYERS = (
+    {
+        "id": "market_map",
+        "name_zh": "行业/市场地图",
+        "purpose": "先确认公司、融资、招聘需求和市场变化，避免直接从单个候选人猜方向。",
+        "services": ("brave_web_search", "gdelt_doc_news", "gnews_funding_news", "crustdata_signal_search"),
+    },
+    {
+        "id": "technical_evidence",
+        "name_zh": "技术证据",
+        "purpose": "用论文、代码、模型和机构证据验证岗位能力是不是赛道真实需求。",
+        "services": (
+            "openalex_works_search",
+            "github_repositories",
+            "huggingface_models",
+        ),
+    },
+    {
+        "id": "people_network",
+        "name_zh": "人才网络",
+        "purpose": "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
+        "services": (
+            "pdl_people_search",
+            "openalex_authors_search",
+            "semantic_scholar_authors_search",
+            "github_repositories",
+            "agent_reach_social_search",
+        ),
+    },
+    {
+        "id": "social_signal",
+        "name_zh": "社媒/社区信号",
+        "purpose": "补充 X、微博、B站、知乎、V2EX 等社区里的近期项目、Demo 和流动信号。",
+        "services": ("x_recent_posts_search", "agent_reach_social_search"),
+    },
+    {
+        "id": "school_competition",
+        "name_zh": "学校/竞赛源",
+        "purpose": "从高校实验室、竞赛和排行榜发现早期高潜人才与导师网络。",
+        "services": ("openalex_institutions_search", "education_competition_monitor"),
+    },
+)
 
 LIVE_ROLE_QUERY_OVERRIDES = {
     "vla_embodied_expert": "robotics diffusion policy vision language action robot manipulation",
@@ -682,6 +731,7 @@ def _b_map(ctx: Dict[str, Any]) -> Any:
         "推荐信源": intelligence["推荐信源"],
         "证据记录": intelligence["证据记录"],
         "实时检索": intelligence["实时检索"],
+        "研究框架": intelligence.get("研究框架", {}),
         "检索说明": intelligence["检索说明"],
     }
 
@@ -771,13 +821,47 @@ def _preview_scenario_b_candidate_leads(ctx: Dict[str, Any]) -> Dict[str, Any]:
         preview_source["搜索证据"] = ctx["data"]["industry_intelligence"]
     raw_leads = extract_candidate_leads(preview_source)
     with project_session_factory()() as session:
-        return preview_candidate_leads(
+        preview = preview_candidate_leads(
             session,
             project_id=project_id,
             job_id=job_id,
             raw_leads=raw_leads,
             limit=5,
         )
+    search_trace = _lead_search_trace(preview_source)
+    if search_trace:
+        preview["search_trace"] = search_trace
+    return preview
+
+
+def _lead_search_trace(source: Dict[str, Any]) -> Dict[str, Any] | None:
+    intelligence = source.get("搜索证据") if isinstance(source, dict) else None
+    if not isinstance(intelligence, dict):
+        return None
+    live = intelligence.get("实时检索")
+    if not isinstance(live, dict):
+        return None
+    services = [str(service) for service in live.get("services", []) if service]
+    errors = [dict(error) for error in live.get("errors", []) if isinstance(error, dict)]
+    layers = [
+        {
+            "id": str(layer.get("id") or ""),
+            "name_zh": str(layer.get("name_zh") or layer.get("name") or ""),
+            "purpose": str(layer.get("purpose") or ""),
+            "services": [str(service) for service in layer.get("services", []) if service],
+            "result_count": int(layer.get("result_count") or 0),
+            "error_count": int(layer.get("error_count") or 0),
+        }
+        for layer in live.get("research_layers", [])
+        if isinstance(layer, dict)
+    ]
+    return {
+        "query": str(live.get("query") or intelligence.get("query") or ""),
+        "services": services,
+        "result_count": int(live.get("result_count") or 0),
+        "errors": errors,
+        "research_layers": layers,
+    }
 
 
 def _project_sourcing_target(frontend_state: Optional[Dict[str, Any]]) -> tuple[str, str] | None:
@@ -1389,11 +1473,13 @@ def _source_intelligence(
         }
         for record in evidence.get("records", [])[:limit]
     ]
+    live_context = _live_search_context(router, query, role_key=role_key, per_service_limit=2)
     result = {
         "query": query,
         "推荐信源": recommended_sources,
         "证据记录": records,
-        "实时检索": _live_search_context(router, query, role_key=role_key, per_service_limit=2),
+        "实时检索": live_context,
+        "研究框架": _top_down_research_framework(live_context),
         "检索说明": "该节点已使用 source catalog 规划、evidence 记录和选择性实时源检索；缺少密钥或请求失败的源会记录在实时检索 errors 中。",
     }
     _emit_audit_event(
@@ -1556,6 +1642,9 @@ def _live_search_context(
         if missing:
             skipped.append({"service": service_name, "reason": f"missing_credentials:{','.join(missing)}"})
             continue
+        if len(providers) >= MAX_LIVE_RECRUITING_PROVIDERS:
+            skipped.append({"service": service_name, "reason": "deferred_by_live_budget"})
+            continue
         try:
             providers.append((service_name, router.search(service_name)))
         except Exception as exc:  # noqa: BLE001
@@ -1584,12 +1673,57 @@ def _live_search_context(
             errors.append({"service": service_name, "reason": f"timeout_after_{timeout_seconds:g}s"})
         executor.shutdown(wait=False, cancel_futures=True)
 
+    bounded_results = results[: max(1, per_service_limit) * max(1, len(providers))]
     return {
         "services": [service_name for service_name, _ in providers],
         "query": _live_query(query, role_key, "default"),
-        "results": results[: max(1, per_service_limit) * max(1, len(providers))],
+        "results": bounded_results,
         "errors": errors,
         "result_count": len(results),
+        "research_layers": _research_layer_summaries(bounded_results, errors),
+    }
+
+
+def _research_layer_summaries(
+    results: list[dict[str, Any]],
+    errors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    result_counts: dict[str, int] = {}
+    error_counts: dict[str, int] = {}
+    for result in results:
+        source_key = str(result.get("source_key") or "")
+        if source_key:
+            result_counts[source_key] = result_counts.get(source_key, 0) + 1
+    for error in errors:
+        service = str(error.get("service") or "")
+        if service:
+            error_counts[service] = error_counts.get(service, 0) + 1
+
+    summaries = []
+    for layer in TOP_DOWN_RESEARCH_LAYERS:
+        services = [str(service) for service in layer["services"]]
+        summaries.append(
+            {
+                "id": str(layer["id"]),
+                "name_zh": str(layer["name_zh"]),
+                "purpose": str(layer["purpose"]),
+                "services": services,
+                "result_count": sum(result_counts.get(service, 0) for service in services),
+                "error_count": sum(error_counts.get(service, 0) for service in services),
+            }
+        )
+    return summaries
+
+
+def _top_down_research_framework(live_context: dict[str, Any]) -> dict[str, Any]:
+    layers = live_context.get("research_layers") if isinstance(live_context, dict) else []
+    if not isinstance(layers, list):
+        layers = []
+    return {
+        "logic": "Top-down: 先看行业/市场，再看技术证据，再定位人才网络，最后用社媒/学校竞赛补新鲜线索。",
+        "layer_count": len(layers),
+        "layers": layers,
+        "coverage_status": "live_with_gaps" if (live_context.get("errors") or []) else "live",
     }
 
 
@@ -1608,6 +1742,12 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         return "robotics diffusion policy language:Python"
     if role_key == "vla_embodied_expert" and service_name == "openalex_works_search":
         return "robot foundation model"
+    if service_name in {"pdl_people_search", "openalex_authors_search", "semantic_scholar_authors_search"}:
+        return f"{role_query} researcher engineer".strip()
+    if service_name == "x_recent_posts_search":
+        return f"{role_query} demo hiring has:links -is:retweet"
+    if service_name in {"agent_reach_social_search", "crustdata_signal_search"}:
+        return f"{role_query} hiring demo team"
     if service_name == "github_repositories":
         return f"{role_query} language:Python"
     if service_name == "huggingface_models":

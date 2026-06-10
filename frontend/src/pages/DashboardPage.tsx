@@ -101,7 +101,7 @@ export function DashboardPage() {
         <SectionPanel title="项目列表" subtitle="点击项目进入独立工作空间。">
           {projects.length === 0 ? (
             <div className="rounded-[12px] border border-dashed border-[#D1D5DB] bg-[#F9FAFB] px-5 py-8 text-center text-[13px] text-[#6B7280]">
-              暂无项目。先创建一个空项目，或进入项目后从 BP 智能生成岗位。
+              暂无项目。先创建一个空项目，或进入项目后用岗位智能生成创建岗位矩阵。
             </div>
           ) : (
             <div className="overflow-x-auto">
