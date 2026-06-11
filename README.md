@@ -4,6 +4,22 @@
 
 当前 README 只记录已经接入或代码中真实存在的能力。能力集成规范见 `docs/capability_integration.md`，服务注册表以 `config/services.toml` 为准。
 
+## 技术栈总览
+
+| 层 | 技术/组件 | 代码位置 |
+| --- | --- | --- |
+| 后端 API | FastAPI、Pydantic v2、Uvicorn、python-multipart；路由拆分在 `app/api/main.py` 和 `app/api/routers/`。 | `app/api/main.py`、`app/api/routers/`、`app/schemas/` |
+| 后端编排 | A/B/C/D 场景 orchestrator、JSON workflow runner、任务事件流、人工确认、Evidence Ledger。 | `app/core/orchestrator.py`、`app/core/workflow_runner.py`、`app/core/intelligence_archive.py` |
+| Provider 路由 | `config/services.toml` + `ServiceRouter`；当前注册 document、OCR、embedding、vector、search、scraping、LLM、evaluation、structured output。 | `config/services.toml`、`app/core/router.py`、`app/providers/` |
+| 搜索/抓取 | 已注册/可路由 provider：Brave、GitHub、Hugging Face、OpenAlex、Semantic Scholar、Agent-Reach、OpenCLI、GNews、SEC/FDA/FDIC/CFPB/NHTSA/EPA/ClinicalTrials/USAspending/Grants.gov；真实运行仍取决于 key、CLI、浏览器登录态和上游可用性。 | `app/providers/search.py`、`app/providers/scraping.py`、`frontend/src/features/projects/explainableAction.ts` |
+| 文档/向量/RAG | Docling、阿里云 OCR、Sentence Transformers、Qdrant 本地向量库、项目候选人入库。 | `app/providers/document.py`、`app/providers/ocr.py`、`app/rag/ingest_worker.py` |
+| 数据库 | SQLAlchemy 2；项目库使用 `PROJECT_DATABASE_URL` 或 `DATABASE_URL`，task/event 库使用 `TASK_DATABASE_URL`；本地默认 SQLite，生产建议 PostgreSQL。 | `app/db/session.py`、`app/db/task_models.py`、`app/db/create_schema.sql`、`app/models/` |
+| 前端应用 | React 19、React Router 7、Vite 8、TypeScript 6、Tailwind CSS 4；页面按 workspace 分区。 | `frontend/src/app/`、`frontend/src/pages/`、`frontend/src/index.css` |
+| 前端组件 | HumanGate、LiveTaskSummary、BackendLinkPanel、MultiJobProgressTable、ProjectSummaryCards、WeeklyReportCard、CandidateTable。 | `frontend/src/features/projects/components/`、`frontend/src/features/candidates/components/` |
+| 前端 API 层 | 统一 `apiClient`、项目 API wrapper、认证 API、task stream hook、mock/test fixtures。 | `frontend/src/shared/api/client.ts`、`frontend/src/features/projects/api.ts`、`frontend/src/shared/hooks/useTaskStream.ts` |
+| 测试/质量 | pytest、Vitest、Testing Library、ESLint、TypeScript typecheck、compileall。 | `tests/`、`frontend/src/**/*.test.tsx`、`frontend/src/**/*.test.ts` |
+| 启动/运维脚本 | 本地 dev、手机访问、Cloudflare 临时公网、watchlist、smoke/e2e 脚本。 | `start.sh`、`scripts/start_phone.sh`、`scripts/start_public_cloudflare.sh`、`scripts/` |
+
 ## 当前能力
 
 | 能力域 | 已实现内容 | 主要入口 |
@@ -98,7 +114,7 @@ opencli weixin search ...
 | 能力域 | 主要路径 | 状态 | 用途 |
 | --- | --- | --- | --- |
 | 系统状态与集成 | `GET /health`、`GET /integrations/status`、`POST /integrations/env` | system | 健康检查、provider 状态、安全保存 allowlist 环境变量。 |
-| 项目工作台 | `GET/POST /projects`、`GET /projects/{project_id}`、`GET /projects/{project_id}/jobs`、`GET /projects/{project_id}/candidates`、`GET /projects/{project_id}/candidates/unique` | productized | 项目、岗位、候选人和统计。 |
+| 项目工作台 | `GET/POST /projects`、`GET/PATCH/DELETE /projects/{project_id}`、`GET /projects/{project_id}/jobs`、`GET /projects/{project_id}/candidates`、`GET /projects/{project_id}/candidates/unique` | productized | 项目、岗位、候选人和统计。 |
 | BP 岗位生成 | `POST /projects/{project_id}/materials/upload`、`POST /projects/{project_id}/preview-from-bp`、`POST /projects/{project_id}/initialize-from-bp` | productized | 上传材料、预览岗位矩阵、写入岗位。 |
 | 候选人入库与匹配 | `POST /resumes/ingest`、`POST /resumes/local-import`、`POST /projects/{project_id}/jobs/{job_id}/upload-resumes`、`POST /jobs/match` | productized | 简历解析、向量入库、岗位匹配。 |
 | 候选人搜索计划 | `GET /projects/{project_id}/candidate-search-schedules`、`PUT /projects/{project_id}/jobs/{job_id}/candidate-search-schedule` | productized | 保存岗位级自动搜候选人计划，调度器触发场景 B。 |
@@ -135,7 +151,11 @@ opencli weixin search ...
 | `app/skills/search_sources.py` | 搜索来源目录。 |
 | `app/db/schema.py` / `app/models/` | 项目库 schema/model。 |
 | `app/db/task_models.py` | 任务库 schema/model。 |
+| `frontend/src/app/` | React app shell、路由、主布局和导航。 |
 | `frontend/src/pages/ProjectDetailPage.tsx` | 项目详情主工作台。 |
+| `frontend/src/pages/` | Dashboard、Jobs、TalentMap、Candidates、Scenarios、Outreach、Reports、Tasks、Integrations 页面。 |
+| `frontend/src/features/projects/components/` | 项目工作台复用组件：HumanGate、LiveTaskSummary、进度表、摘要卡、周报卡等。 |
+| `frontend/src/shared/api/client.ts` | 前端统一 API client、拦截器、错误处理和请求日志。 |
 | `frontend/src/capabilities/capabilityRegistry.js` | 前端能力、路径产品化状态和风险元数据。 |
 | `frontend/src/shared/hooks/useTaskStream.ts` | SSE + polling task stream hook。 |
 | `scripts/smoke_search_sources.py` | live search / external tool smoke。 |

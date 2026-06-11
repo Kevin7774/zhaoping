@@ -249,8 +249,10 @@ describe("workspace sidebar pages", () => {
     renderPage(<DashboardPage />);
 
     expect(await screen.findByRole("heading", { name: "工作台" })).toBeTruthy();
+    expect(await screen.findByLabelText("工作台总览")).toBeTruthy();
+    expect(await screen.findByLabelText("项目数量")).toBeTruthy();
     expect(await screen.findByText("项目数量")).toBeTruthy();
-    expect(await screen.findByText("2")).toBeTruthy();
+    expect((await screen.findByLabelText("项目总数")).textContent).toBe("2");
     expect(await screen.findByText("项目管理")).toBeTruthy();
     expect(await screen.findByText("项目一览")).toBeTruthy();
     expect(screen.queryByText("测试监控")).toBeNull();
@@ -293,7 +295,7 @@ describe("workspace sidebar pages", () => {
 
     renderPage(<DashboardPage />);
 
-    expect(await screen.findByText("真实后端项目")).toBeTruthy();
+    expect((await screen.findAllByText("真实后端项目")).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("项目 ID"), { target: { value: "project_new_market" } });
     fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "新市场项目" } });
     fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
@@ -307,7 +309,7 @@ describe("workspace sidebar pages", () => {
         }),
       );
     });
-    expect(await screen.findByText("新市场项目")).toBeTruthy();
+    expect((await screen.findAllByText("新市场项目")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "编辑 真实后端项目" }));
     fireEvent.change(screen.getByLabelText("编辑项目名称"), { target: { value: "真实后端项目更新版" } });
@@ -323,7 +325,7 @@ describe("workspace sidebar pages", () => {
         }),
       );
     });
-    expect(await screen.findByText("真实后端项目更新版")).toBeTruthy();
+    expect((await screen.findAllByText("真实后端项目更新版")).length).toBeGreaterThan(0);
 
     const enterLink = screen.getByRole("link", { name: "进入项目 真实后端项目更新版" });
     expect(enterLink.getAttribute("href")).toBe("/projects/project_2026_ai_team");

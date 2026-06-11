@@ -498,7 +498,14 @@ def _build_jobs_from_bp_pipeline(
     except BpNoAcceptedRolesError as exc:
         raise HTTPException(status_code=422, detail=_no_accepted_roles_detail(exc)) from exc
     except BpStageOutputError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        matrix = _fallback_bp_matrix(
+            bp_text=bp_text,
+            project_prompt=project_prompt,
+            industry_research_prompt=industry_research_prompt,
+            generation_mode=request.generation_mode,
+            minimum_role_count=request.minimum_role_count,
+            reason=str(exc),
+        )
     except TimeoutError as exc:
         matrix = _fallback_bp_matrix(
             bp_text=bp_text,

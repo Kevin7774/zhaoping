@@ -83,6 +83,14 @@ const generationModeLabel: Record<ProjectGenerationMode, string> = {
   bp_plus_prompt: "BP + 提示词",
 };
 
+function generationModeForInput(bpFilePath: string, prompt: string): ProjectGenerationMode {
+  const hasBpFile = bpFilePath.trim().length > 0;
+  const hasPrompt = prompt.trim().length > 0;
+  if (hasBpFile && hasPrompt) return "bp_plus_prompt";
+  if (hasBpFile) return "bp_file";
+  return "prompt";
+}
+
 const projectStatusLabel: Record<string, string> = {
   active: "进行中",
   done: "已完成",
@@ -353,14 +361,12 @@ export function ProjectDetailPage() {
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
   const [candidateSearchSchedules, setCandidateSearchSchedules] = useState<CandidateSearchSchedule[]>([]);
   const [scheduleBusyJobId, setScheduleBusyJobId] = useState<string | null>(null);
-  const [bpGenerationMode, setBpGenerationMode] = useState<ProjectGenerationMode>("bp_plus_prompt");
   const [candidateSearchConfig, setCandidateSearchConfig] = useState<SearchConfig>(() => createDefaultSearchConfig());
   const [actionExplanationText, setActionExplanationText] = useState<string | null>(null);
   const [bpFilePath, setBpFilePath] = useState(DEFAULT_BP_FILE_PATH);
   const [bpUploadedMaterialName, setBpUploadedMaterialName] = useState<string | null>(null);
   const [bpMaterialParseSummary, setBpMaterialParseSummary] = useState<string | null>(null);
   const [bpProjectPrompt, setBpProjectPrompt] = useState("");
-  const [bpIndustryResearchPrompt, setBpIndustryResearchPrompt] = useState("");
   const [bpMinimumRoleCount, setBpMinimumRoleCount] = useState(1);
   const [bpPreview, setBpPreview] = useState<ProjectBpInitializeResponse | null>(null);
   const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
@@ -512,14 +518,12 @@ export function ProjectDetailPage() {
     setMatchingJobId(null);
     setCandidateSearchSchedules([]);
     setScheduleBusyJobId(null);
-    setBpGenerationMode("bp_plus_prompt");
     setCandidateSearchConfig(createDefaultSearchConfig());
     setActionExplanationText(null);
     setBpFilePath(DEFAULT_BP_FILE_PATH);
     setBpUploadedMaterialName(null);
     setBpMaterialParseSummary(null);
     setBpProjectPrompt("");
-    setBpIndustryResearchPrompt("");
     setBpMinimumRoleCount(1);
     setBpPreview(null);
     setBpBusy(null);
@@ -676,30 +680,25 @@ export function ProjectDetailPage() {
   const validateBpGenerationRequest = useCallback(() => {
     const hasBpFile = bpFilePath.trim().length > 0;
     const hasProjectPrompt = bpProjectPrompt.trim().length > 0;
-    const hasIndustryPrompt = bpIndustryResearchPrompt.trim().length > 0;
-    if (bpGenerationMode === "bp_file" && !hasBpFile) return "请填写项目材料位置。";
-    if (bpGenerationMode === "prompt" && !hasProjectPrompt && !hasIndustryPrompt) {
-      return "提示词模式需要填写项目提示词或行业研究偏好。";
-    }
-    if (bpGenerationMode === "bp_plus_prompt" && !hasBpFile && !hasProjectPrompt && !hasIndustryPrompt) {
-      return "BP + 提示词模式需要至少提供项目材料、项目提示词或行业研究偏好。";
+    if (!hasBpFile && !hasProjectPrompt) {
+      return "请输入岗位生成提示，或通过左下角 + 上传项目材料。";
     }
     return null;
-  }, [bpFilePath, bpGenerationMode, bpIndustryResearchPrompt, bpProjectPrompt]);
+  }, [bpFilePath, bpProjectPrompt]);
 
   const bpRequest = useCallback(
     () => {
+      const generationMode = generationModeForInput(bpFilePath, bpProjectPrompt);
       const request = {
         projectName: project?.name ?? projectId,
-        generationMode: bpGenerationMode,
+        generationMode,
         minimumRoleCount: bpMinimumRoleCount,
-        ...(bpGenerationMode !== "prompt" && bpFilePath.trim() ? { bpFilePath: bpFilePath.trim() } : {}),
+        ...(generationMode !== "prompt" && bpFilePath.trim() ? { bpFilePath: bpFilePath.trim() } : {}),
         ...(bpProjectPrompt.trim() ? { projectPrompt: bpProjectPrompt.trim() } : {}),
-        ...(bpIndustryResearchPrompt.trim() ? { industryResearchPrompt: bpIndustryResearchPrompt.trim() } : {}),
       };
       return request;
     },
-    [bpFilePath, bpGenerationMode, bpIndustryResearchPrompt, bpMinimumRoleCount, bpProjectPrompt, project?.name, projectId],
+    [bpFilePath, bpMinimumRoleCount, bpProjectPrompt, project?.name, projectId],
   );
 
   const handlePreviewBpJobs = async () => {
@@ -736,7 +735,6 @@ export function ProjectDetailPage() {
       setBpFilePath(uploaded.bpFilePath);
       setBpUploadedMaterialName(uploaded.fileName);
       setBpMaterialParseSummary(`已解析为 ${parsedName}${parserText}${confidenceText}`);
-      setBpGenerationMode((current) => (current === "prompt" ? "bp_plus_prompt" : current));
       setBpPreview(null);
       setToast(`已上传项目材料：${uploaded.fileName}`);
     } catch (error) {
@@ -1134,7 +1132,8 @@ export function ProjectDetailPage() {
   const statusText = projectStatusLabel[project.status] ?? project.status;
   const currentTaskStatusText = taskStatusLabel[taskStatus] ?? taskStatus;
   const bpMaterialName = bpFilePath.trim().split(/[\\/]/).filter(Boolean).pop() || "未选择材料";
-  const bpMaterialDisplay = bpGenerationMode === "prompt" ? "未使用项目材料" : bpUploadedMaterialName ?? bpMaterialName;
+  const bpMaterialDisplay = bpUploadedMaterialName ?? bpMaterialName;
+  const effectiveBpGenerationMode = generationModeForInput(bpFilePath, bpProjectPrompt);
   const currentSearchPolicyLabel =
     SEARCH_EXECUTION_POLICY_OPTIONS.find((option) => option.value === candidateSearchConfig.executionPolicy)?.label ??
     candidateSearchConfig.executionPolicy;
@@ -1151,8 +1150,8 @@ export function ProjectDetailPage() {
   const recommendedTarget = recommendedJob ? recommendedCandidateTarget(recommendedJob) : 0;
   const recommendedAction = !recommendedJob
     ? {
-        label: "预览岗位矩阵",
-        description: "当前还没有岗位，先在岗位智能生成区预览岗位矩阵；预览不会写入数据库。",
+        label: "生成岗位矩阵",
+        description: "当前还没有岗位，先在岗位智能生成区生成岗位矩阵；生成结果确认后才会写入数据库。",
         disabled: bpBusy !== null,
         showButton: false,
         title: undefined,
@@ -1177,12 +1176,6 @@ export function ProjectDetailPage() {
           title: !actionAvailability.candidate_evaluation.enabled ? actionAvailability.candidate_evaluation.reason : undefined,
           run: () => handleRunAction(recommendedJob, "candidate_evaluation" as const),
         };
-  const roleGenerationActionHint = !recommendedJob
-    ? "当前还没有岗位，先预览岗位矩阵；确认覆盖后才会写入当前项目。"
-    : bpPreview
-      ? "已生成预览，请先检查岗位、HC 和证据；确认覆盖会重建当前项目岗位。"
-      : "如需重建岗位，先预览岗位矩阵；确认后才会覆盖现有岗位。";
-  const roleGenerationActionLabel = !recommendedJob ? "下一步：" : bpPreview ? "预览状态：" : "岗位生成：";
   const searchProviderSummaryText = `当前选中搜索源 ${searchProviderSummary.ready}/${searchProviderSummary.total} 项已就绪${
     searchProviderSummary.blocked ? `，${searchProviderSummary.blocked} 项需处理` : "，无明确阻断"
   }`;
@@ -1241,45 +1234,46 @@ export function ProjectDetailPage() {
       ) : null}
 
       <section className="mt-5 min-w-0 rounded-[14px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.14)]">
-        <div>
-          <div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <h2 className="text-[16px] font-semibold leading-6 text-[#111827]">岗位智能生成</h2>
             <p className="mt-1 text-[12px] leading-[18px] text-[#6B7280]">
-              可从 BP、项目提示词或两者结合生成岗位矩阵；预览不会写入数据库，确认覆盖后才会重建当前项目岗位。
+              像发消息一样输入招聘目标、约束或 BP 摘要；也可以点左下角 + 上传材料。生成结果不会自动写入，确认覆盖后才会重建当前项目岗位。
             </p>
           </div>
+          <div className="shrink-0 rounded-full bg-[#F9FAFB] px-3 py-1.5 text-[12px] font-medium text-[#6B7280]">
+            {generationModeLabel[effectiveBpGenerationMode]} · 最少 {bpMinimumRoleCount} 个岗位
+          </div>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[180px_minmax(260px,1fr)_160px]">
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            生成方式
-            <select
-              value={bpGenerationMode}
-              onChange={(event) => {
-                setBpGenerationMode(event.currentTarget.value as ProjectGenerationMode);
-                setBpPreview(null);
-              }}
-              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
-            >
-              <option value="bp_plus_prompt">BP + 提示词</option>
-              <option value="bp_file">仅 BP</option>
-              <option value="prompt">仅提示词</option>
-            </select>
+
+        <div className="mt-4 overflow-hidden rounded-[16px] border border-[#D1D5DB] bg-[#FBFCFE] transition focus-within:border-[#93C5FD] focus-within:ring-2 focus-within:ring-[#EFF6FF]">
+          <label htmlFor="bp-role-composer" className="sr-only">
+            岗位生成输入
           </label>
-          <div className="text-[12px] font-medium text-[#6B7280]">
-            <div>项目材料</div>
-            <div className="mt-1 flex h-10 w-full items-center rounded-[10px] border border-[#D1D5DB] bg-[#F9FAFB] px-3 text-[13px] font-normal text-[#111827]">
-              <span className="truncate">{bpMaterialDisplay}</span>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+          <textarea
+            id="bp-role-composer"
+            aria-label="岗位生成输入"
+            value={bpProjectPrompt}
+            onChange={(event) => {
+              setBpProjectPrompt(event.currentTarget.value);
+              setBpPreview(null);
+            }}
+            rows={5}
+            placeholder="粘贴 BP 内容、招聘目标或补充约束。例如：为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。"
+            className="min-h-[132px] w-full resize-y border-0 bg-transparent px-4 py-3 text-[14px] leading-6 text-[#111827] outline-none placeholder:text-[#9CA3AF]"
+          />
+          <div className="flex flex-col gap-3 border-t border-[#E5E7EB] bg-white px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <label
                 htmlFor="project-material-upload"
-                className={`inline-flex h-8 cursor-pointer items-center rounded-[9px] border px-3 text-[12px] font-medium ${
+                title="上传项目材料"
+                className={`grid h-9 w-9 cursor-pointer place-items-center rounded-full border text-[22px] font-medium leading-none transition ${
                   bpMaterialUploading
                     ? "border-[#E5E7EB] bg-[#F3F4F6] text-[#9CA3AF]"
-                    : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]"
+                    : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE]"
                 }`}
               >
-                {bpMaterialUploading ? "上传中" : "上传项目材料"}
+                +
               </label>
               <input
                 id="project-material-upload"
@@ -1290,74 +1284,49 @@ export function ProjectDetailPage() {
                 onChange={handleProjectMaterialUpload}
                 className="sr-only"
               />
-              <span className="text-[11px] font-normal text-[#9CA3AF]">支持 PDF / Word / Markdown / TXT / 图片</span>
-            </div>
-            {bpMaterialParseSummary ? (
-              <div className="mt-1 truncate text-[11px] font-normal text-[#6B7280]" title={bpMaterialParseSummary}>
-                {bpMaterialParseSummary}
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-medium text-[#111827]" title={bpMaterialDisplay}>
+                  {bpMaterialUploading ? "上传中" : bpMaterialDisplay}
+                </div>
+                <div className="text-[11px] leading-[16px] text-[#9CA3AF]">
+                  支持 PDF / Word / Markdown / TXT / 图片
+                  {bpMaterialParseSummary ? ` · ${bpMaterialParseSummary}` : ""}
+                </div>
               </div>
-            ) : null}
-            <details className="mt-2">
-              <summary className="cursor-pointer text-[12px] font-medium text-[#2563EB]">修改材料位置</summary>
-              <label htmlFor="bp-file-path" className="sr-only">
-                项目材料位置
+              <label className="flex h-9 items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[12px] font-medium text-[#6B7280]">
+                最少岗位数
+                <input
+                  type="number"
+                  min={1}
+                  max={64}
+                  value={bpMinimumRoleCount}
+                  onChange={(event) => {
+                    setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 1)));
+                    setBpPreview(null);
+                  }}
+                  className="h-6 w-14 rounded-[7px] border border-[#D1D5DB] bg-white px-2 text-[12px] text-[#111827] outline-none"
+                />
               </label>
-              <input
-                id="bp-file-path"
-                value={bpFilePath}
-                disabled={bpGenerationMode === "prompt"}
-                onChange={(event) => {
-                  setBpFilePath(event.currentTarget.value);
-                  setBpUploadedMaterialName(null);
-                  setBpMaterialParseSummary(null);
-                  setBpPreview(null);
-                }}
-                className="mt-2 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] font-normal text-[#111827] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF]"
-              />
-            </details>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={handlePreviewBpJobs}
+                disabled={bpBusy !== null}
+                className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {bpBusy === "preview" ? "生成中" : "生成岗位矩阵"}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBpJobs}
+                disabled={!bpPreview || bpBusy !== null}
+                className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {bpBusy === "confirm" ? "写入中" : "确认覆盖"}
+              </button>
+            </div>
           </div>
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            最少岗位数
-            <input
-              type="number"
-              min={1}
-              max={64}
-              value={bpMinimumRoleCount}
-              onChange={(event) => {
-                setBpMinimumRoleCount(Math.max(1, Math.min(64, Number(event.currentTarget.value) || 1)));
-                setBpPreview(null);
-              }}
-              className="mt-1 h-10 w-full rounded-[10px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827]"
-            />
-          </label>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            项目提示词
-            <textarea
-              value={bpProjectPrompt}
-              onChange={(event) => {
-                setBpProjectPrompt(event.currentTarget.value);
-                setBpPreview(null);
-              }}
-              rows={4}
-              placeholder="例如：我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。"
-              className="mt-1 min-h-[96px] w-full resize-y rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-2 text-[13px] leading-5 text-[#111827]"
-            />
-          </label>
-          <label className="text-[12px] font-medium text-[#6B7280]">
-            行业研究偏好
-            <textarea
-              value={bpIndustryResearchPrompt}
-              onChange={(event) => {
-                setBpIndustryResearchPrompt(event.currentTarget.value);
-                setBpPreview(null);
-              }}
-              rows={4}
-              placeholder="例如：重点关注行业场景、竞品团队、交付链路、合规约束和候选人搜索策略。"
-              className="mt-1 min-h-[96px] w-full resize-y rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-2 text-[13px] leading-5 text-[#111827]"
-            />
-          </label>
         </div>
         {bpError ? <div className="mt-3 text-[13px] leading-5 text-[#EF4444]">{bpError}</div> : null}
         {bpPreview ? (
@@ -1431,30 +1400,6 @@ export function ProjectDetailPage() {
             ) : null}
           </div>
         ) : null}
-        <div className="mt-4 flex flex-col gap-3 border-t border-[#EEF2F7] pt-4 lg:flex-row lg:items-center lg:justify-between">
-          <p className="max-w-[720px] text-[12px] leading-[18px] text-[#6B7280]">
-            <span className="font-semibold text-[#374151]">{roleGenerationActionLabel}</span>
-            {roleGenerationActionHint}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handlePreviewBpJobs}
-              disabled={bpBusy !== null}
-              className="h-[38px] rounded-[10px] bg-[#2563EB] px-3.5 text-[14px] font-medium text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {bpBusy === "preview" ? "生成中" : "预览岗位矩阵"}
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmBpJobs}
-              disabled={!bpPreview || bpBusy !== null}
-              className="h-[38px] rounded-[10px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {bpBusy === "confirm" ? "写入中" : "确认覆盖岗位"}
-            </button>
-          </div>
-        </div>
       </section>
 
       {integrationsError || integrations ? (

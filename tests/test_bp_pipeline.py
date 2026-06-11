@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.bp_pipeline import critic_gate
+from app.core.bp_pipeline import _parse_json_object, critic_gate
 
 SOURCE = "汉诺云智承诺交付边缘计算与 AI 综合解决方案，已有 3000 平厂房和智能硬件供应链，目标东盟市场销售。"
 
@@ -98,3 +98,38 @@ def test_critic_rejects_missing_vendor_and_risk_answers() -> None:
     reasons = "；".join(rejected[0]["reasons"])
     assert "why_hire_not_vendor" in reasons
     assert "if_not_hired_risk" in reasons
+
+
+def test_parse_json_object_repairs_missing_commas_between_fields() -> None:
+    payload = _parse_json_object(
+        """
+        {
+          "gaps": [
+            {
+              "capability_id": "CAP1",
+              "status": "missing",
+              "resolution": "hire",
+              "rationale": "核心交付能力需要留在组织内"
+              "evidence": ["C1"]
+            }
+          ]
+        }
+        """
+    )
+
+    assert payload["gaps"][0]["evidence"] == ["C1"]
+
+
+def test_parse_json_object_repairs_missing_commas_between_array_items() -> None:
+    payload = _parse_json_object(
+        """
+        {
+          "gaps": [
+            {"capability_id": "CAP1", "status": "missing", "resolution": "hire", "rationale": "自建", "evidence": ["C1"]}
+            {"capability_id": "CAP2", "status": "existing", "resolution": "existing", "rationale": "已有", "evidence": ["R1"]}
+          ]
+        }
+        """
+    )
+
+    assert [item["capability_id"] for item in payload["gaps"]] == ["CAP1", "CAP2"]

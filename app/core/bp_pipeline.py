@@ -464,10 +464,24 @@ def _parse_json_object(raw_output: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start >= 0 and end > start:
         text = text[start : end + 1]
-    payload = json.loads(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = json.loads(_repair_json_object_text(text))
     if not isinstance(payload, dict):
         raise ValueError("stage returned non-object JSON")
     return payload
+
+
+def _repair_json_object_text(text: str) -> str:
+    repaired = text
+    # Common LLM failure: adjacent object fields or array items without a comma.
+    repaired = re.sub(r"(?<=[}\]\"])\s+(?=\"[^\"\n\r]+\"\s*:)", ",", repaired)
+    repaired = re.sub(r"}\s*{", "},{", repaired)
+    repaired = re.sub(r"]\s*\[", "],[", repaired)
+    # Common LLM failure: trailing comma before a container closes.
+    repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    return repaired
 
 
 def _llm_json_text(llm: Any, prompt: str, *, max_tokens: int) -> str:

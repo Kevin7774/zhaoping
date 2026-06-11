@@ -376,13 +376,10 @@ describe("ProjectDetailPage backend hardening", () => {
     renderProjectPage();
 
     expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("项目材料位置"), {
-      target: { value: "data/input/projects/bp_ai_hardware.md" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "确认覆盖岗位" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认覆盖" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -392,7 +389,7 @@ describe("ProjectDetailPage backend hardening", () => {
     });
   });
 
-  it("sends prompt and industry research context when generating project roles", async () => {
+  it("sends chat prompt context when generating project roles", async () => {
     mockBackend();
 
     renderProjectPage();
@@ -400,21 +397,50 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "岗位智能生成" })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("项目提示词"), {
-      target: { value: "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。" },
+    fireEvent.change(screen.getByLabelText("岗位生成输入"), {
+      target: {
+        value: "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。",
+      },
     });
-    fireEvent.change(screen.getByLabelText("行业研究偏好"), {
-      target: { value: "重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     await waitFor(() => {
       const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
       expect(previewCall).toBeTruthy();
       expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
         generationMode: "bp_plus_prompt",
-        projectPrompt: "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。",
-        industryResearchPrompt: "重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。",
+        projectPrompt:
+          "我要为工业质检边缘 AI 项目生成岗位，覆盖算法、硬件、交付和客户成功。重点关注工业质检、边缘盒子、现场交付、数据闭环和政企合规。",
+      });
+    });
+  });
+
+  it("uses a chat composer for role generation materials and prompts", async () => {
+    mockBackend();
+
+    renderProjectPage();
+
+    expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
+    const composer = screen.getByLabelText("岗位生成输入");
+    expect(composer).toBeTruthy();
+    expect(screen.getByLabelText("上传项目材料")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "生成岗位矩阵" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "确认覆盖" })).toBeTruthy();
+    expect(screen.queryByText("生成方式")).toBeNull();
+    expect(screen.queryByLabelText("项目提示词")).toBeNull();
+    expect(screen.queryByLabelText("行业研究偏好")).toBeNull();
+
+    fireEvent.change(composer, {
+      target: { value: "基于工业质检边缘 AI 项目生成岗位，重点考虑现场交付、数据闭环和政企合规。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
+
+    await waitFor(() => {
+      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
+      expect(previewCall).toBeTruthy();
+      expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
+        generationMode: "bp_plus_prompt",
+        projectPrompt: "基于工业质检边缘 AI 项目生成岗位，重点考虑现场交付、数据闭环和政企合规。",
       });
     });
   });
@@ -438,7 +464,7 @@ describe("ProjectDetailPage backend hardening", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "预览岗位矩阵" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     await waitFor(() => {
       const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
@@ -521,7 +547,7 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(roleGenerationHeading.compareDocumentPosition(preflightHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText("后端能力状态")).toBeNull();
     expect(screen.queryByText("BP 文件路径")).toBeNull();
-    expect(screen.getByText("项目材料")).toBeTruthy();
+    expect(screen.getByLabelText("上传项目材料")).toBeTruthy();
     expect(screen.getByText("bp_ai_hardware.md")).toBeTruthy();
   });
 
@@ -531,10 +557,9 @@ describe("ProjectDetailPage backend hardening", () => {
     renderProjectPage();
 
     expect(await screen.findByRole("heading", { name: "岗位智能生成" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "预览岗位矩阵" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "生成岗位矩阵" })).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "下一步" })).toBeNull();
-    expect(screen.getByText("下一步：")).toBeTruthy();
-    expect(screen.getByText(/确认覆盖后才会写入当前项目/)).toBeTruthy();
+    expect(screen.getByText(/确认覆盖后才会重建当前项目岗位/)).toBeTruthy();
     expect(screen.getByText(/当前选中搜索源 \d+\/\d+ 项已就绪/)).toBeTruthy();
     expect(screen.queryByText(/搜索服务 .*可用/)).toBeNull();
   });

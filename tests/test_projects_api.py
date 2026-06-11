@@ -605,6 +605,37 @@ def test_initialize_project_from_bp_falls_back_and_persists_when_llm_times_out(
         assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_hanno_ai_hardware")) == 14
 
 
+def test_preview_project_from_bp_falls_back_when_gap_stage_json_repair_is_exhausted(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = SequenceProjectInitLLM(
+        {"stage_id: bp_gap_analysis": ['{"gaps":[', '{"gaps":[', '{"gaps":[']},
+        role_count=14,
+    )
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    response = client.post(
+        "/projects/project_hanno_ai_hardware/preview-from-bp",
+        json={
+            "projectName": "汉诺云智边缘计算与 AI 综合解决方案招聘项目",
+            "bpFilePath": str(bp_path),
+            "minimumRoleCount": 14,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["generationDegraded"] is True
+    assert payload["jobCount"] == 14
+    assert any("structured output failed" in item for item in payload["coverageGaps"])
+
+
 def test_initialize_project_from_bp_retries_once_when_llm_json_is_malformed(
     client: TestClient,
     session_factory: sessionmaker[Session],
