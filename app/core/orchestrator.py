@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 
 from app.core.candidate_lead_ingestion import (
+    PERSON_SEARCH_SOURCE_KEYS,
     empty_lead_ingestion_result,
     extract_candidate_leads,
     ingest_candidate_leads,
@@ -189,8 +190,8 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "gnews_funding_news",
     "education_competition_monitor",
 )
-MAX_LIVE_RECRUITING_PROVIDERS = 9
-MAX_DEEP_LIVE_PROVIDERS = 14
+MAX_LIVE_RECRUITING_PROVIDERS = 17
+MAX_DEEP_LIVE_PROVIDERS = 28
 
 LIVE_RESULT_SOURCE_KEYS = {
     *LIVE_RECRUITING_SEARCH_SERVICES,
@@ -214,12 +215,12 @@ SEARCH_EXECUTION_POLICY_METADATA: dict[str, dict[str, Any]] = {
     "bounded_live": {
         "label": "标准联网",
         "external_request_policy": "bounded_live",
-        "budget": {"max_providers": MAX_LIVE_RECRUITING_PROVIDERS, "per_provider_limit": 2, "timeout_seconds": 6, "max_crawl_pages": 0},
+        "budget": {"max_providers": MAX_LIVE_RECRUITING_PROVIDERS, "per_provider_limit": 3, "timeout_seconds": 10, "max_crawl_pages": 0},
     },
     "deep_live": {
         "label": "深度联网",
         "external_request_policy": "deep_live",
-        "budget": {"max_providers": MAX_DEEP_LIVE_PROVIDERS, "per_provider_limit": 3, "timeout_seconds": 12, "max_crawl_pages": 3},
+        "budget": {"max_providers": MAX_DEEP_LIVE_PROVIDERS, "per_provider_limit": 4, "timeout_seconds": 18, "max_crawl_pages": 3},
     },
 }
 
@@ -923,6 +924,9 @@ def _b_finalize(ctx: Dict[str, Any]) -> Any:
         result["搜索证据"] = ctx["data"]["industry_intelligence"]
     _apply_human_edits(ctx, result)
     ingestion = _ingest_scenario_b_candidate_leads(ctx, result)
+    diagnostics = _scenario_b_lead_diagnostics(ctx, ingestion)
+    if diagnostics:
+        ingestion["diagnostics"] = diagnostics
     result["lead_ingestion"] = ingestion
     _attach_human_report(ctx, result)
     _emit_audit_event(
@@ -937,12 +941,54 @@ def _b_finalize(ctx: Dict[str, Any]) -> Any:
         ),
         {"lead_ingestion": ingestion},
     )
+    if diagnostics:
+        _emit_audit_event(
+            ctx,
+            "error",
+            "talent_map",
+            f"警告：人才地图工作流未发现可入库候选人线索（{diagnostics['原因']}）",
+            {"lead_ingestion_diagnostics": diagnostics},
+        )
     ctx["log"] = (
         "已汇总生成最终人才地图报告；"
         f"候选人入库新增 {ingestion['inserted_candidates']} 人，"
         f"关联岗位 {ingestion['linked_job_candidates']} 条"
+        + ("（警告：本轮实时检索未产出可入库线索，详见 lead_ingestion.diagnostics）" if diagnostics else "")
     )
     return result
+
+
+def _scenario_b_lead_diagnostics(ctx: Dict[str, Any], ingestion: Dict[str, Any]) -> Dict[str, Any] | None:
+    """Explain why the talent-map workflow produced no ingestible leads.
+
+    found=0 must never be silent: the run looks successful while the final
+    candidate list ends up sourced entirely by the fallback provider sweep."""
+
+    if int(ingestion.get("found") or 0) > 0:
+        return None
+    intelligence = ctx["data"].get("industry_intelligence") or {}
+    live = intelligence.get("实时检索") if isinstance(intelligence, dict) else {}
+    live = live if isinstance(live, dict) else {}
+    live_results = [item for item in live.get("results") or [] if isinstance(item, dict)]
+    person_results = [
+        item
+        for item in live_results
+        if str(item.get("source_key") or "") in PERSON_SEARCH_SOURCE_KEYS
+    ]
+    if not live_results:
+        reason = "实时检索没有返回任何结果"
+    elif not person_results:
+        reason = "实时检索结果中没有人选类信源（github_candidates/github_users/openalex_authors/semantic_scholar_authors）命中"
+    else:
+        reason = "实时检索有人选类结果，但全部被线索抽取过滤，请检查结果字段结构"
+    return {
+        "原因": reason,
+        "live_result_count": int(live.get("result_count") or 0),
+        "live_services": list(live.get("services") or []),
+        "person_source_result_count": len(person_results),
+        "provider_errors": list(live.get("errors") or [])[:10],
+        "rejected_reasons": dict(ingestion.get("rejected_reasons") or {}),
+    }
 
 
 def _ingest_scenario_b_candidate_leads(ctx: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:

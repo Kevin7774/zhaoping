@@ -428,19 +428,98 @@ def _clean_string_list(value: Any) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+SKILL_TERM_BILINGUAL_ALIASES: Dict[str, List[str]] = {
+    # 全局方法论：中英文同义技能词映射，解决英文 GitHub/论文证据
+    # 与中文岗位画像关键词无法互相命中导致评分塌缩的问题。
+    "强化学习": ["reinforcement learning", "deep rl", "rlhf"],
+    "模仿学习": ["imitation learning", "behavior cloning"],
+    "机器学习": ["machine learning"],
+    "深度学习": ["deep learning", "pytorch", "tensorflow"],
+    "大模型": ["llm", "large language model", "foundation model"],
+    "多模态": ["multimodal", "multi-modal", "vision-language"],
+    "具身智能": ["embodied ai", "embodied intelligence", "embodied agent"],
+    "机器人": ["robot", "robotics", "ros"],
+    "机械臂": ["robot arm", "manipulator"],
+    "运动控制": ["motion control", "whole-body control"],
+    "运动规划": ["motion planning"],
+    "路径规划": ["path planning"],
+    "轨迹优化": ["trajectory optimization"],
+    "扩散策略": ["diffusion policy"],
+    "视觉语言动作": ["vla", "vision-language-action"],
+    "计算机视觉": ["computer vision"],
+    "目标检测": ["object detection"],
+    "位姿估计": ["pose estimation"],
+    "自然语言处理": ["nlp", "natural language processing"],
+    "仿真": ["simulation", "sim2real", "sim-to-real", "mujoco", "isaac gym", "isaac sim", "gazebo", "pybullet"],
+    "感知": ["perception"],
+    "导航": ["navigation"],
+    "建图": ["slam", "mapping"],
+    "定位": ["localization", "slam"],
+    "抓取": ["grasping", "grasp"],
+    "操作": ["manipulation"],
+    "灵巧手": ["dexterous hand", "dexterous manipulation"],
+    "人形机器人": ["humanoid", "humanoid robot"],
+    "四足机器人": ["quadruped", "legged robot"],
+    "模型预测控制": ["mpc", "model predictive control"],
+    "数据闭环": ["data pipeline", "data engine", "data flywheel"],
+    "遥操作": ["teleoperation", "teleop"],
+    "世界模型": ["world model"],
+    "预训练": ["pretraining", "pre-training", "pretrained"],
+    "微调": ["fine-tuning", "finetuning", "fine-tune", "lora"],
+    "推理部署": ["deployment", "inference", "onnx", "tensorrt"],
+    "嵌入式": ["embedded", "firmware"],
+    "实时系统": ["real-time", "rtos"],
+}
+
+_TERM_ALIAS_INDEX: Dict[str, List[str]] = {}
+for _zh_term, _en_aliases in SKILL_TERM_BILINGUAL_ALIASES.items():
+    _group = list(dict.fromkeys([_zh_term.casefold(), *(alias.casefold() for alias in _en_aliases)]))
+    for _member in _group:
+        _TERM_ALIAS_INDEX.setdefault(_member, [])
+        _TERM_ALIAS_INDEX[_member] = list(dict.fromkeys(_TERM_ALIAS_INDEX[_member] + _group))
+
+OWNERSHIP_SIGNAL_TERMS = ["负责", "主导", "owner", "lead", "独立", "maintainer", "author", "creator", "founder", "built"]
+DELIVERY_SIGNAL_TERMS = ["上线", "交付", "量产", "0到1", "复盘", "迭代", "shipped", "released", "deployed", "production", "launched", "release"]
+
+
+def _term_variants(term: str) -> List[str]:
+    base = term.strip().casefold()
+    variants = {base, base.replace("-", " ").replace("_", " ")}
+    for key in list(variants):
+        variants.update(_TERM_ALIAS_INDEX.get(key, []))
+    return [variant for variant in variants if variant]
+
+
+def _text_contains_term(term: str, text: str, text_normalized: str) -> bool:
+    for variant in _term_variants(term):
+        if variant.isascii() and len(variant) <= 3:
+            # 短英文缩写（rl/vla/mpc…）必须按整词匹配，避免误命中普通单词。
+            if re.search(rf"(?<![a-z0-9]){re.escape(variant)}(?![a-z0-9])", text_normalized):
+                return True
+        elif variant in text or variant in text_normalized:
+            return True
+    return False
+
+
 def score_candidate_against_job(job_profile: Dict[str, Any], candidate_material: str) -> Dict[str, Any]:
     """Deterministic candidate scoring driven by the job's own scoring_rubric.
 
     The methodology (composition formula, level thresholds, generic
-    ownership/delivery evidence) is global; every scored dimension, skill,
-    bonus, and risk signal comes from the job profile itself."""
+    ownership/delivery evidence, bilingual skill-term aliases) is global; every
+    scored dimension, skill, bonus, and risk signal comes from the job profile
+    itself. Evidence text is matched bilingually so English GitHub/paper
+    material can hit Chinese rubric terms and vice versa."""
 
-    text = candidate_material.lower()
+    text = candidate_material.casefold()
+    text_normalized = re.sub(r"[-_/]+", " ", text)
     rationale = job_profile.get("rationale") if isinstance(job_profile.get("rationale"), dict) else {}
 
+    def contains(term: str) -> bool:
+        return _text_contains_term(term, text, text_normalized)
+
     must_have = _clean_string_list(job_profile.get("must_have_skills"))
-    matched_skills = [item for item in must_have if item.lower() in text]
-    missing_skills = [item for item in must_have if item.lower() not in text]
+    matched_skills = [item for item in must_have if contains(item)]
+    missing_skills = [item for item in must_have if not contains(item)]
     skill_coverage = len(matched_skills) / len(must_have) if must_have else 0.0
 
     rubric = job_profile.get("scoring_rubric") if isinstance(job_profile.get("scoring_rubric"), dict) else {}
@@ -455,7 +534,7 @@ def score_candidate_against_job(job_profile: Dict[str, Any], candidate_material:
         if weight <= 0:
             continue
         terms = _rubric_terms(str(raw_name))
-        hits = [term for term in terms if term.lower() in text]
+        hits = [term for term in terms if contains(term)]
         coverage = len(hits) / len(terms) if terms else 0.0
         weighted += weight * coverage
         weight_sum += weight
@@ -475,12 +554,12 @@ def score_candidate_against_job(job_profile: Dict[str, Any], candidate_material:
             + _clean_string_list((rationale or {}).get("bonus_signals"))
         )
     )
-    bonus_hits = [item for item in bonus_signals if item.lower() in text]
+    bonus_hits = [item for item in bonus_signals if contains(item)]
     risk_signals = _clean_string_list((rationale or {}).get("risk_signals"))
-    risk_hits = [item for item in risk_signals if item.lower() in text]
+    risk_hits = [item for item in risk_signals if contains(item)]
 
-    has_ownership = any(term in text for term in ["负责", "主导", "owner", "lead", "独立"])
-    has_delivery = any(term in text for term in ["上线", "交付", "量产", "0到1", "复盘", "迭代"])
+    has_ownership = any(term in text for term in OWNERSHIP_SIGNAL_TERMS)
+    has_delivery = any(term in text for term in DELIVERY_SIGNAL_TERMS)
 
     score = 55 * rubric_coverage + 30 * skill_coverage
     score += 5 if has_ownership else 0
@@ -520,7 +599,8 @@ def score_candidate_against_job(job_profile: Dict[str, Any], candidate_material:
         "风险信号命中": risk_hits,
         "评分依据": (
             "55×岗位评分权重覆盖 + 30×必备技能覆盖 + 独立贡献/交付信号(各5) + 加分信号(≤10) − 风险信号(≤20)；"
-            "维度与关键词全部来自岗位画像的 scoring_rubric / must_have_skills / rationale。"
+            "维度与关键词全部来自岗位画像的 scoring_rubric / must_have_skills / rationale，"
+            "关键词按中英双语同义词表匹配，英文 GitHub/论文证据可命中中文岗位关键词。"
         ),
     }
 
