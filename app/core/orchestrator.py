@@ -21,7 +21,7 @@ import subprocess
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -3316,7 +3316,11 @@ def run_workflow_node(
 
     try:
         if step.kind == "hitl" and not decision:
-            payload = step.handler(ctx) if step.handler else {"prompt": "请确认", "draft": {}}
+            payload = (
+                _run_step_handler_guarded(step.handler, ctx, store=task_store, task_id=task_id, label=step.label)
+                if step.handler
+                else {"prompt": "请确认", "draft": {}}
+            )
             awaiting = {"agent": step.agent_id, "prompt": payload.get("prompt", "请确认"), "draft": payload.get("draft", {})}
             task_store.set_awaiting(task_id, step, index, awaiting)
             _update_atomic_node(node, "awaiting", awaiting, increment_run_count=False)
@@ -3334,7 +3338,11 @@ def run_workflow_node(
             output = {"人工决策": ctx["human"]["decision"], "修改意见": edits}
             message = f"原子人工门控已{ctx['human']['decision']}。"
         else:
-            output = step.handler(ctx) if step.handler else None
+            output = (
+                _run_step_handler_guarded(step.handler, ctx, store=task_store, task_id=task_id, label=step.label)
+                if step.handler
+                else None
+            )
             message = ctx.pop("log", None) or f"{AGENT_REGISTRY[step.agent_id]['name_zh']} 完成原子节点：{step.label}"
 
         task_store.complete_step(task_id, step, index, output, message, final=step.kind == "finalize")
@@ -3348,6 +3356,11 @@ def run_workflow_node(
         _save_workflow(task_id, snapshot, workflow)
         if step.kind == "finalize":
             task_store.mark_done(task_id)
+        return _snapshot_with_workflow(task_store.snapshot(task_id))
+    except TaskCancelled:
+        message = "任务已取消，原子节点执行中止。"
+        _update_atomic_node(node, "error", error=message, increment_run_count=True)
+        _save_workflow(task_id, snapshot, workflow)
         return _snapshot_with_workflow(task_store.snapshot(task_id))
     except Exception as exc:  # noqa: BLE001 - report node failures to the UI.
         message = friendly_error(exc, provider=step.agent_id)
@@ -3402,6 +3415,37 @@ def _dt_now() -> datetime:
 
 class TaskCancelled(RuntimeError):
     pass
+
+
+_NODE_HANDLER_TIMEOUT_SECONDS = max(60.0, float(os.environ.get("SCENARIO_NODE_TIMEOUT_SECONDS", "600")))
+
+
+def _run_step_handler_guarded(
+    handler: Callable[[Dict[str, Any]], Any],
+    ctx: Dict[str, Any],
+    *,
+    store: "DBTaskStore",
+    task_id: str,
+    label: str,
+) -> Any:
+    # Handler 在工作线程中执行：内部挂起的调用不能把任务永远钉在 processing，
+    # 取消在 ~1s 内生效而不是只在步与步之间。超时/取消后线程被弃置，结果丢弃。
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"node-{task_id[:8]}")
+    future = executor.submit(handler, ctx)
+    deadline = time.monotonic() + _NODE_HANDLER_TIMEOUT_SECONDS
+    try:
+        while True:
+            try:
+                return future.result(timeout=1.0)
+            except FuturesTimeoutError:
+                if store.is_cancelled(task_id):
+                    raise TaskCancelled(task_id)
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"节点「{label}」执行超过 {_NODE_HANDLER_TIMEOUT_SECONDS:.0f} 秒，已按超时终止；可重试该节点。"
+                    )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 LEGACY_SCENARIO_RUNTIME_KEY = "legacy_scenario_runtime"
@@ -4375,7 +4419,13 @@ class AgentRunner(threading.Thread):
                 if step.kind == "hitl":
                     decision = self._store.consume_human_decision(task_id) if resumed_human_gate else None
                     if decision is None:
-                        payload = step.handler(ctx) if step.handler else {"prompt": "请确认", "draft": {}}
+                        payload = (
+                            _run_step_handler_guarded(
+                                step.handler, ctx, store=self._store, task_id=task_id, label=step.label
+                            )
+                            if step.handler
+                            else {"prompt": "请确认", "draft": {}}
+                        )
                         awaiting = {
                             "agent": step.agent_id,
                             "prompt": payload.get("prompt", "请确认"),
@@ -4414,7 +4464,11 @@ class AgentRunner(threading.Thread):
                     self._save_runtime_context(ctx, idx + 1)
                     continue
 
-                output = step.handler(ctx) if step.handler else None
+                output = (
+                    _run_step_handler_guarded(step.handler, ctx, store=self._store, task_id=task_id, label=step.label)
+                    if step.handler
+                    else None
+                )
                 self._raise_if_cancelled()
                 log_message = ctx.pop("log", None) or f"{agent} 完成：{step.label}"
                 self._store.complete_step(task_id, step, idx, output, log_message, final=step.kind == "finalize")
