@@ -16,7 +16,7 @@ def test_unknown_execution_policy_falls_back_to_bounded_live() -> None:
     assert config["execution_policy"] == "bounded_live"
     assert config["budget"]["max_providers"] == orchestrator.MAX_LIVE_RECRUITING_PROVIDERS
     assert "agent_reach_social_search" in services
-    assert "opencli_platform_search" in services
+    assert "opencli_platform_search" not in services
     assert "search_mode" not in config
 
 
@@ -67,13 +67,21 @@ def test_search_config_layers_are_additive_and_budgeted() -> None:
     assert "pdl_people_search" not in services
 
 
-def test_default_candidate_sourcing_budget_reaches_opencli_platform_search() -> None:
+def test_default_candidate_sourcing_keeps_opencli_platform_search_opt_in() -> None:
     config = orchestrator._search_config_from_ctx({"frontend_state": {}})
     services = orchestrator._live_services_for_search_config(config)
-    opencli_index = services.index("opencli_platform_search") + 1
+
+    assert "agent_reach_social_search" in services
+    assert "opencli_platform_search" not in services
+
+
+def test_platform_search_layer_enables_opencli_platform_search() -> None:
+    config = orchestrator._search_config_from_ctx(
+        {"frontend_state": {"source_layers": {"platform_search": True}}}
+    )
+    services = orchestrator._live_services_for_search_config(config)
 
     assert "opencli_platform_search" in services
-    assert config["budget"]["max_providers"] >= opencli_index
 
 
 def test_crawler_snapshot_layer_requires_deep_live_crawl_budget() -> None:
@@ -313,14 +321,14 @@ def test_live_search_context_prioritizes_catalog_recommended_services(monkeypatc
         search_config={
             "search_profile": "candidate_sourcing",
             "execution_policy": "bounded_live",
-            "source_layers": {"academic": True, "social": True},
+            "source_layers": {"academic": True, "platform_search": True},
             "budget": {"max_providers": 1, "per_provider_limit": 1, "timeout_seconds": 5, "max_crawl_pages": 0},
         },
         recommended_sources=[
             {
                 "source_key": "opencli_platform_search",
                 "executable_services": ["opencli_platform_search"],
-                "frontend_layers": ["social"],
+                "frontend_layers": ["platform_search"],
             }
         ],
     )

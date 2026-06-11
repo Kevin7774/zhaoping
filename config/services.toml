@@ -147,13 +147,14 @@ project_url = "https://github.com/jackwener/OpenCLI"
 required_command = "opencli"
 requires_browser_bridge = true
 supported_platforms = ["B站", "知乎", "小红书", "LinkedIn", "YouTube", "X/Twitter", "Reddit", "微信公众号"]
-timeout_seconds = 60
+timeout_seconds = 20
+max_platforms = 4
 purpose = "Use OpenCLI built-in browser-backed commands to search authorized public/platform pages for social, video, and professional evidence."
 access_pattern = "Only use public pages, official site behavior, or user-authorized browser login state; do not bypass login, paywalls, robots.txt, access controls, or platform terms."
 risk_level = "high"
 freshness = "daily"
 guardrails = ["复用用户授权浏览器登录态前必须确认用途和范围。", "平台内容只能作为线索，关键结论必须回看原文并交叉验证。", "候选人相关信息仅限公开职业信息和岗位相关能力证据。"]
-description = "OpenCLI browser-backed platform search provider for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search."
+description = "OpenCLI browser-backed platform search provider for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search. Kept as explicit opt-in advanced search so normal candidate runs do not fan out into browser platform searches."
 
 [services.opencli_platform_search.platform_commands.bilibili]
 name_zh = "B站"
@@ -317,14 +318,6 @@ fields = "title,year,authors,url,abstract,citationCount,venue,publicationTypes,e
 timeout_seconds = 20
 description = "Live Semantic Scholar paper search provider for papers, authors, venues, abstracts, citations, and open-access links."
 
-[services.semantic_scholar_authors_search]
-type = "search"
-provider = "semantic_scholar_authors"
-endpoint = "https://api.semanticscholar.org/graph/v1/author/search"
-fields = "name,url,paperCount,citationCount,hIndex,aliases,affiliations"
-timeout_seconds = 20
-description = "Live Semantic Scholar author search provider for researchers, aliases, affiliations, h-index, paper count, and citation signals."
-
 [services.education_competition_monitor]
 type = "search"
 provider = "education_competition_monitor"
@@ -475,23 +468,6 @@ endpoint = "https://clinicaltrials.gov/api/v2/studies"
 timeout_seconds = 20
 description = "Live ClinicalTrials.gov API v2 provider for clinical study registration, sponsors, status, phases, interventions, outcomes, enrollment, dates, and locations."
 
-[services.cms_openpayments]
-type = "search"
-provider = "cms_openpayments"
-metastore_endpoint = "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items"
-datastore_endpoint_template = "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0"
-dataset_limit = 100
-timeout_seconds = 20
-description = "Live CMS Open Payments provider for drug and medical device company payments, transfers of value, research payments, ownership interests, covered recipients, and teaching hospital relationship signals."
-
-[services.gdelt_doc_news]
-type = "search"
-provider = "gdelt_doc_news"
-endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
-timespan = "7d"
-timeout_seconds = 20
-description = "Live GDELT DOC provider for global news article monitoring and market event discovery."
-
 [services.gnews_funding_news]
 type = "search"
 provider = "gnews_funding_news"
@@ -525,27 +501,12 @@ opportunity_statuses = "forecasted|posted"
 timeout_seconds = 30
 description = "Live Grants.gov provider for forecasted and posted federal grant opportunities, agency, opportunity number, ALN/CFDA, open/close dates, and non-dilutive funding pipeline signals."
 
-[services.patentsview_patents]
-type = "search"
-provider = "patentsview_patents"
-endpoint = "https://search.patentsview.org/api/v1/patent/"
-timeout_seconds = 30
-description = "Live PatentsView provider for U.S. patent titles, abstracts, assignees, inventors, and grant dates."
-
-[services.ofac_sanctions_lists]
-type = "search"
-provider = "ofac_sanctions_lists"
-sdn_xml_url = "https://www.treasury.gov/ofac/downloads/sdn.xml"
-consolidated_xml_url = "https://www.treasury.gov/ofac/downloads/consolidated/consolidated.xml"
-timeout_seconds = 30
-description = "Live OFAC sanctions list provider using official SDN and consolidated XML downloads for compliance screening."
-
 [services.due_diligence_federated_search]
 type = "search"
 provider = "due_diligence_federated"
 source_catalog_service = "talent_source_catalog"
 web_search_service = "brave_web_search"
-live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "cms_openpayments", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "semantic_scholar_authors_search", "gdelt_doc_news", "gnews_funding_news", "sec_enforcement_search", "usaspending_awards", "grants_gov_opportunities", "patentsview_patents", "ofac_sanctions_lists", "github_candidates", "github_repositories", "github_code", "github_topics", "github_users", "huggingface_models", "agent_reach_social_search", "opencli_platform_search", "opencli_web_read_search", "education_competition_monitor"]
+live_search_services = ["sec_edgar_company_filings", "sec_company_facts", "sec_insider_transactions", "sec_ownership_activism", "sec_investment_adviser_reports", "fdic_bankfind_institutions", "federal_register_documents", "cpsc_recalls", "fda_enforcement_recalls", "fda_device_510k", "fda_device_events", "fda_device_classification", "fda_device_registration_listing", "cfpb_consumer_complaints", "nhtsa_recalls", "epa_echo_facilities", "clinicaltrials_studies", "openalex_works_search", "openalex_authors_search", "openalex_institutions_search", "semantic_scholar_papers_search", "gnews_funding_news", "sec_enforcement_search", "usaspending_awards", "grants_gov_opportunities", "github_candidates", "github_repositories", "github_code", "github_topics", "github_users", "huggingface_models", "agent_reach_social_search", "opencli_platform_search", "opencli_web_read_search", "education_competition_monitor"]
 web_enabled_by_default = false
 live_enabled_by_default = false
 description = "Compliance-first federated intelligence search for financial due diligence, primary/secondary market research, recruiting, technical evidence, and source coverage planning."

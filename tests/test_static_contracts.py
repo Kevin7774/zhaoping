@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import main as api_main
+from app.core import orchestrator
 from app.core.config import load_app_config
 from app.core.intelligence_archive import IntelligenceArchive
 from app.core.integration_status import get_integration_status
@@ -57,6 +58,48 @@ from app.skills.recruiting_scenarios import (
     infer_role_key,
 )
 from scripts.run_watchlist import render_markdown_report, run_watchlist
+
+
+REMOVED_UNSTABLE_SEARCH_SERVICES = {
+    "cms_openpayments",
+    "gdelt_doc_news",
+    "ofac_sanctions_lists",
+    "patentsview_patents",
+    "semantic_scholar_authors_search",
+}
+
+
+def test_unstable_search_providers_are_removed_from_active_surfaces() -> None:
+    config = load_app_config()
+    active_search_services = {name for name, service in config.services.items() if service.type == "search"}
+    layer_services = {
+        str(service)
+        for layer in SEARCH_SOURCE_LAYER_METADATA.values()
+        for service in layer.get("services", ())
+    }
+    federated_services = set(config.service("due_diligence_federated_search").model_extra["live_search_services"])
+
+    assert REMOVED_UNSTABLE_SEARCH_SERVICES.isdisjoint(active_search_services)
+    assert REMOVED_UNSTABLE_SEARCH_SERVICES.isdisjoint(orchestrator.LIVE_RECRUITING_SEARCH_SERVICES)
+    assert REMOVED_UNSTABLE_SEARCH_SERVICES.isdisjoint(layer_services)
+    assert REMOVED_UNSTABLE_SEARCH_SERVICES.isdisjoint(federated_services)
+
+
+def test_search_source_layers_cover_all_remaining_routable_search_providers() -> None:
+    config = load_app_config()
+    internal_services = {"disabled_search", "talent_source_catalog", "due_diligence_federated_search"}
+    routable_search_services = {
+        name
+        for name, service in config.services.items()
+        if service.type == "search" and name not in internal_services
+    }
+    layer_services = {
+        str(service)
+        for layer in SEARCH_SOURCE_LAYER_METADATA.values()
+        for service in layer.get("services", ())
+    }
+
+    assert layer_services == routable_search_services
 
 
 def test_all_role_capabilities_exist() -> None:
@@ -175,6 +218,7 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("opencli_platform_search").provider == "opencli_command"
     assert config.service("opencli_platform_search").model_extra["required_command"] == "opencli"
     assert config.service("opencli_platform_search").model_extra["requires_browser_bridge"] is True
+    assert config.service("opencli_platform_search").model_extra["max_platforms"] == 4
     assert set(config.service("opencli_platform_search").model_extra["platform_commands"]) >= {
         "bilibili",
         "zhihu",
@@ -226,8 +270,6 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("openalex_institutions_search").model_extra["endpoint"] == "https://api.openalex.org/institutions"
     assert config.service("semantic_scholar_papers_search").provider == "semantic_scholar_papers"
     assert config.service("semantic_scholar_papers_search").model_extra["endpoint"] == "https://api.semanticscholar.org/graph/v1/paper/search"
-    assert config.service("semantic_scholar_authors_search").provider == "semantic_scholar_authors"
-    assert config.service("semantic_scholar_authors_search").model_extra["endpoint"] == "https://api.semanticscholar.org/graph/v1/author/search"
     assert config.service("education_competition_monitor").provider == "education_competition_monitor"
     assert len(config.service("education_competition_monitor").model_extra["targets"]) >= 8
     assert config.service("openalex_works_search").provider == "openalex_works"
@@ -266,11 +308,6 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("epa_echo_facilities").model_extra["endpoint"] == "https://echodata.epa.gov/echo/echo_rest_services.get_facilities"
     assert config.service("clinicaltrials_studies").provider == "clinicaltrials_studies"
     assert config.service("clinicaltrials_studies").model_extra["endpoint"] == "https://clinicaltrials.gov/api/v2/studies"
-    assert config.service("cms_openpayments").provider == "cms_openpayments"
-    assert config.service("cms_openpayments").model_extra["metastore_endpoint"] == "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items"
-    assert config.service("cms_openpayments").model_extra["datastore_endpoint_template"] == "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0"
-    assert config.service("gdelt_doc_news").provider == "gdelt_doc_news"
-    assert config.service("gdelt_doc_news").model_extra["endpoint"] == "https://api.gdeltproject.org/api/v2/doc/doc"
     assert config.service("gnews_funding_news").provider == "gnews_funding_news"
     assert config.service("gnews_funding_news").model_extra["api_key_env"] == "GNEWS_API_KEY"
     assert config.service("sec_enforcement_search").provider == "sec_enforcement"
@@ -279,10 +316,6 @@ def test_service_config_defaults_exist() -> None:
     assert config.service("usaspending_awards").model_extra["endpoint"] == "https://api.usaspending.gov/api/v2/search/spending_by_award/"
     assert config.service("grants_gov_opportunities").provider == "grants_gov_opportunities"
     assert config.service("grants_gov_opportunities").model_extra["endpoint"] == "https://api.grants.gov/v1/api/search2"
-    assert config.service("patentsview_patents").provider == "patentsview_patents"
-    assert config.service("patentsview_patents").model_extra["endpoint"] == "https://search.patentsview.org/api/v1/patent/"
-    assert config.service("ofac_sanctions_lists").provider == "ofac_sanctions_lists"
-    assert config.service("ofac_sanctions_lists").model_extra["sdn_xml_url"] == "https://www.treasury.gov/ofac/downloads/sdn.xml"
     assert config.service("due_diligence_federated_search").model_extra["live_search_services"] == [
         "sec_edgar_company_filings",
         "sec_company_facts",
@@ -301,30 +334,25 @@ def test_service_config_defaults_exist() -> None:
         "nhtsa_recalls",
         "epa_echo_facilities",
         "clinicaltrials_studies",
-        "cms_openpayments",
         "openalex_works_search",
         "openalex_authors_search",
         "openalex_institutions_search",
         "semantic_scholar_papers_search",
-        "semantic_scholar_authors_search",
-        "gdelt_doc_news",
         "gnews_funding_news",
         "sec_enforcement_search",
         "usaspending_awards",
         "grants_gov_opportunities",
-        "patentsview_patents",
-        "ofac_sanctions_lists",
         "github_candidates",
         "github_repositories",
         "github_code",
         "github_topics",
-            "github_users",
-            "huggingface_models",
-            "agent_reach_social_search",
-            "opencli_platform_search",
-            "opencli_web_read_search",
-            "education_competition_monitor",
-        ]
+        "github_users",
+        "huggingface_models",
+        "agent_reach_social_search",
+        "opencli_platform_search",
+        "opencli_web_read_search",
+        "education_competition_monitor",
+    ]
     assert config.service("openrouter_auto_reasoning").provider == "openrouter_chat"
     assert config.service("openrouter_auto_reasoning").model_extra["api_key_env"] == "OPENROUTER_API_KEY"
     assert config.service("openrouter_online_research").model_extra["tools"] == [
@@ -1536,7 +1564,6 @@ def test_search_smoke_script_and_readme_document_live_sources() -> None:
         "openalex_authors_search",
         "openalex_institutions_search",
         "semantic_scholar_papers_search",
-        "semantic_scholar_authors_search",
         "education_competition_monitor",
         "sec_edgar_company_filings",
         "sec_company_facts",
@@ -1555,14 +1582,10 @@ def test_search_smoke_script_and_readme_document_live_sources() -> None:
         "nhtsa_recalls",
         "epa_echo_facilities",
         "clinicaltrials_studies",
-        "cms_openpayments",
-        "gdelt_doc_news",
         "gnews_funding_news",
         "sec_enforcement_search",
         "usaspending_awards",
         "grants_gov_opportunities",
-        "patentsview_patents",
-        "ofac_sanctions_lists",
         "BRAVE_SEARCH_API_KEY",
     }
     for token in active_tokens:
@@ -1649,7 +1672,6 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["openalex_authors_search"]["name_zh"] == "OpenAlex 作者搜索"
     assert search_services["openalex_institutions_search"]["status"] == "available"
     assert search_services["semantic_scholar_papers_search"]["status"] == "available"
-    assert search_services["semantic_scholar_authors_search"]["status"] == "available"
     assert search_services["education_competition_monitor"]["status"] == "available"
     assert search_services["github_repositories"]["status"] == "available"
     assert search_services["github_repositories"]["name_zh"] == "GitHub 代码仓库搜索"
@@ -1669,6 +1691,11 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
         "browser_use_agent_search",
         "claude_chrome_supervised_search",
         "web_access_cdp_search",
+        "cms_openpayments",
+        "gdelt_doc_news",
+        "ofac_sanctions_lists",
+        "patentsview_patents",
+        "semantic_scholar_authors_search",
     }
     assert removed_search_services.isdisjoint(search_services)
     assert search_services["sec_company_facts"]["status"] == "available"
@@ -1707,14 +1734,10 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["epa_echo_facilities"]["name_zh"] == "EPA ECHO 设施合规"
     assert search_services["clinicaltrials_studies"]["status"] == "available"
     assert search_services["clinicaltrials_studies"]["name_zh"] == "ClinicalTrials.gov 试验登记"
-    assert search_services["cms_openpayments"]["status"] == "available"
-    assert search_services["cms_openpayments"]["name_zh"] == "CMS Open Payments 医疗付款"
     assert search_services["openalex_works_search"]["status"] == "available"
     assert search_services["openalex_works_search"]["name_zh"] == "OpenAlex 学术作品搜索"
     assert search_services["sec_edgar_company_filings"]["status"] == "available"
     assert search_services["sec_edgar_company_filings"]["name_zh"] == "SEC EDGAR 公司披露"
-    assert search_services["gdelt_doc_news"]["status"] == "available"
-    assert search_services["gdelt_doc_news"]["name_zh"] == "GDELT 全球新闻"
     assert search_services["gnews_funding_news"]["status"] == "available"
     assert search_services["gnews_funding_news"]["name_zh"] == "GNews 融资事件新闻"
     assert search_services["sec_enforcement_search"]["status"] == "available"
@@ -1723,10 +1746,6 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["usaspending_awards"]["name_zh"] == "USAspending 政府采购与拨款"
     assert search_services["grants_gov_opportunities"]["status"] == "available"
     assert search_services["grants_gov_opportunities"]["name_zh"] == "Grants.gov 资助机会"
-    assert search_services["patentsview_patents"]["status"] == "available"
-    assert search_services["patentsview_patents"]["name_zh"] == "PatentsView 专利检索"
-    assert search_services["ofac_sanctions_lists"]["status"] == "available"
-    assert search_services["ofac_sanctions_lists"]["name_zh"] == "OFAC 制裁清单"
     assert capabilities["code_api"]["status"] == "not_configured"
     assert capabilities["code_api"]["connected"] is False
     assert capabilities["code_api"]["connected_name_zh"] == "未接入"
@@ -1836,7 +1855,7 @@ def test_calibrated_target_sources_promotes_live_entities_over_static_seed() -> 
                     "url": "https://www.skild.ai/news",
                 },
                 {
-                    "source_key": "gdelt_doc_news",
+                    "source_key": "gnews_funding_news",
                     "source_type": "news_media",
                     "title": "Figure AI launches humanoid robot team",
                     "snippet": "Figure AI expands robotics hiring.",
@@ -2268,15 +2287,11 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
         "nhtsa_recalls",
         "epa_echo_facilities",
         "clinicaltrials_studies",
-        "cms_openpayments",
         "openalex_works_search",
-        "gdelt_doc_news",
         "gnews_funding_news",
         "sec_enforcement_search",
         "usaspending_awards",
         "grants_gov_opportunities",
-        "patentsview_patents",
-        "ofac_sanctions_lists",
         "github_repositories",
         "huggingface_models",
         "brave_web_search",
@@ -2324,17 +2339,14 @@ def test_due_diligence_federated_search_plans_financial_intelligence_sources() -
     assert "fda_device_510k" in plan["coverage_matrix"]["clinical_validation"]
     assert "fda_device_classification" in plan["coverage_matrix"]["clinical_validation"]
     assert "fda_device_registration_listing" in plan["coverage_matrix"]["clinical_validation"]
-    assert "cms_openpayments" in plan["coverage_matrix"]["healthcare_commercial_relationships"]
     assert "usaspending_awards" in plan["coverage_matrix"]["government_procurement"]
     assert "grants_gov_opportunities" in plan["coverage_matrix"]["government_procurement"]
-    assert any("OFAC" in query for query in plan["query_templates"])
     assert any("Form ADV" in query for query in plan["query_templates"])
     assert any("FDIC BankFind" in query for query in plan["query_templates"])
     assert any("510(k)" in query for query in plan["query_templates"])
     assert any("FDA classification" in query for query in plan["query_templates"])
     assert any("FDA registration listing" in query for query in plan["query_templates"])
     assert any("MAUDE" in query for query in plan["query_templates"])
-    assert any("Open Payments" in query for query in plan["query_templates"])
     assert any("USAspending" in query for query in plan["query_templates"])
     assert any("Grants.gov" in query for query in plan["query_templates"])
     assert any("至少需要两个独立来源" in rule for rule in plan["evidence_rules"])
@@ -4135,100 +4147,6 @@ def test_clinicaltrials_provider_maps_study_records(monkeypatch: pytest.MonkeyPa
     assert results[0]["locations"] == ["Example Hospital, Boston, United States"]
 
 
-def test_cms_openpayments_provider_discovers_latest_datasets_and_maps_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[dict[str, object]] = []
-
-    class Response:
-        status_code = 200
-        text = ""
-
-        def __init__(self, payload: dict | list) -> None:
-            self.payload = payload
-
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-        def json(self) -> dict | list:
-            return self.payload
-
-    def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
-        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
-        if url == "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items":
-            return Response(
-                [
-                    {
-                        "title": "2023 General Payment Data",
-                        "identifier": "general-2023",
-                        "description": "All general payments from the 2023 program year",
-                    },
-                    {
-                        "title": "2024 General Payment Data",
-                        "identifier": "general-2024",
-                        "description": "All general payments from the 2024 program year",
-                    },
-                    {
-                        "title": "2024 Research Payment Data",
-                        "identifier": "research-2024",
-                        "description": "Research Payment Data - Detailed Dataset 2024 Reporting Year",
-                    },
-                    {
-                        "title": "2024 Ownership Payment Data",
-                        "identifier": "ownership-2024",
-                        "description": "Ownership Payment Data - Detailed Dataset 2024 Reporting Year",
-                    },
-                ]
-            )
-        return Response(
-            {
-                "results": [
-                    {
-                        "applicable_manufacturer_or_applicable_gpo_making_payment_name": "Medtronic USA, Inc.",
-                        "covered_recipient_first_name": "Ada",
-                        "covered_recipient_last_name": "Lovelace",
-                        "covered_recipient_type": "Covered Recipient Physician",
-                        "covered_recipient_npi": "1234567890",
-                        "recipient_state": "MA",
-                        "recipient_country": "United States",
-                        "total_amount_of_payment_usdollars": "1200.50",
-                        "date_of_payment": "01/15/2024",
-                        "nature_of_payment_or_transfer_of_value": "Consulting Fee",
-                        "form_of_payment_or_transfer_of_value": "Cash or cash equivalent",
-                        "name_of_drug_or_biological_or_device_or_medical_supply_1": "Robotic surgical system",
-                        "contextual_information": "Research and training relationship",
-                    }
-                ]
-            }
-        )
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("cms_openpayments").search("Medtronic", limit=6)
-
-    assert calls[0]["url"] == "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items"
-    assert calls[0]["params"]["limit"] == 100
-    queried_urls = [str(call["url"]) for call in calls[1:]]
-    assert "https://openpaymentsdata.cms.gov/api/1/datastore/query/general-2024/0" in queried_urls
-    assert "https://openpaymentsdata.cms.gov/api/1/datastore/query/research-2024/0" in queried_urls
-    assert "https://openpaymentsdata.cms.gov/api/1/datastore/query/ownership-2024/0" in queried_urls
-    assert all(call["params"]["q"] == "Medtronic" for call in calls[1:])
-    assert results[0]["source_key"] == "cms_openpayments"
-    assert results[0]["source_type"] == "healthcare_payments"
-    assert results[0]["program_year"] == "2024"
-    assert results[0]["payment_type"] == "general"
-    assert results[0]["manufacturer_or_gpo"] == "Medtronic USA, Inc."
-    assert results[0]["covered_recipient"] == "Ada Lovelace"
-    assert results[0]["covered_recipient_npi"] == "1234567890"
-    assert results[0]["total_amount_usd"] == "1200.50"
-    assert results[0]["nature_of_payment"] == "Consulting Fee"
-    assert results[0]["related_product"] == "Robotic surgical system"
-
-
 def test_census_trade_provider_is_not_routable_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(KeyError):
         ServiceRouter(load_app_config()).search("census_international_trade")
@@ -4685,7 +4603,7 @@ def test_openalex_author_and_institution_providers_map_results(monkeypatch: pyte
     assert institutions[0]["url"] == "https://www.sjtu.edu.cn"
 
 
-def test_semantic_scholar_paper_and_author_providers_map_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_semantic_scholar_paper_provider_maps_results(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict[str, object]] = []
 
     class Response:
@@ -4704,33 +4622,18 @@ def test_semantic_scholar_paper_and_author_providers_map_results(monkeypatch: py
 
     def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
         calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
-        if "/paper/search" in url:
-            return Response(
-                {
-                    "data": [
-                        {
-                            "paperId": "paper_1",
-                            "title": "Vision-Language-Action Robotics",
-                            "url": "https://www.semanticscholar.org/paper/paper_1",
-                            "abstract": "Robotics policy learning.",
-                            "year": 2026,
-                            "citationCount": 10,
-                            "authors": [{"name": "Ada Researcher", "authorId": "a1"}],
-                            "venue": "CoRL",
-                        }
-                    ]
-                }
-            )
         return Response(
             {
                 "data": [
                     {
-                        "authorId": "a1",
-                        "name": "Ada Researcher",
-                        "url": "https://www.semanticscholar.org/author/a1",
-                        "paperCount": 7,
-                        "citationCount": 80,
-                        "hIndex": 5,
+                        "paperId": "paper_1",
+                        "title": "Vision-Language-Action Robotics",
+                        "url": "https://www.semanticscholar.org/paper/paper_1",
+                        "abstract": "Robotics policy learning.",
+                        "year": 2026,
+                        "citationCount": 10,
+                        "authors": [{"name": "Ada Researcher", "authorId": "a1"}],
+                        "venue": "CoRL",
                     }
                 ]
             }
@@ -4742,7 +4645,6 @@ def test_semantic_scholar_paper_and_author_providers_map_results(monkeypatch: py
 
     router = ServiceRouter(load_app_config())
     papers = router.search("semantic_scholar_papers_search").search("robot VLA", limit=200)
-    authors = router.search("semantic_scholar_authors_search").search("Ada Researcher", limit=200)
 
     assert calls[0]["url"] == "https://api.semanticscholar.org/graph/v1/paper/search"
     assert calls[0]["params"]["limit"] == 100
@@ -4751,10 +4653,6 @@ def test_semantic_scholar_paper_and_author_providers_map_results(monkeypatch: py
     assert papers[0]["source_type"] == "academic"
     assert papers[0]["title"] == "Vision-Language-Action Robotics"
     assert papers[0]["authors"] == ["Ada Researcher"]
-    assert calls[1]["url"] == "https://api.semanticscholar.org/graph/v1/author/search"
-    assert authors[0]["source_key"] == "semantic_scholar_authors_search"
-    assert authors[0]["source_type"] == "academic_author"
-    assert authors[0]["h_index"] == 5
 
 
 def test_sec_edgar_provider_maps_company_filings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4816,66 +4714,6 @@ def test_sec_edgar_provider_maps_company_filings(monkeypatch: pytest.MonkeyPatch
     assert results[0]["ticker"] == "MSFT"
     assert results[0]["form"] == "10-K"
     assert results[0]["url"] == "https://www.sec.gov/Archives/edgar/data/789019/000095017026000001/msft-20260331.htm"
-
-
-def test_gdelt_doc_news_provider_maps_articles(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict[str, object]] = []
-
-    class Response:
-        def __init__(self, status_code: int, payload: dict | None = None, text: str = "") -> None:
-            self.status_code = status_code
-            self.payload = payload or {}
-            self.text = text
-
-        def raise_for_status(self) -> None:
-            if self.status_code >= 400:
-                import requests
-
-                raise requests.HTTPError("rate limited", response=self)
-
-        def json(self) -> dict:
-            return self.payload
-
-    def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
-        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
-        if len(calls) == 1:
-            return Response(429, text="Please limit requests to one every 5 seconds")
-        return Response(
-            200,
-            {
-                "articles": [
-                    {
-                        "title": "Robotics startup raises new funding",
-                        "url": "https://example-news.com/robotics-funding",
-                        "seendate": "20260603T120000Z",
-                        "domain": "example-news.com",
-                        "sourcecountry": "US",
-                        "language": "English",
-                        "socialimage": "https://example-news.com/image.jpg",
-                    }
-                ]
-            },
-        )
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-    monkeypatch.setattr("time.sleep", lambda seconds: None)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("gdelt_doc_news").search("robotics funding", limit=300)
-
-    assert len(calls) == 2
-    assert calls[0]["url"] == "https://api.gdeltproject.org/api/v2/doc/doc"
-    assert calls[0]["params"]["query"] == "robotics funding"
-    assert calls[0]["params"]["mode"] == "ArtList"
-    assert calls[0]["params"]["format"] == "json"
-    assert calls[0]["params"]["maxrecords"] == 250
-    assert calls[0]["params"]["timespan"] == "7d"
-    assert results[0]["source_key"] == "gdelt_doc_news"
-    assert results[0]["source_type"] == "news_media"
-    assert results[0]["title"] == "Robotics startup raises new funding"
-    assert results[0]["domain"] == "example-news.com"
 
 
 def test_usaspending_award_provider_maps_awards(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -5119,156 +4957,6 @@ def test_grants_gov_opportunity_provider_maps_grant_opportunities(monkeypatch: p
     assert results[0]["document_type"] == "synopsis"
     assert results[0]["cfda_list"] == ["47.041", "47.070"]
     assert results[0]["url"] == "https://www.grants.gov/search-results-detail/324369"
-
-
-def test_patentsview_provider_maps_patents(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, object] = {}
-
-    class Response:
-        status_code = 200
-        text = ""
-
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-        @staticmethod
-        def json() -> dict:
-            return {
-                "data": [
-                    {
-                        "patent_id": "12345678",
-                        "patent_title": "Robot manipulation system",
-                        "patent_date": "2026-02-01",
-                        "patent_abstract": "A robotic manipulation method.",
-                        "assignees": [
-                            {"assignee_organization": "ROBOTICS LAB INC"},
-                        ],
-                        "inventors": [
-                            {"inventor_first_name": "Ada", "inventor_last_name": "Lovelace"},
-                        ],
-                    }
-                ]
-            }
-
-    def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
-        calls["url"] = url
-        calls["params"] = params
-        calls["headers"] = headers
-        calls["timeout"] = timeout
-        return Response()
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("patentsview_patents").search("robot manipulation", limit=150)
-
-    assert calls["url"] == "https://search.patentsview.org/api/v1/patent/"
-    assert json.loads(calls["params"]["q"])["_or"][0]["_text_any"]["patent_title"] == "robot manipulation"
-    assert "patent_id" in json.loads(calls["params"]["f"])
-    assert json.loads(calls["params"]["o"])["size"] == 100
-    assert calls["headers"]["Accept"] == "application/json"
-    assert results[0]["source_key"] == "patentsview_patents"
-    assert results[0]["source_type"] == "patent"
-    assert results[0]["patent_number"] == "12345678"
-    assert results[0]["assignees"] == ["ROBOTICS LAB INC"]
-    assert results[0]["inventors"] == ["Ada Lovelace"]
-
-
-def test_patentsview_provider_returns_transition_notice_for_migrated_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    class Response:
-        status_code = 301
-        text = "<html>PatentsView transition guide</html>"
-        headers = {"location": "https://data.uspto.gov/support/transition-guide/patentsview"}
-
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-        @staticmethod
-        def json() -> dict:
-            raise ValueError("HTML response")
-
-    def fake_get(url: str, *, params: dict, headers: dict, timeout: int) -> Response:
-        return Response()
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("patentsview_patents").search("robot manipulation", limit=1)
-
-    assert results[0]["source_key"] == "patentsview_patents"
-    assert results[0]["retrieval_status"] == "temporarily_unavailable"
-    assert results[0]["url"] == "https://data.uspto.gov/support/transition-guide/patentsview"
-
-
-def test_patentsview_provider_returns_transition_notice_for_connection_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, params: dict, headers: dict, timeout: int):
-        import requests
-
-        raise requests.ConnectionError("PatentsView migrated")
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("patentsview_patents").search("robot manipulation", limit=1)
-
-    assert results[0]["source_key"] == "patentsview_patents"
-    assert results[0]["retrieval_status"] == "temporarily_unavailable"
-
-
-def test_ofac_sanctions_provider_maps_xml_matches(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict[str, object]] = []
-    sdn_xml = b"""
-<sdnList>
-  <sdnEntry>
-    <uid>42</uid>
-    <firstName>Example</firstName>
-    <lastName>Robotics</lastName>
-    <sdnType>Entity</sdnType>
-    <programList><program>CYBER2</program></programList>
-  </sdnEntry>
-</sdnList>
-"""
-    consolidated_xml = b"<consolidatedList></consolidatedList>"
-
-    class Response:
-        status_code = 200
-        text = ""
-
-        def __init__(self, content: bytes) -> None:
-            self.content = content
-
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-    def fake_get(url: str, *, headers: dict, timeout: int) -> Response:
-        calls.append({"url": url, "headers": headers, "timeout": timeout})
-        if url == "https://www.treasury.gov/ofac/downloads/sdn.xml":
-            return Response(sdn_xml)
-        return Response(consolidated_xml)
-
-    import requests
-
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    router = ServiceRouter(load_app_config())
-    results = router.search("ofac_sanctions_lists").search("Example Robotics", limit=5)
-
-    assert calls[0]["url"] == "https://www.treasury.gov/ofac/downloads/sdn.xml"
-    assert calls[0]["headers"]["Accept"] == "application/xml,text/xml,*/*"
-    assert results[0]["source_key"] == "ofac_sanctions_lists"
-    assert results[0]["source_type"] == "sanctions"
-    assert results[0]["uid"] == "42"
-    assert results[0]["title"] == "Example Robotics"
-    assert results[0]["programs"] == ["CYBER2"]
 
 
 def test_openrouter_chat_provider_maps_messages_and_models(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -6005,7 +5693,7 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
         if args == ["opencli", "doctor"]:
             assert timeout == 10
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="[OK] Connectivity: ready", stderr="")
-        assert timeout == 60
+        assert timeout == 20
         return subprocess.CompletedProcess(
             args=args,
             returncode=0,
@@ -6034,9 +5722,10 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
 
     assert calls[0] == ["opencli", "doctor"]
     assert calls[1] == ["opencli", "bilibili", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
-    assert ["opencli", "twitter", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
-    assert ["opencli", "reddit", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
-    assert ["opencli", "weixin", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
+    assert calls[2] == ["opencli", "zhihu", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert calls[3] == ["opencli", "xiaohongshu", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert calls[4] == ["opencli", "linkedin", "people-search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert len(calls) == 5
     assert results[0]["source_key"] == "opencli_platform_search"
     assert results[0]["name_zh"] == "OpenCLI 平台搜索"
     assert results[0]["source_type"] == "browser_platform_search"

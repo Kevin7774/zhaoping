@@ -53,6 +53,7 @@ import { ProjectSummaryCards } from "../features/projects/components/ProjectSumm
 import { WeeklyReportCard } from "../features/projects/components/WeeklyReportCard";
 import {
   SEARCH_EXECUTION_POLICY_OPTIONS,
+  SEARCH_SOURCE_LAYER_GROUPS,
   SEARCH_SOURCE_LAYER_OPTIONS,
   SEARCH_SOURCE_LAYER_SERVICES,
   budgetForExecutionPolicy,
@@ -1601,37 +1602,61 @@ export function ProjectDetailPage() {
                 </span>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {SEARCH_SOURCE_LAYER_OPTIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className={`inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2 text-[11px] font-medium ${
-                    candidateSearchConfig.sourceLayers[option.value]
-                      ? option.highRisk
-                        ? "border-[#F59E0B] bg-[#FFFBEB] text-[#92400E]"
-                        : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]"
-                      : "border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={candidateSearchConfig.sourceLayers[option.value]}
-                    onChange={(event) => {
-                      const layer = option.value as SearchSourceLayer;
-                      const checked = event.currentTarget.checked;
-                      setCandidateSearchConfig((current) => ({
-                        ...current,
-                        sourceLayers: {
-                          ...current.sourceLayers,
-                          [layer]: checked,
-                        },
-                      }));
-                    }}
-                    className="h-3.5 w-3.5 accent-[#2563EB]"
-                  />
-                  {option.label}
-                </label>
-              ))}
+            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+              {SEARCH_SOURCE_LAYER_GROUPS.map((group) => {
+                const options = SEARCH_SOURCE_LAYER_OPTIONS.filter((option) => option.group === group.id);
+                const enabledOptions = options.filter((option) => candidateSearchConfig.sourceLayers[option.value]);
+                const groupProviderCount = new Set(
+                  options.flatMap((option) =>
+                    candidateSearchConfig.sourceLayers[option.value] ? SEARCH_SOURCE_LAYER_SERVICES[option.value] : [],
+                  ),
+                ).size;
+                return (
+                  <section key={group.id} className="rounded-[10px] border border-[#E5E7EB] bg-[#FCFCFD] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[12px] font-semibold text-[#111827]">{group.label}</div>
+                        <p className="mt-0.5 text-[11px] leading-4 text-[#6B7280]">{group.description}</p>
+                      </div>
+                      <span className="rounded-[7px] bg-white px-2 py-0.5 text-[11px] text-[#6B7280]">
+                        {enabledOptions.length}/{options.length} · {groupProviderCount}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {options.map((option) => (
+                        <label
+                          key={option.value}
+                          className={`inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2 text-[11px] font-medium ${
+                            candidateSearchConfig.sourceLayers[option.value]
+                              ? option.highRisk
+                                ? "border-[#F59E0B] bg-[#FFFBEB] text-[#92400E]"
+                                : "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]"
+                              : "border-[#E5E7EB] bg-white text-[#6B7280]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={candidateSearchConfig.sourceLayers[option.value]}
+                            onChange={(event) => {
+                              const layer = option.value as SearchSourceLayer;
+                              const checked = event.currentTarget.checked;
+                              setCandidateSearchConfig((current) => ({
+                                ...current,
+                                sourceLayers: {
+                                  ...current.sourceLayers,
+                                  [layer]: checked,
+                                },
+                              }));
+                            }}
+                            className="h-3.5 w-3.5 accent-[#2563EB]"
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
             <div className="mt-2 space-y-1">
               {SEARCH_SOURCE_LAYER_OPTIONS.filter((option) => option.hint).map((option) => (
@@ -1640,36 +1665,41 @@ export function ProjectDetailPage() {
                 </p>
               ))}
             </div>
-            <div className="mt-3 space-y-2">
-              {SEARCH_SOURCE_LAYER_OPTIONS.map((option) => {
-                const services = SEARCH_SOURCE_LAYER_SERVICES[option.value] ?? [];
-                const enabled = candidateSearchConfig.sourceLayers[option.value];
-                return (
-                  <div key={`${option.value}-providers`} className="min-w-0 border-t border-[#EEF2F7] pt-2">
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] leading-4">
-                      <span className={enabled ? "font-semibold text-[#111827]" : "font-medium text-[#9CA3AF]"}>
-                        {option.label} · {services.length} provider
-                      </span>
-                      <span className={enabled ? "text-[#047857]" : "text-[#9CA3AF]"}>
-                        {enabled ? "已启用" : "未启用"}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {services.map((service) => (
-                        <span
-                          key={`${option.value}-${service}`}
-                          className={`rounded-[6px] px-1.5 py-0.5 text-[10px] leading-4 ${
-                            enabled ? "bg-[#F3F4F6] text-[#374151]" : "bg-[#F9FAFB] text-[#9CA3AF]"
-                          }`}
-                        >
-                          {service}
+            <details className="mt-3 rounded-[10px] border border-[#EEF2F7] bg-white">
+              <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-medium text-[#374151] marker:content-none">
+                Provider 明细 · 当前已选 {selectedSearchProviderCount} 个
+              </summary>
+              <div className="space-y-2 border-t border-[#EEF2F7] px-3 py-2">
+                {SEARCH_SOURCE_LAYER_OPTIONS.map((option) => {
+                  const services = SEARCH_SOURCE_LAYER_SERVICES[option.value] ?? [];
+                  const enabled = candidateSearchConfig.sourceLayers[option.value];
+                  return (
+                    <div key={`${option.value}-providers`} className="min-w-0 border-t border-[#EEF2F7] pt-2 first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] leading-4">
+                        <span className={enabled ? "font-semibold text-[#111827]" : "font-medium text-[#9CA3AF]"}>
+                          {option.label} · {services.length} provider
                         </span>
-                      ))}
+                        <span className={enabled ? "text-[#047857]" : "text-[#9CA3AF]"}>
+                          {enabled ? "已启用" : "未启用"}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {services.map((service) => (
+                          <span
+                            key={`${option.value}-${service}`}
+                            className={`rounded-[6px] px-1.5 py-0.5 text-[10px] leading-4 ${
+                              enabled ? "bg-[#F3F4F6] text-[#374151]" : "bg-[#F9FAFB] text-[#9CA3AF]"
+                            }`}
+                          >
+                            {service}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </details>
             </div>
           </details>
           <MultiJobProgressTable

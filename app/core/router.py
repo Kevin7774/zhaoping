@@ -17,7 +17,6 @@ from app.providers.search import (
     AgentReachSocialSearchProvider,
     BraveWebSearchProvider,
     CFPBConsumerComplaintProvider,
-    CMSOpenPaymentsSearchProvider,
     ClinicalTrialsStudySearchProvider,
     CPSCRecallSearchProvider,
     DueDiligenceFederatedSearchProvider,
@@ -30,7 +29,6 @@ from app.providers.search import (
     FDADeviceRegistrationListingProvider,
     FDAEnforcementRecallProvider,
     FederalRegisterDocumentSearchProvider,
-    GDELTDocNewsSearchProvider,
     GNewsFundingNewsProvider,
     GrantsGovOpportunitySearchProvider,
     GitHubCandidateSearchProvider,
@@ -40,12 +38,10 @@ from app.providers.search import (
     GitHubUserSearchProvider,
     HuggingFaceModelSearchProvider,
     NHTSARecallSearchProvider,
-    OFACSanctionsListSearchProvider,
     OpenAlexAuthorsSearchProvider,
     OpenCLICommandSearchProvider,
     OpenAlexInstitutionsSearchProvider,
     OpenAlexWorksSearchProvider,
-    PatentsViewPatentSearchProvider,
     EducationCompetitionMonitorProvider,
     SECEdgarCompanyFilingsProvider,
     SECEnforcementSearchProvider,
@@ -54,7 +50,6 @@ from app.providers.search import (
     SECInvestmentAdviserReportProvider,
     SECOwnershipActivismProvider,
     SearchSourceCatalogProvider,
-    SemanticScholarAuthorSearchProvider,
     SemanticScholarPaperSearchProvider,
     USASpendingAwardSearchProvider,
 )
@@ -220,6 +215,7 @@ class ServiceRouter:
                 supported_platforms=[str(item) for item in settings.get("supported_platforms", [])],
                 project_url=str(settings.get("project_url", "https://github.com/jackwener/OpenCLI")),
                 timeout_seconds=int(settings.get("timeout_seconds", 60)),
+                max_platforms=int(settings["max_platforms"]) if "max_platforms" in settings else None,
                 risk_level=str(settings.get("risk_level", "high")),
                 freshness=str(settings.get("freshness", "daily")),
                 requires_absolute_url=bool(settings.get("requires_absolute_url", False)),
@@ -334,13 +330,6 @@ class ServiceRouter:
 
         if service.type == "search" and provider == "semantic_scholar_papers":
             return SemanticScholarPaperSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                fields=str(settings["fields"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
-        if service.type == "search" and provider == "semantic_scholar_authors":
-            return SemanticScholarAuthorSearchProvider(
                 endpoint=str(settings["endpoint"]),
                 fields=str(settings["fields"]),
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
@@ -466,21 +455,6 @@ class ServiceRouter:
                 timeout_seconds=int(settings.get("timeout_seconds", 20)),
             )
 
-        if service.type == "search" and provider == "cms_openpayments":
-            return CMSOpenPaymentsSearchProvider(
-                metastore_endpoint=str(settings["metastore_endpoint"]),
-                datastore_endpoint_template=str(settings["datastore_endpoint_template"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-                dataset_limit=int(settings.get("dataset_limit", 100)),
-            )
-
-        if service.type == "search" and provider == "gdelt_doc_news":
-            return GDELTDocNewsSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                timespan=str(settings.get("timespan", "7d")),
-                timeout_seconds=int(settings.get("timeout_seconds", 20)),
-            )
-
         if service.type == "search" and provider == "gnews_funding_news":
             return GNewsFundingNewsProvider(
                 endpoint=str(settings["endpoint"]),
@@ -507,19 +481,6 @@ class ServiceRouter:
             return GrantsGovOpportunitySearchProvider(
                 endpoint=str(settings["endpoint"]),
                 opportunity_statuses=str(settings.get("opportunity_statuses", "forecasted|posted")),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "patentsview_patents":
-            return PatentsViewPatentSearchProvider(
-                endpoint=str(settings["endpoint"]),
-                timeout_seconds=int(settings.get("timeout_seconds", 30)),
-            )
-
-        if service.type == "search" and provider == "ofac_sanctions_lists":
-            return OFACSanctionsListSearchProvider(
-                sdn_xml_url=str(settings["sdn_xml_url"]),
-                consolidated_xml_url=str(settings["consolidated_xml_url"]),
                 timeout_seconds=int(settings.get("timeout_seconds", 30)),
             )
 

@@ -30,7 +30,7 @@
   "execution_policy": "bounded_live",
   "source_layers": ["academic", "code_model", "social", "news_funding"],
   "search_budget": {
-    "max_providers": 17,
+    "max_providers": 14,
     "per_provider_limit": 3,
     "timeout_seconds": 10,
     "max_crawl_pages": 0
@@ -48,8 +48,8 @@ search。
 
 | 值 | 行为 |
 | --- | --- |
-| `bounded_live` | 默认标准联网，受 provider 数、每 provider 数量和 timeout 控制。默认 provider 上限为 17，覆盖 `agent_reach_social_search` 和 `opencli_platform_search`。 |
-| `deep_live` | 深度联网，默认 provider 上限更高，并且只有 `search_budget.max_crawl_pages > 0` 时才启用 crawler snapshot。 |
+| `bounded_live` | 默认标准联网，受 provider 数、每 provider 数量和 timeout 控制。默认 provider 上限为 14，不自动触发浏览器平台搜索。 |
+| `deep_live` | 深度联网，默认 provider 上限为 36；只有 `search_budget.max_crawl_pages > 0` 时才启用 crawler snapshot。 |
 
 ### Live Search Provider
 
@@ -58,16 +58,17 @@ search。
 | 默认联邦入口 | `due_diligence_federated_search` | 默认 search service；组合本地来源目录、开放网页和 live provider，输出覆盖矩阵、计划、brief 和证据线索。 |
 | 开放网页 | `brave_web_search` | Brave Web Search API；需要 `BRAVE_SEARCH_API_KEY`。 |
 | GitHub / 模型生态 | `github_candidates`、`github_repositories`、`github_code`、`github_topics`、`github_users`、`huggingface_models` | GitHub 候选人、用户、仓库、代码、topic 和 Hugging Face 模型信号；GitHub token 走 `GITHUB_TOKEN`，HF token 可选 `HF_TOKEN`。 |
-| 学术 | `openalex_works_search`、`openalex_authors_search`、`openalex_institutions_search`、`semantic_scholar_papers_search`、`semantic_scholar_authors_search` | 论文、作者、机构、引用、venue、h-index 和开放访问链接。 |
-| 社媒/社区 | `agent_reach_social_search`、`opencli_platform_search` | 微博、B站、V2EX、知乎、掘金、CSDN、SegmentFault、LinkedIn、YouTube、小红书、X/Twitter、Reddit、微信公众号文章等公开或授权浏览器线索。 |
+| 学术 | `openalex_works_search`、`openalex_authors_search`、`openalex_institutions_search`、`semantic_scholar_papers_search` | 论文、作者、机构、引用、venue 和开放访问链接。 |
+| 社媒/社区 | `agent_reach_social_search` | 微博、B站、V2EX、知乎、掘金、CSDN、SegmentFault 等公开搜索线索。 |
+| 授权平台 | `opencli_platform_search` | OpenCLI 浏览器授权平台搜索；覆盖 B站、知乎、小红书、LinkedIn、YouTube、X/Twitter、Reddit、微信公众号，前端默认关闭，需要显式开启 `platform_search`。 |
 | 网页正文 | `opencli_web_read_search`、`opencli_crawl_scrape` | OpenCLI `web read`，用于已发现 URL 的 Markdown/HTML/metadata 读取。 |
 | 学校/竞赛 | `education_competition_monitor` | 高校官网、实验室页、天池、DataFountain、CCF、ICPC/CCPC、蓝桥杯、Kaggle 目标。 |
-| 新闻/融资 | `gdelt_doc_news`、`gnews_funding_news` | GDELT 全球新闻；GNews 融资新闻需要 `GNEWS_API_KEY`。 |
-| 监管/尽调 | `sec_edgar_company_filings`、`sec_company_facts`、`sec_insider_transactions`、`sec_ownership_activism`、`sec_investment_adviser_reports`、`fdic_bankfind_institutions`、`federal_register_documents`、`cpsc_recalls`、`fda_enforcement_recalls`、`fda_device_510k`、`fda_device_events`、`fda_device_classification`、`fda_device_registration_listing`、`cfpb_consumer_complaints`、`nhtsa_recalls`、`epa_echo_facilities`、`clinicaltrials_studies`、`cms_openpayments`、`sec_enforcement_search`、`usaspending_awards`、`grants_gov_opportunities`、`patentsview_patents`、`ofac_sanctions_lists` | 公司披露、财务事实、内部人交易、控制权、投顾/ERA、银行机构、监管文件、召回、FDA、CFPB、NHTSA、EPA、临床试验、Open Payments、SEC enforcement、政府合同/拨款、非稀释资金、专利和制裁。 |
+| 新闻/融资 | `gnews_funding_news` | GNews 融资新闻需要 `GNEWS_API_KEY`。 |
+| 监管/尽调 | `sec_edgar_company_filings`、`sec_company_facts`、`sec_insider_transactions`、`sec_ownership_activism`、`sec_investment_adviser_reports`、`fdic_bankfind_institutions`、`federal_register_documents`、`cpsc_recalls`、`fda_enforcement_recalls`、`fda_device_510k`、`fda_device_events`、`fda_device_classification`、`fda_device_registration_listing`、`cfpb_consumer_complaints`、`nhtsa_recalls`、`epa_echo_facilities`、`clinicaltrials_studies`、`sec_enforcement_search`、`usaspending_awards`、`grants_gov_opportunities` | 公司披露、财务事实、内部人交易、控制权、投顾/ERA、银行机构、监管文件、召回、FDA、CFPB、NHTSA、EPA、临床试验、SEC enforcement、政府合同/拨款和非稀释资金。 |
 
 ### OpenCLI / Agent-Reach 状态
 
-`opencli_platform_search` 已接入这些命令：
+`opencli_platform_search` 已接入这些命令，并通过 `platform_search` 前端层显式开启；服务配置限制单次最多跑 4 个平台，避免普通候选人搜索触发长时间浏览器 fan-out：
 
 ```text
 opencli bilibili search ...

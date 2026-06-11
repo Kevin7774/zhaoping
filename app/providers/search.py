@@ -9,14 +9,12 @@ import json
 import os
 import shutil
 import subprocess
-import time
 import zipfile
 from datetime import datetime, timezone
 from html import unescape
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
 from urllib.parse import urljoin
 from urllib.parse import quote_plus
 from urllib.parse import urlparse
@@ -64,7 +62,7 @@ class SearchSourceCatalogProvider:
             "frontend_layers": ["academic"],
         },
         "semantic_scholar_research": {
-            "executable_services": ["semantic_scholar_papers_search", "semantic_scholar_authors_search"],
+            "executable_services": ["semantic_scholar_papers_search"],
             "frontend_layers": ["academic"],
         },
         "conference_paper_lists": {
@@ -72,7 +70,6 @@ class SearchSourceCatalogProvider:
                 "openalex_works_search",
                 "openalex_authors_search",
                 "semantic_scholar_papers_search",
-                "semantic_scholar_authors_search",
             ],
             "frontend_layers": ["academic"],
         },
@@ -91,10 +88,10 @@ class SearchSourceCatalogProvider:
         },
         "linkedin": {
             "executable_services": ["opencli_platform_search"],
-            "frontend_layers": ["social"],
+            "frontend_layers": ["platform_search"],
         },
         "ai_communities": {
-            "executable_services": ["agent_reach_social_search", "opencli_platform_search"],
+            "executable_services": ["agent_reach_social_search"],
             "frontend_layers": ["social"],
         },
         "agent_reach_social_search": {
@@ -103,11 +100,11 @@ class SearchSourceCatalogProvider:
         },
         "opencli_platform_search": {
             "executable_services": ["opencli_platform_search"],
-            "frontend_layers": ["social"],
+            "frontend_layers": ["platform_search"],
         },
         "video_platforms": {
             "executable_services": ["opencli_platform_search"],
-            "frontend_layers": ["social"],
+            "frontend_layers": ["platform_search"],
         },
         "opencli_web_read_search": {
             "executable_services": ["opencli_web_read_search"],
@@ -118,11 +115,11 @@ class SearchSourceCatalogProvider:
             "frontend_layers": ["crawler_snapshot"],
         },
         "news_media": {
-            "executable_services": ["gdelt_doc_news", "gnews_funding_news"],
+            "executable_services": ["gnews_funding_news"],
             "frontend_layers": ["news_funding"],
         },
         "funding_private_market": {
-            "executable_services": ["gnews_funding_news", "gdelt_doc_news"],
+            "executable_services": ["gnews_funding_news"],
             "frontend_layers": ["news_funding"],
         },
         "filings_annual_reports": {
@@ -140,17 +137,13 @@ class SearchSourceCatalogProvider:
             ],
             "frontend_layers": ["due_diligence"],
         },
-        "patent_databases": {
-            "executable_services": ["patentsview_patents"],
-            "frontend_layers": ["due_diligence"],
-        },
         "regulatory_risk_litigation": {
-            "executable_services": ["sec_enforcement_search", "federal_register_documents", "ofac_sanctions_lists"],
+            "executable_services": ["sec_enforcement_search", "federal_register_documents"],
             "frontend_layers": ["due_diligence"],
         },
         "procurement_tenders": {
             "executable_services": ["usaspending_awards", "grants_gov_opportunities"],
-            "frontend_layers": ["due_diligence"],
+            "frontend_layers": ["public_funding"],
         },
         "standards_certifications": {
             "executable_services": ["federal_register_documents"],
@@ -729,6 +722,7 @@ class OpenCLICommandSearchProvider:
         supported_platforms: list[str] | None = None,
         project_url: str = "https://github.com/jackwener/OpenCLI",
         timeout_seconds: int = 60,
+        max_platforms: int | None = None,
         risk_level: str = "high",
         freshness: str = "daily",
         requires_absolute_url: bool = False,
@@ -742,6 +736,7 @@ class OpenCLICommandSearchProvider:
         self.supported_platforms = supported_platforms or list(platform_commands)
         self.project_url = project_url
         self.timeout_seconds = timeout_seconds
+        self.max_platforms = max_platforms
         self.risk_level = risk_level
         self.freshness = freshness
         self.requires_absolute_url = requires_absolute_url
@@ -795,7 +790,10 @@ class OpenCLICommandSearchProvider:
 
         results: list[dict[str, Any]] = []
         rank = 1
-        for platform, settings in self.platform_commands.items():
+        platform_items = list(self.platform_commands.items())
+        if self.max_platforms is not None and self.max_platforms > 0:
+            platform_items = platform_items[: self.max_platforms]
+        for platform, settings in platform_items:
             args_template = [str(item) for item in settings.get("args", [])]
             name_zh = str(settings.get("name_zh") or platform)
             if not args_template:
@@ -876,6 +874,7 @@ class OpenCLICommandSearchProvider:
             "mode": "opencli_command_search",
             "service": self.service_name,
             "supported_platforms": self.supported_platforms,
+            "max_platforms": self.max_platforms,
             "runtime_requirements": [
                 {
                     "type": "command",
@@ -899,7 +898,11 @@ class OpenCLICommandSearchProvider:
                     self.required_command,
                     *self._render_args([str(item) for item in settings.get("args", [])], query=query, limit=max(1, int(limit))),
                 ]
-                for platform, settings in self.platform_commands.items()
+                for platform, settings in (
+                    list(self.platform_commands.items())[: self.max_platforms]
+                    if self.max_platforms is not None and self.max_platforms > 0
+                    else self.platform_commands.items()
+                )
             },
             "guardrails": self._guardrails(),
         }
@@ -2684,65 +2687,6 @@ class SemanticScholarPaperSearchProvider:
             "venue": item.get("venue"),
             "cited_by_count": item.get("citationCount"),
             "authors": authors[:8],
-        }
-
-
-class SemanticScholarAuthorSearchProvider:
-    def __init__(
-        self,
-        endpoint: str = "https://api.semanticscholar.org/graph/v1/author/search",
-        fields: str = "name,url,paperCount,citationCount,hIndex,aliases,affiliations",
-        timeout_seconds: int = 20,
-    ) -> None:
-        self.endpoint = endpoint
-        self.fields = fields
-        self.timeout_seconds = timeout_seconds
-
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        normalized_limit = max(1, min(int(limit), 100))
-
-        import requests
-
-        response = requests.get(
-            self.endpoint,
-            params={
-                "query": query,
-                "limit": normalized_limit,
-                "fields": self.fields,
-            },
-            headers={"Accept": "application/json"},
-            timeout=self.timeout_seconds,
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise RuntimeError(f"Semantic Scholar author search failed: {response.status_code} {response.text[:300]}") from exc
-
-        return [
-            self._to_result(query=query, rank=rank, item=item)
-            for rank, item in enumerate(response.json().get("data") or [], start=1)
-        ]
-
-    @staticmethod
-    def _to_result(query: str, rank: int, item: dict[str, Any]) -> dict:
-        author_id = item.get("authorId")
-        affiliations = item.get("affiliations") or []
-        return {
-            "source_key": "semantic_scholar_authors_search",
-            "name_zh": "Semantic Scholar 作者搜索",
-            "source_type": "academic_author",
-            "query": query,
-            "rank": rank,
-            "title": item.get("name", ""),
-            "url": item.get("url") or (f"https://www.semanticscholar.org/author/{author_id}" if author_id else ""),
-            "semantic_scholar_id": author_id,
-            "snippet": ", ".join(str(affiliation) for affiliation in affiliations),
-            "published_at": None,
-            "paper_count": item.get("paperCount"),
-            "citation_count": item.get("citationCount"),
-            "h_index": item.get("hIndex"),
-            "aliases": item.get("aliases") or [],
-            "affiliations": affiliations,
         }
 
 
@@ -4545,198 +4489,6 @@ class ClinicalTrialsStudySearchProvider:
         }
 
 
-class CMSOpenPaymentsSearchProvider:
-    def __init__(
-        self,
-        metastore_endpoint: str = "https://openpaymentsdata.cms.gov/api/1/metastore/schemas/dataset/items",
-        datastore_endpoint_template: str = "https://openpaymentsdata.cms.gov/api/1/datastore/query/{dataset_id}/0",
-        timeout_seconds: int = 20,
-        dataset_limit: int = 100,
-    ) -> None:
-        self.metastore_endpoint = metastore_endpoint
-        self.datastore_endpoint_template = datastore_endpoint_template
-        self.timeout_seconds = timeout_seconds
-        self.dataset_limit = dataset_limit
-
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        normalized_limit = max(1, min(int(limit), 30))
-        datasets = self._latest_payment_datasets()
-        per_dataset_limit = max(1, normalized_limit // max(1, len(datasets)))
-        results: list[dict[str, Any]] = []
-
-        import requests
-
-        for payment_type, dataset in datasets:
-            response = requests.get(
-                self.datastore_endpoint_template.format(dataset_id=dataset["identifier"]),
-                params={
-                    "limit": per_dataset_limit,
-                    "q": query,
-                },
-                headers={"Accept": "application/json"},
-                timeout=self.timeout_seconds,
-            )
-            try:
-                response.raise_for_status()
-            except requests.HTTPError as exc:
-                raise RuntimeError(
-                    f"CMS Open Payments datastore query failed: {response.status_code} {response.text[:300]}"
-                ) from exc
-
-            rows = (response.json().get("results") or [])[:per_dataset_limit]
-            results.extend(
-                self._to_result(
-                    query=query,
-                    rank=len(results) + rank,
-                    payment_type=payment_type,
-                    dataset=dataset,
-                    item=item,
-                )
-                for rank, item in enumerate(rows, start=1)
-            )
-
-        return results[:normalized_limit]
-
-    def _latest_payment_datasets(self) -> list[tuple[str, dict[str, Any]]]:
-        import requests
-
-        response = requests.get(
-            self.metastore_endpoint,
-            params={"limit": self.dataset_limit, "offset": 0},
-            headers={"Accept": "application/json"},
-            timeout=self.timeout_seconds,
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise RuntimeError(
-                f"CMS Open Payments metastore query failed: {response.status_code} {response.text[:300]}"
-            ) from exc
-
-        selected: dict[str, dict[str, Any]] = {}
-        for item in response.json():
-            title = str(item.get("title", ""))
-            description = str(item.get("description", ""))
-            haystack = f"{title}\n{description}"
-            year = self._year(haystack)
-            payment_type = self._payment_type(haystack)
-            identifier = item.get("identifier")
-            if not year or not payment_type or not identifier:
-                continue
-            current = selected.get(payment_type)
-            if current is None or int(year) > int(current["year"]):
-                selected[payment_type] = {
-                    "identifier": str(identifier),
-                    "title": title,
-                    "year": year,
-                    "description": description,
-                }
-
-        return [
-            (payment_type, selected[payment_type])
-            for payment_type in ("general", "research", "ownership")
-            if payment_type in selected
-        ]
-
-    @staticmethod
-    def _year(text: str) -> str | None:
-        import re
-
-        match = re.search(r"\b(20\d{2})\b", text)
-        return match.group(1) if match else None
-
-    @staticmethod
-    def _payment_type(text: str) -> str | None:
-        lowered = text.casefold()
-        if "general payment data" in lowered:
-            return "general"
-        if "research payment data" in lowered:
-            return "research"
-        if "ownership payment data" in lowered:
-            return "ownership"
-        return None
-
-    @classmethod
-    def _to_result(
-        cls,
-        query: str,
-        rank: int,
-        payment_type: str,
-        dataset: dict[str, Any],
-        item: dict[str, Any],
-    ) -> dict:
-        manufacturer = cls._first(
-            item,
-            "applicable_manufacturer_or_applicable_gpo_making_payment_name",
-            "submitting_applicable_manufacturer_or_applicable_gpo_name",
-            "applicable_manufacturer_or_applicable_gpo_name",
-        )
-        recipient = cls._recipient_name(item)
-        amount = cls._first(
-            item,
-            "total_amount_of_payment_usdollars",
-            "total_amount_invested_usdollars",
-            "dollar_amount_invested",
-            "value_of_interest",
-        )
-        nature = cls._first(item, "nature_of_payment_or_transfer_of_value", "nature_of_ownership_or_investment_interest")
-        product = cls._first(
-            item,
-            "name_of_drug_or_biological_or_device_or_medical_supply_1",
-            "name_of_associated_covered_drug_or_biological1",
-            "name_of_associated_covered_device_or_medical_supply1",
-            "product_category_or_therapeutic_area_1",
-        )
-        payment_date = cls._first(item, "date_of_payment", "program_year")
-        title = " ".join(part for part in [manufacturer, recipient, amount] if part)
-        return {
-            "source_key": "cms_openpayments",
-            "name_zh": "CMS Open Payments 医疗付款",
-            "source_type": "healthcare_payments",
-            "query": query,
-            "rank": rank,
-            "title": title or str(dataset.get("title", "CMS Open Payments")),
-            "url": f"https://openpaymentsdata.cms.gov/dataset/{dataset['identifier']}",
-            "snippet": " | ".join(part for part in [nature, product] if part),
-            "published_at": payment_date,
-            "dataset_id": dataset["identifier"],
-            "program_year": dataset.get("year") or cls._first(item, "program_year"),
-            "payment_type": payment_type,
-            "manufacturer_or_gpo": manufacturer,
-            "covered_recipient": recipient,
-            "covered_recipient_type": cls._first(item, "covered_recipient_type"),
-            "covered_recipient_npi": cls._first(item, "covered_recipient_npi"),
-            "teaching_hospital_name": cls._first(item, "teaching_hospital_name"),
-            "recipient_state": cls._first(item, "recipient_state"),
-            "recipient_country": cls._first(item, "recipient_country"),
-            "total_amount_usd": amount,
-            "nature_of_payment": nature,
-            "form_of_payment": cls._first(item, "form_of_payment_or_transfer_of_value"),
-            "related_product": product,
-            "contextual_information": cls._first(item, "contextual_information"),
-        }
-
-    @classmethod
-    def _recipient_name(cls, item: dict[str, Any]) -> str:
-        hospital = cls._first(item, "teaching_hospital_name")
-        if hospital:
-            return hospital
-        parts = [
-            cls._first(item, "covered_recipient_first_name", "physician_profile_first_name"),
-            cls._first(item, "covered_recipient_middle_name", "physician_profile_middle_name"),
-            cls._first(item, "covered_recipient_last_name", "physician_profile_last_name"),
-        ]
-        return " ".join(part for part in parts if part)
-
-    @staticmethod
-    def _first(item: dict[str, Any], *keys: str) -> str:
-        for key in keys:
-            value = item.get(key)
-            if value not in (None, ""):
-                return str(value)
-        return ""
-
-
 class CensusInternationalTradeProvider:
     def __init__(
         self,
@@ -4823,76 +4575,6 @@ class CensusInternationalTradeProvider:
             "monthly_value": item.get("GEN_VAL_MO"),
             "year_to_date_value": item.get("GEN_VAL_YR"),
             "time": item.get("time"),
-        }
-
-
-class GDELTDocNewsSearchProvider:
-    def __init__(
-        self,
-        endpoint: str = "https://api.gdeltproject.org/api/v2/doc/doc",
-        timespan: str = "7d",
-        timeout_seconds: int = 20,
-    ) -> None:
-        self.endpoint = endpoint
-        self.timespan = timespan
-        self.timeout_seconds = timeout_seconds
-
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        normalized_limit = max(1, min(int(limit), 250))
-        params = {
-            "query": query,
-            "mode": "ArtList",
-            "format": "json",
-            "maxrecords": normalized_limit,
-            "timespan": self.timespan,
-            "sort": "datedesc",
-        }
-
-        import requests
-
-        response = None
-        for attempt in range(2):
-            response = requests.get(
-                self.endpoint,
-                params=params,
-                headers={"Accept": "application/json"},
-                timeout=self.timeout_seconds,
-            )
-            if response.status_code == 429 and attempt == 0:
-                time.sleep(5.25)
-                continue
-            break
-        if response is None:
-            return []
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            if response.status_code == 429:
-                return []
-            raise RuntimeError(f"GDELT DOC request failed: {response.status_code} {response.text[:300]}") from exc
-
-        articles = response.json().get("articles") or []
-        return [
-            self._to_result(query=query, rank=rank, item=item)
-            for rank, item in enumerate(articles[:normalized_limit], start=1)
-        ]
-
-    @staticmethod
-    def _to_result(query: str, rank: int, item: dict[str, Any]) -> dict:
-        return {
-            "source_key": "gdelt_doc_news",
-            "name_zh": "GDELT 全球新闻",
-            "source_type": "news_media",
-            "query": query,
-            "rank": rank,
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "snippet": item.get("seendate", "") or item.get("title", ""),
-            "published_at": item.get("seendate"),
-            "domain": item.get("domain"),
-            "source_country": item.get("sourcecountry"),
-            "language": item.get("language"),
-            "social_image": item.get("socialimage"),
         }
 
 
@@ -5533,253 +5215,6 @@ class FREDSeriesSearchProvider:
         }
 
 
-class PatentsViewPatentSearchProvider:
-    def __init__(
-        self,
-        endpoint: str = "https://search.patentsview.org/api/v1/patent/",
-        timeout_seconds: int = 30,
-    ) -> None:
-        self.endpoint = endpoint
-        self.timeout_seconds = timeout_seconds
-
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        normalized_limit = max(1, min(int(limit), 100))
-        fields = [
-            "patent_id",
-            "patent_title",
-            "patent_date",
-            "patent_abstract",
-            "assignees.assignee_organization",
-            "inventors.inventor_first_name",
-            "inventors.inventor_last_name",
-        ]
-        params = {
-            "q": json.dumps(self._query(query), separators=(",", ":")),
-            "f": json.dumps(fields, separators=(",", ":")),
-            "o": json.dumps({"size": normalized_limit}, separators=(",", ":")),
-        }
-
-        import requests
-
-        try:
-            response = requests.get(
-                self.endpoint,
-                params=params,
-                headers={"Accept": "application/json"},
-                timeout=self.timeout_seconds,
-            )
-        except requests.RequestException:
-            return [self._transition_result(query)]
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise RuntimeError(f"PatentsView request failed: {response.status_code} {response.text[:300]}") from exc
-
-        content_type = response.headers.get("content-type", "") if hasattr(response, "headers") else ""
-        if response.status_code in {301, 302, 303, 307, 308} or "html" in content_type.casefold():
-            return [self._transition_result(query)]
-        try:
-            payload = response.json()
-        except ValueError:
-            return [self._transition_result(query)]
-        patents = payload.get("data") or payload.get("patents") or []
-        return [
-            self._to_result(query=query, rank=rank, item=item)
-            for rank, item in enumerate(patents[:normalized_limit], start=1)
-        ]
-
-    @staticmethod
-    def _query(query: str) -> dict[str, Any]:
-        return {
-            "_or": [
-                {"_text_any": {"patent_title": query}},
-                {"_text_any": {"patent_abstract": query}},
-                {"_text_any": {"assignee_organization": query}},
-            ]
-        }
-
-    @staticmethod
-    def _to_result(query: str, rank: int, item: dict[str, Any]) -> dict:
-        patent_number = str(item.get("patent_number") or item.get("patent_id") or "")
-        assignees = item.get("assignees") or []
-        inventors = item.get("inventors") or []
-        assignee_names = [
-            str(assignee.get("assignee_organization"))
-            for assignee in assignees
-            if assignee.get("assignee_organization")
-        ]
-        inventor_names = [
-            " ".join(
-                part
-                for part in [
-                    str(inventor.get("inventor_first_name") or ""),
-                    str(inventor.get("inventor_last_name") or ""),
-                ]
-                if part
-            )
-            for inventor in inventors
-        ]
-        return {
-            "source_key": "patentsview_patents",
-            "name_zh": "PatentsView 专利",
-            "source_type": "patent",
-            "query": query,
-            "rank": rank,
-            "title": item.get("patent_title", ""),
-            "url": f"https://patents.google.com/patent/US{patent_number}" if patent_number else "",
-            "snippet": item.get("patent_abstract", ""),
-            "published_at": item.get("patent_date"),
-            "patent_number": patent_number,
-            "assignees": assignee_names[:8],
-            "inventors": [name for name in inventor_names if name][:8],
-        }
-
-    @staticmethod
-    def _transition_result(query: str) -> dict:
-        return {
-            "source_key": "patentsview_patents",
-            "name_zh": "PatentsView 专利",
-            "source_type": "patent",
-            "query": query,
-            "rank": 1,
-            "title": "PatentsView API migrated to USPTO Open Data Portal",
-            "url": "https://data.uspto.gov/support/transition-guide/patentsview",
-            "snippet": "PatentsView search APIs are temporarily unavailable during the USPTO Open Data Portal migration; use USPTO ODP downloads or the transition guide.",
-            "published_at": "2026-03-20",
-            "retrieval_status": "temporarily_unavailable",
-            "patent_number": "",
-            "assignees": [],
-            "inventors": [],
-        }
-
-
-class OFACSanctionsListSearchProvider:
-    def __init__(
-        self,
-        sdn_xml_url: str = "https://www.treasury.gov/ofac/downloads/sdn.xml",
-        consolidated_xml_url: str = "https://www.treasury.gov/ofac/downloads/consolidated/consolidated.xml",
-        timeout_seconds: int = 30,
-    ) -> None:
-        self.sdn_xml_url = sdn_xml_url
-        self.consolidated_xml_url = consolidated_xml_url
-        self.timeout_seconds = timeout_seconds
-
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        normalized_limit = max(1, min(int(limit), 100))
-        matches: list[dict[str, Any]] = []
-        for list_name, url in [
-            ("SDN", self.sdn_xml_url),
-            ("Consolidated", self.consolidated_xml_url),
-        ]:
-            payload = self._download(url)
-            matches.extend(self._search_xml(query=query, list_name=list_name, url=url, payload=payload))
-            if len(matches) >= normalized_limit:
-                break
-        return [
-            self._to_result(query=query, rank=rank, item=item)
-            for rank, item in enumerate(matches[:normalized_limit], start=1)
-        ]
-
-    def _download(self, url: str) -> bytes:
-        import requests
-
-        response = requests.get(
-            url,
-            headers={"Accept": "application/xml,text/xml,*/*"},
-            timeout=self.timeout_seconds,
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise RuntimeError(f"OFAC sanctions list request failed: {response.status_code} {response.text[:300]}") from exc
-        return response.content
-
-    def _search_xml(self, query: str, list_name: str, url: str, payload: bytes) -> list[dict[str, Any]]:
-        tokens = [token.casefold() for token in SearchSourceCatalogProvider._tokens(query)]
-        if not tokens:
-            return []
-        root = ElementTree.fromstring(payload)
-        entries = [
-            element
-            for element in root.iter()
-            if self._local_name(element.tag) in {"sdnEntry", "sanctionsEntry", "entity"}
-        ]
-        matches = []
-        for entry in entries:
-            haystack = " ".join(text.casefold() for text in entry.itertext() if text)
-            if all(token in haystack for token in tokens):
-                matches.append(self._entry_payload(entry=entry, list_name=list_name, source_url=url))
-        return matches
-
-    @classmethod
-    def _entry_payload(cls, entry: ElementTree.Element, list_name: str, source_url: str) -> dict[str, Any]:
-        names = [
-            text
-            for tag in ("firstName", "lastName", "name", "sdnName")
-            for text in cls._texts(entry, tag)
-        ]
-        programs = cls._texts(entry, "program")
-        aliases = [
-            " ".join(part for part in [first, last] if part)
-            for first, last in zip(cls._texts(entry, "firstName"), cls._texts(entry, "lastName"))
-        ]
-        entity_type = cls._first_text(entry, "sdnType") or cls._first_text(entry, "type")
-        uid = cls._first_text(entry, "uid") or cls._first_text(entry, "id")
-        return {
-            "uid": uid,
-            "list_name": list_name,
-            "name": " ".join(names[:2]).strip() or cls._first_non_empty(entry),
-            "entity_type": entity_type,
-            "programs": programs[:8],
-            "aliases": [alias for alias in aliases if alias][:8],
-            "source_url": source_url,
-        }
-
-    @staticmethod
-    def _to_result(query: str, rank: int, item: dict[str, Any]) -> dict:
-        name = item.get("name", "")
-        return {
-            "source_key": "ofac_sanctions_lists",
-            "name_zh": "OFAC 制裁清单",
-            "source_type": "sanctions",
-            "query": query,
-            "rank": rank,
-            "title": name,
-            "url": item.get("source_url", ""),
-            "snippet": f"{item.get('list_name', '')} {item.get('entity_type', '')}".strip(),
-            "published_at": None,
-            "uid": item.get("uid"),
-            "list_name": item.get("list_name"),
-            "entity_type": item.get("entity_type"),
-            "programs": item.get("programs", []),
-            "aliases": item.get("aliases", []),
-        }
-
-    @classmethod
-    def _texts(cls, element: ElementTree.Element, tag_name: str) -> list[str]:
-        values = []
-        for child in element.iter():
-            if cls._local_name(child.tag) == tag_name and child.text and child.text.strip():
-                values.append(child.text.strip())
-        return values
-
-    @classmethod
-    def _first_text(cls, element: ElementTree.Element, tag_name: str) -> str | None:
-        values = cls._texts(element, tag_name)
-        return values[0] if values else None
-
-    @staticmethod
-    def _first_non_empty(element: ElementTree.Element) -> str:
-        for text in element.itertext():
-            if text and text.strip():
-                return text.strip()
-        return ""
-
-    @staticmethod
-    def _local_name(tag: str) -> str:
-        return tag.rsplit("}", 1)[-1]
-
-
 class DueDiligenceFederatedSearchProvider:
     """Compliance-first intelligence search across source planning and live web."""
 
@@ -6093,13 +5528,10 @@ class DueDiligenceFederatedSearchProvider:
             "regulatory_filings_global",
             "filings_annual_reports",
             "company_websites",
-            "patent_databases",
             "conference_paper_lists",
             "scholar_arxiv",
             "openalex_works_search",
             "sec_edgar_company_filings",
-            "patentsview_patents",
-            "ofac_sanctions_lists",
             "github_repositories",
             "huggingface_models",
             "sec_company_facts",
@@ -6118,7 +5550,6 @@ class DueDiligenceFederatedSearchProvider:
             "nhtsa_recalls",
             "epa_echo_facilities",
             "clinicaltrials_studies",
-            "cms_openpayments",
             "gnews_funding_news",
             "sec_enforcement_search",
             "procurement_tenders",
@@ -6382,12 +5813,10 @@ class DueDiligenceFederatedSearchProvider:
                 "usaspending_awards",
             },
             "technical_evidence": {
-                "patent_databases",
                 "conference_paper_lists",
                 "scholar_arxiv",
                 "datasets_benchmarks",
                 "openalex_works_search",
-                "patentsview_patents",
                 "github_candidates",
                 "github_users",
                 "github_repositories",
@@ -6404,12 +5833,10 @@ class DueDiligenceFederatedSearchProvider:
             "community_signal": {
                 "developer_communities",
                 "ai_communities",
-                "gdelt_doc_news",
                 "brave_web_search",
                 "agent_reach_social_search",
             },
             "regulatory_enforcement": {
-                "ofac_sanctions_lists",
                 "sec_enforcement_search",
                 "fdic_bankfind_institutions",
                 "sec_investment_adviser_reports",
@@ -6455,9 +5882,7 @@ class DueDiligenceFederatedSearchProvider:
                 "fda_device_classification",
                 "fda_device_registration_listing",
             },
-            "healthcare_commercial_relationships": {
-                "cms_openpayments",
-            },
+            "healthcare_commercial_relationships": set(),
             "government_procurement": {
                 "procurement_tenders",
                 "usaspending_awards",
@@ -6574,7 +5999,7 @@ class DueDiligenceFederatedSearchProvider:
             f'"{query}" site:sec.gov OR site:hkexnews.hk OR site:cninfo.com.cn',
             f'"{query}" site:sec.gov Form 4 OR 13D OR 13G OR 13F',
             f'"{query}" Form ADV OR IAPD OR investment adviser OR exempt reporting adviser',
-            f'"{query}" enforcement OR litigation OR sanctions OR OFAC OR penalty',
+            f'"{query}" enforcement OR litigation OR sanctions OR penalty',
             f'"{query}" FDIC BankFind OR bank certificate OR insured depository OR primary regulator',
             f'"{query}" recall OR enforcement report OR complaint OR hazard OR remedy',
             f'"{query}" 510(k) OR K number OR product code OR substantially equivalent',
@@ -6583,13 +6008,11 @@ class DueDiligenceFederatedSearchProvider:
             f'"{query}" MAUDE OR adverse event OR malfunction OR injury OR death',
             f'"{query}" environmental compliance OR EPA ECHO OR facility OR violation',
             f'"{query}" clinical trial OR NCT OR sponsor OR primary outcome',
-            f'"{query}" Open Payments OR CMS OR physician payment OR transfer of value',
             f'"{query}" FRED OR interest rate OR inflation OR unemployment OR yield curve OR credit spread',
             f'"{query}" contract OR grant OR award OR procurement OR USAspending',
             f'"{query}" SAM.gov OR solicitation OR RFP OR RFQ OR sources sought',
             f'"{query}" Grants.gov OR SBIR OR STTR OR non-dilutive funding OR federal grant',
             f'"{query}" funding OR financing OR 融资 OR 投资方',
-            f'"{query}" patent OR 专利 OR inventor OR 发明人',
             f'"{query}" arxiv OR OpenReview OR ICRA OR IROS OR CoRL OR RSS',
             f'"{query}" GitHub OR Hugging Face OR ModelScope',
             f'"{query}" 招聘 OR careers OR jobs OR LinkedIn',
@@ -6610,7 +6033,6 @@ class DueDiligenceFederatedSearchProvider:
             "SECOwnershipActivismProvider": ("sec_ownership_activism", "SEC 重大持股与控制权披露", "ownership_activism"),
             "SECInvestmentAdviserReportProvider": ("sec_investment_adviser_reports", "SEC 投顾/ERA Form ADV 数据", "investment_adviser_registry"),
             "FDICBankFindInstitutionProvider": ("fdic_bankfind_institutions", "FDIC BankFind 银行机构", "financial_institution_registry"),
-            "GDELTDocNewsSearchProvider": ("gdelt_doc_news", "GDELT 全球新闻", "news_media"),
             "CPSCRecallSearchProvider": ("cpsc_recalls", "CPSC 产品召回", "product_safety_recall"),
             "FDAEnforcementRecallProvider": ("fda_enforcement_recalls", "FDA Enforcement 召回", "fda_enforcement_recall"),
             "FDADevice510kClearanceProvider": ("fda_device_510k", "FDA 510(k) 器械准入", "fda_device_clearance"),
@@ -6621,11 +6043,8 @@ class DueDiligenceFederatedSearchProvider:
             "NHTSARecallSearchProvider": ("nhtsa_recalls", "NHTSA 车辆召回", "vehicle_safety_recall"),
             "EPAEchoFacilityComplianceProvider": ("epa_echo_facilities", "EPA ECHO 设施合规", "environmental_compliance"),
             "ClinicalTrialsStudySearchProvider": ("clinicaltrials_studies", "ClinicalTrials.gov 试验登记", "clinical_trial_registry"),
-            "CMSOpenPaymentsSearchProvider": ("cms_openpayments", "CMS Open Payments 医疗付款", "healthcare_payments"),
             "USASpendingAwardSearchProvider": ("usaspending_awards", "USAspending 政府采购与拨款", "procurement_awards"),
             "GrantsGovOpportunitySearchProvider": ("grants_gov_opportunities", "Grants.gov 资助机会", "grant_opportunity"),
-            "PatentsViewPatentSearchProvider": ("patentsview_patents", "PatentsView 专利", "patent"),
-            "OFACSanctionsListSearchProvider": ("ofac_sanctions_lists", "OFAC 制裁清单", "sanctions"),
             "GitHubRepositorySearchProvider": ("github_repositories", "GitHub 代码仓库", "code_repository"),
             "GitHubCandidateSearchProvider": ("github_candidates", "GitHub 候选人搜索", "developer_profile"),
             "GitHubUserSearchProvider": ("github_users", "GitHub 用户搜索", "developer_profile"),

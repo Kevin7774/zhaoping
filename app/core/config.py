@@ -116,7 +116,6 @@ class AppConfig(BaseModel):
             ("search", "openalex_authors"): ("endpoint",),
             ("search", "openalex_institutions"): ("endpoint",),
             ("search", "semantic_scholar_papers"): ("endpoint", "fields"),
-            ("search", "semantic_scholar_authors"): ("endpoint", "fields"),
             ("search", "education_competition_monitor"): ("targets",),
             ("search", "sec_edgar_company_filings"): (
                 "company_tickers_url",
@@ -147,14 +146,10 @@ class AppConfig(BaseModel):
             ("search", "nhtsa_recalls"): ("endpoint",),
             ("search", "epa_echo_facilities"): ("endpoint",),
             ("search", "clinicaltrials_studies"): ("endpoint",),
-            ("search", "cms_openpayments"): ("metastore_endpoint", "datastore_endpoint_template"),
-            ("search", "gdelt_doc_news"): ("endpoint",),
             ("search", "gnews_funding_news"): ("endpoint", "api_key_env"),
             ("search", "sec_enforcement"): ("endpoint",),
             ("search", "usaspending_awards"): ("endpoint",),
             ("search", "grants_gov_opportunities"): ("endpoint",),
-            ("search", "patentsview_patents"): ("endpoint",),
-            ("search", "ofac_sanctions_lists"): ("sdn_xml_url", "consolidated_xml_url"),
             ("search", "due_diligence_federated"): ("source_catalog_service",),
             ("search", "external_search_tool"): (
                 "tool_name",

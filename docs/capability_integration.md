@@ -152,10 +152,10 @@ The search stack now includes executable or routable providers for recruiting, a
 
 - `agent_reach_social_search` (`search` / `agent_reach_social`): executable fan-out provider. Weibo uses `mcporter` direct Weibo search. Bilibili, V2EX, Zhihu, Juejin, CSDN, and SegmentFault use `mcporter` Exa site search. Runtime requirements are `agent-reach`, `mcporter`, and `opencli`.
 - `openalex_works_search`, `openalex_authors_search`, `openalex_institutions_search`: OpenAlex providers for papers, authors, institutions, schools, labs, citations, and topics.
-- `semantic_scholar_papers_search`, `semantic_scholar_authors_search`: Semantic Scholar Graph API providers for papers, authors, venues, h-index, and citation evidence.
+- `semantic_scholar_papers_search`: Semantic Scholar Graph API provider for papers, authors, venues, abstracts, citation counts, and open-access links.
 - `github_candidates`, `github_users`, `github_repositories`, `github_code`, `github_topics`: GitHub REST providers for public developer profiles, repositories, code snippets, topics, representative repository evidence, deterministic GitHub scoring, and HumanGate-ready candidate lead previews. Token-required providers are gated by `GITHUB_TOKEN` and can be disabled with `GITHUB_SEARCH_ENABLED=false`.
 - `education_competition_monitor`: curated monitoring target provider for school/lab pages and competitions such as Tianchi, DataFountain, CCF, ICPC/CCPC, Lanqiao, and Kaggle.
-- `opencli_platform_search` (`search` / `opencli_command`): local OpenCLI browser-backed platform commands for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search. It requires the `opencli` command and a connected Browser Bridge extension.
+- `opencli_platform_search` (`search` / `opencli_command`): opt-in local OpenCLI browser-backed platform commands for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search. It requires the `opencli` command and a connected Browser Bridge extension. It is exposed through the `platform_search` source layer and is not part of the default candidate-sourcing layer.
 - `opencli_web_read_search` (`search` / `opencli_command`): URL-backed OpenCLI web reader facade for crawler snapshot workflows. It returns `requires_url` without launching a browser when the query is not an absolute `http(s)` URL.
 - `opencli_crawl_scrape`: local OpenCLI web reader using `opencli web read --url {url} -f json`. The CLI can be installed while Browser Bridge remains disconnected; live browser-backed reads require the Chrome/Chromium extension. Integration status reports command absence as `missing_tool` and disconnected Browser Bridge as `manual_setup`.
 
@@ -182,10 +182,10 @@ Project scenario tasks should prefer structured search control in
 `frontend_state`: `search_profile`, `execution_policy`, `source_layers`, and
 `search_budget`. `search_profile` describes the intent, such as candidate
 sourcing or due diligence. `execution_policy` controls depth and external
-request risk: `bounded_live` uses a capped provider budget. The default bounded live provider cap is sized to include both social adapters (`agent_reach_social_search` and `opencli_platform_search`) in the candidate-sourcing workflow. `deep_live` allows a larger bounded budget.
+request risk: `bounded_live` uses a capped provider budget. The default bounded live provider cap is sized for the stable candidate-sourcing workflow and does not automatically launch browser-backed platform search. `deep_live` allows a larger bounded budget.
 `source_layers` is additive, not mutually exclusive; layers such as academic,
-code/model, social, news/funding, school/competition, crawler snapshot, and due
-diligence can be enabled together. `search_budget` caps provider count,
+code/model, social, platform search, news/funding, school/competition, crawler
+snapshot, and due diligence can be enabled together. `search_budget` caps provider count,
 per-provider limit, timeout, and crawl pages. The `crawler_snapshot` layer is
 accepted only when `execution_policy = "deep_live"` and
 `search_budget.max_crawl_pages > 0`; otherwise it is normalized off before live

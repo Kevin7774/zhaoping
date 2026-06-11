@@ -59,7 +59,7 @@ def test_probe_marks_exceptions_and_error_status_results_as_failed(monkeypatch) 
     payload = _probe_with_stub(
         monkeypatch,
         {
-            "semantic_scholar_authors_search": _StubProvider(error=RuntimeError("HTTP 429 Too Many Requests")),
+            "openalex_authors_search": _StubProvider(error=RuntimeError("HTTP 429 Too Many Requests")),
             "gnews_funding_news": _StubProvider(
                 results=[{"retrieval_status": "error", "error": "query too long"}]
             ),
@@ -69,8 +69,8 @@ def test_probe_marks_exceptions_and_error_status_results_as_failed(monkeypatch) 
     assert payload["probed"] == 2
     assert payload["verified"] == 0
     by_service = {probe["service"]: probe for probe in payload["probes"]}
-    assert by_service["semantic_scholar_authors_search"]["probe_status"] == "probe_failed"
-    assert "429" in by_service["semantic_scholar_authors_search"]["reason"]
+    assert by_service["openalex_authors_search"]["probe_status"] == "probe_failed"
+    assert "429" in by_service["openalex_authors_search"]["reason"]
     assert by_service["gnews_funding_news"]["probe_status"] == "probe_failed"
     assert "query too long" in by_service["gnews_funding_news"]["reason"]
 

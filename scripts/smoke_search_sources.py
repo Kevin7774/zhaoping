@@ -92,7 +92,6 @@ def main() -> None:
     parser.add_argument("--openalex-author-query", default="robot learning researcher")
     parser.add_argument("--openalex-institution-query", default="robotics university lab")
     parser.add_argument("--semantic-paper-query", default="vision language action robotics")
-    parser.add_argument("--semantic-author-query", default="robot learning")
     parser.add_argument("--sec-query", default="MSFT annual report")
     parser.add_argument("--sec-facts-query", default="MSFT revenue")
     parser.add_argument("--insider-query", default="MSFT insider transactions")
@@ -110,14 +109,10 @@ def main() -> None:
     parser.add_argument("--nhtsa-query", default="2024 Tesla Model Y recall")
     parser.add_argument("--epa-query", default="battery manufacturing")
     parser.add_argument("--clinical-query", default="robotic surgery")
-    parser.add_argument("--openpayments-query", default="Medtronic")
-    parser.add_argument("--news-query", default="robotics funding")
     parser.add_argument("--funding-query", default="robotics funding")
     parser.add_argument("--enforcement-query", default="robotics")
     parser.add_argument("--spending-query", default="robotics")
     parser.add_argument("--grants-query", default="robotics")
-    parser.add_argument("--patent-query", default="robot manipulation")
-    parser.add_argument("--sanctions-query", default="example")
     parser.add_argument("--github-query", default="robotics foundation model")
     parser.add_argument("--hf-query", default="robotics")
     parser.add_argument("--social-query", default="robotics VLA demo")
@@ -161,9 +156,6 @@ def main() -> None:
         ),
         "semantic_scholar_papers_search": _summarize(
             router.search("semantic_scholar_papers_search").search(args.semantic_paper_query, limit=args.limit)
-        ),
-        "semantic_scholar_authors_search": _summarize(
-            router.search("semantic_scholar_authors_search").search(args.semantic_author_query, limit=args.limit)
         ),
         "sec_edgar_company_filings": _summarize(
             router.search("sec_edgar_company_filings").search(args.sec_query, limit=args.limit)
@@ -216,12 +208,6 @@ def main() -> None:
         "clinicaltrials_studies": _summarize(
             router.search("clinicaltrials_studies").search(args.clinical_query, limit=args.limit)
         ),
-        "cms_openpayments": _summarize(
-            router.search("cms_openpayments").search(args.openpayments_query, limit=args.limit)
-        ),
-        "gdelt_doc_news": _summarize(
-            router.search("gdelt_doc_news").search(args.news_query, limit=args.limit)
-        ),
         "sec_enforcement_search": _summarize(
             router.search("sec_enforcement_search").search(args.enforcement_query, limit=args.limit)
         ),
@@ -230,12 +216,6 @@ def main() -> None:
         ),
         "grants_gov_opportunities": _summarize(
             router.search("grants_gov_opportunities").search(args.grants_query, limit=args.limit)
-        ),
-        "patentsview_patents": _summarize(
-            router.search("patentsview_patents").search(args.patent_query, limit=args.limit)
-        ),
-        "ofac_sanctions_lists": _summarize(
-            router.search("ofac_sanctions_lists").search(args.sanctions_query, limit=args.limit)
         ),
         "github_repositories": _summarize(
             router.search("github_repositories").search(args.github_query, limit=args.limit)

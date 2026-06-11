@@ -48,7 +48,6 @@ PROVIDER_PLAN = (
     ),
     ("github_users", tuple(f"{query} type:user" for query in DEFAULT_QUERIES[:5]), 5),
     ("openalex_authors_search", ("AI agents software engineering", "agentic workflow LLM tools"), 5),
-    ("semantic_scholar_authors_search", ("AI agents software engineering", "LLM tool use agents"), 5),
     ("agent_reach_social_search", ("AI Native FDE Agentic Builder", "MCP RAG fullstack engineer"), 5),
 )
 

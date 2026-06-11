@@ -56,7 +56,6 @@ PERSON_SEARCH_SOURCE_KEYS = {
     "github_candidates",
     "github_users",
     "openalex_authors_search",
-    "semantic_scholar_authors_search",
 }
 PERSON_SEARCH_SOURCE_TYPES = {
     "developer_profile",

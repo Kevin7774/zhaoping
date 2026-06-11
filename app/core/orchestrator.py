@@ -177,7 +177,7 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "openalex_works_search",
     "openalex_authors_search",
     "openalex_institutions_search",
-    "semantic_scholar_authors_search",
+    "semantic_scholar_papers_search",
     "github_candidates",
     "github_users",
     "github_repositories",
@@ -186,13 +186,11 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "huggingface_models",
     "brave_web_search",
     "agent_reach_social_search",
-    "opencli_platform_search",
-    "gdelt_doc_news",
     "gnews_funding_news",
     "education_competition_monitor",
 )
-MAX_LIVE_RECRUITING_PROVIDERS = 17
-MAX_DEEP_LIVE_PROVIDERS = 28
+MAX_LIVE_RECRUITING_PROVIDERS = 14
+MAX_DEEP_LIVE_PROVIDERS = 36
 
 LIVE_RESULT_SOURCE_KEYS = {
     *LIVE_RECRUITING_SEARCH_SERVICES,
@@ -237,7 +235,6 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
             "openalex_authors_search",
             "openalex_institutions_search",
             "semantic_scholar_papers_search",
-            "semantic_scholar_authors_search",
         ),
     },
     "code_model": {
@@ -253,11 +250,15 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
     },
     "social": {
         "label": "社媒/社区",
-        "services": ("agent_reach_social_search", "opencli_platform_search"),
+        "services": ("agent_reach_social_search",),
+    },
+    "platform_search": {
+        "label": "授权平台搜索",
+        "services": ("opencli_platform_search",),
     },
     "news_funding": {
         "label": "新闻/融资",
-        "services": ("gdelt_doc_news", "gnews_funding_news"),
+        "services": ("gnews_funding_news",),
     },
     "education_competition": {
         "label": "学校/竞赛",
@@ -275,13 +276,33 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
             "sec_insider_transactions",
             "sec_ownership_activism",
             "sec_investment_adviser_reports",
-            "patentsview_patents",
-            "ofac_sanctions_lists",
             "federal_register_documents",
             "cpsc_recalls",
             "fda_enforcement_recalls",
             "sec_enforcement_search",
         ),
+    },
+    "financial_regulatory": {
+        "label": "金融/投诉",
+        "services": ("fdic_bankfind_institutions", "cfpb_consumer_complaints"),
+    },
+    "healthcare_regulatory": {
+        "label": "医疗/FDA",
+        "services": (
+            "fda_device_510k",
+            "fda_device_events",
+            "fda_device_classification",
+            "fda_device_registration_listing",
+            "clinicaltrials_studies",
+        ),
+    },
+    "safety_environment": {
+        "label": "安全/环境",
+        "services": ("nhtsa_recalls", "epa_echo_facilities"),
+    },
+    "public_funding": {
+        "label": "政府资金",
+        "services": ("usaspending_awards", "grants_gov_opportunities"),
     },
 }
 
@@ -308,6 +329,10 @@ SEARCH_PROFILE_DEFAULT_LAYERS: dict[str, tuple[str, ...]] = {
         "news_funding",
         "education_competition",
         "due_diligence",
+        "financial_regulatory",
+        "healthcare_regulatory",
+        "safety_environment",
+        "public_funding",
     ),
 }
 
@@ -318,6 +343,11 @@ SEARCH_SOURCE_LAYER_ALIASES = {
     "educationCompetition": "education_competition",
     "crawlerSnapshot": "crawler_snapshot",
     "dueDiligence": "due_diligence",
+    "platformSearch": "platform_search",
+    "financialRegulatory": "financial_regulatory",
+    "healthcareRegulatory": "healthcare_regulatory",
+    "safetyEnvironment": "safety_environment",
+    "publicFunding": "public_funding",
     "liveWeb": "live_web",
 }
 
@@ -326,7 +356,7 @@ TOP_DOWN_RESEARCH_LAYERS = (
         "id": "market_map",
         "name_zh": "行业/市场地图",
         "purpose": "先确认公司、融资、招聘需求和市场变化，避免直接从单个候选人猜方向。",
-        "services": ("brave_web_search", "gdelt_doc_news", "gnews_funding_news"),
+        "services": ("brave_web_search", "gnews_funding_news"),
     },
     {
         "id": "technical_evidence",
@@ -348,7 +378,6 @@ TOP_DOWN_RESEARCH_LAYERS = (
         "purpose": "从人员库、作者网络和开源/社媒身份定位可触达候选人。",
         "services": (
             "openalex_authors_search",
-            "semantic_scholar_authors_search",
             "github_candidates",
             "github_users",
             "github_repositories",
@@ -399,7 +428,6 @@ GENERIC_ENTITY_NAMES = {
     "GitHub",
     "Hugging Face",
     "OpenAlex",
-    "GDELT",
     "Brave Search",
     "家庭机器人",
     "人形机器人",
@@ -689,7 +717,7 @@ def _humanize_org_handle(raw_name: Any) -> str:
 
 
 def _entity_from_result_url(url: str, source_key: str) -> str:
-    if not url or source_key not in {"brave_web_search", "gdelt_doc_news"}:
+    if not url or source_key != "brave_web_search":
         return ""
     host = urlparse(url).netloc.casefold()
     host = host.removeprefix("www.")
@@ -2668,12 +2696,10 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         return "robotics diffusion policy language:Python"
     if role_key == "vla_embodied_expert" and service_name == "openalex_works_search":
         return "robot foundation model"
-    if service_name in {"openalex_authors_search", "semantic_scholar_authors_search"}:
+    if service_name == "openalex_authors_search":
         return f"{role_query} researcher engineer".strip()
     if service_name == "agent_reach_social_search":
         return f"{role_query} hiring demo team"
-    if service_name == "opencli_platform_search":
-        return f"{role_query} demo talk profile"
     if service_name == "opencli_web_read_search":
         return fallback_query if urlparse(fallback_query).scheme in {"http", "https"} else f"{role_query} official team page"
     if service_name in {"github_candidates", "github_users", "github_repositories", "github_code"}:
@@ -2682,8 +2708,6 @@ def _live_query(fallback_query: str, role_key: str | None, service_name: str) ->
         return role_query
     if service_name == "huggingface_models":
         return "robotics" if role_key == "vla_embodied_expert" else role_query
-    if service_name == "gdelt_doc_news":
-        return f"{role_query} funding product launch team"
     if service_name == "brave_web_search":
         return f"{role_query} companies labs hiring"
     return role_query

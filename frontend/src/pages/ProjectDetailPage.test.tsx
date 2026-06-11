@@ -601,10 +601,10 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByText("展开设置"));
     expect(screen.getAllByText("GitHub/代码/模型").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/GitHub 搜人、Repo、Code、Topic/)).toBeTruthy();
-    expect(screen.getByText(/最多 17 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/最多 14 个 provider/)).toBeTruthy();
     expect(screen.getAllByText(/单源 3 条/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole("option", { name: "仅规划" })).toBeNull();
-    expect(screen.getByText(/当前已选 17 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/当前已选 14 个 provider/)).toBeTruthy();
     expect(screen.getByText(/开放网页 · 1 provider/)).toBeTruthy();
     expect(screen.getByText(/GitHub\/代码\/模型 · 6 provider/)).toBeTruthy();
     expect(screen.getByText("brave_web_search")).toBeTruthy();
@@ -614,12 +614,18 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(screen.getByLabelText("网页抓取")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("搜索深度"), { target: { value: "deep_live" } });
     fireEvent.click(screen.getByLabelText("网页抓取"));
-    fireEvent.click(screen.getByLabelText("尽调源"));
-    expect(screen.getByText(/当前已选 29 个 provider/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("OpenCLI 平台"));
+    fireEvent.click(screen.getByLabelText("公司/SEC/召回"));
+    fireEvent.click(screen.getByLabelText("金融/投诉"));
+    fireEvent.click(screen.getByLabelText("医疗/FDA"));
+    fireEvent.click(screen.getByLabelText("安全/环境"));
+    fireEvent.click(screen.getByLabelText("政府资金"));
+    expect(screen.getByText(/当前已选 36 个 provider/)).toBeTruthy();
     expect(screen.queryByText("scrapling_adaptive_scrape")).toBeNull();
     expect(screen.getByText(/网页抓取 · 1 provider/)).toBeTruthy();
     expect(screen.getByText("opencli_web_read_search")).toBeTruthy();
-    expect(screen.getByText(/尽调源 · 11 provider/)).toBeTruthy();
+    expect(screen.getByText(/公司\/SEC\/召回 · 9 provider/)).toBeTruthy();
+    expect(screen.getByText(/OpenCLI 平台 · 1 provider/)).toBeTruthy();
     expect(screen.getByText("sec_edgar_company_filings")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "找候选人" }));
 
@@ -635,6 +641,7 @@ describe("ProjectDetailPage backend hardening", () => {
           academic: true,
           code_model: true,
           social: true,
+          platform_search: true,
           crawler_snapshot: true,
           due_diligence: true,
         },
