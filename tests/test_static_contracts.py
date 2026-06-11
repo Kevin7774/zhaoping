@@ -496,7 +496,6 @@ def test_router_registries_and_structured_output_provider() -> None:
     assert "evidence_record_schema" in router.skill_registry.all()
     assert "search_data_sources" in router.skill_registry.all()
     assert "home_robot_recruiting_scenarios" in router.skill_registry.all()
-    assert router.mcp_registry.services() == {}
     assert router.structured_output("outlines_structured_output").model_service == "openrouter_auto_reasoning"
     assert router.llm().model == load_app_config().service("openrouter_auto_reasoning").model_extra["model"]
 
@@ -770,66 +769,6 @@ def test_active_frontend_api_client_wraps_project_workspace_endpoints() -> None:
     assert "export async function loginWithCompanyEmail" in auth_source
     assert "/auth/login" in auth_source
     assert "setJwtTokenProvider" in client_source
-
-
-def test_frontend_capability_registry_productizes_all_backend_paths() -> None:
-    registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
-    backend_paths = set(app.openapi()["paths"])
-    registry_paths = {
-        match.group(1)
-        for match in re.finditer(
-            r"^\s*'([^']+)':\s*'(?:productized|system|closed)'",
-            registry_source,
-            flags=re.MULTILINE,
-        )
-    }
-
-    assert sorted(backend_paths - registry_paths) == []
-    assert sorted(registry_paths - backend_paths) == []
-    assert "/projects/{project_id}/candidates/{job_candidate_id}/compliance-review" in registry_paths
-    for status in ["productized", "system", "closed"]:
-        assert status in registry_source
-    for artifact_type in [
-        "search_plan",
-        "search_results",
-        "evidence_records",
-        "intel_brief",
-        "archive_record",
-        "watchlist_run",
-        "resume_ingest",
-        "candidate_matches",
-        "rsi_report",
-        "workflow_snapshot",
-        "outreach_draft",
-        "outreach_history",
-        "segment",
-        "weekly_report",
-        "candidate_search_schedule",
-    ]:
-        assert artifact_type in registry_source
-
-
-def test_frontend_search_capability_chain_requires_human_confirmation() -> None:
-    registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
-    chain_start = registry_source.index("search_intel_pipeline")
-
-    assert registry_source.index("/search/plan", chain_start) < registry_source.index("/search/run", chain_start)
-    assert registry_source.index("/search/run", chain_start) < registry_source.index("/search/evidence", chain_start)
-    assert registry_source.index("/search/evidence", chain_start) < registry_source.index("/search/brief", chain_start)
-    assert registry_source.index("/search/archive", chain_start) > registry_source.index("/search/brief", chain_start)
-    assert "requiresConfirmation: true" in registry_source[chain_start:]
-    assert "writeScope: 'optional_archive'" in registry_source[chain_start:]
-
-
-def test_frontend_chat_shell_recommends_without_auto_execution() -> None:
-    registry_source = Path("frontend/src/capabilities/capabilityRegistry.js").read_text(encoding="utf-8")
-
-    assert "export function detectIntent" in registry_source
-    assert "export function getCapabilitiesByWorkspace" in registry_source
-    assert "export function suggestCapabilitiesForInput" in registry_source
-    assert "requiresConfirmation: true" in registry_source
-    assert "writeScope: 'optional_archive'" in registry_source
-    assert "ChatShell" not in registry_source
 
 
 def test_db_task_store_persists_audit_events_and_cancel() -> None:

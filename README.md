@@ -34,7 +34,7 @@
 | 分群与触达 | Segment 查询/保存/读取；邮件草稿、人工编辑、模拟触达历史。 | `app/api/routers/segments.py`、`app/api/routers/outreach.py` |
 | 评估闭环 | Self-RSI local/full 评估，输出能力 trace、反馈缺口、测试结果和迭代计划。 | `app/providers/evaluation.py` |
 | 集成状态 | 动态读取 `config/services.toml`，返回 provider 状态、中文名、代码路径和服务明细；当前注册表不保留 disabled / missing_key 占位项。 | `GET /integrations/status` |
-| 前端控制台 | Workflow、Search Intel、Archive Watch、Candidate、Evaluation、Ops 工作区和能力注册表。 | `frontend/src/capabilities/capabilityRegistry.js` |
+| 前端控制台 | Dashboard、项目详情、Jobs、TalentMap、Candidates、Scenarios、Outreach、Reports、Tasks、Integrations 页面。 | `frontend/src/app/router.tsx`、`frontend/src/pages/` |
 
 ## 最新搜索能力
 
@@ -109,7 +109,7 @@ opencli weixin search ...
 
 ## API 能力总览
 
-以 `/openapi.json`、`app/api/main.py`、`app/api/routers/` 和 `frontend/src/capabilities/capabilityRegistry.js` 为准。
+以 `/openapi.json`、`app/api/main.py` 和 `app/api/routers/` 为准。
 
 | 能力域 | 主要路径 | 状态 | 用途 |
 | --- | --- | --- | --- |
@@ -126,7 +126,7 @@ opencli weixin search ...
 | RSI 评估 | `POST /rsi/evaluate` | productized | 运行 local/full 评估。 |
 | 分群与触达 | `POST /segments/query`、`POST/GET /segments`、`GET /segments/{segment_id}`、`POST /outreach/draft`、`PATCH /outreach/drafts/{draft_id}`、`POST /outreach/send`、`GET /outreach/history` | productized | Segment、邮件草稿、人工编辑、模拟确认和历史。 |
 | 周报 | `POST /reports/weekly`、`GET /projects/{project_id}/reports/latest`、`GET /reports/{report_id}` | productized | 周报写入与读取。 |
-| 认证与开发监控 | `POST /auth/login`、`GET /auth/me`、`POST /monitor/start`、`GET /monitor/status` | productized/system | 登录态和开发监控。 |
+| 认证 | `POST /auth/login`、`GET /auth/me` | productized | 登录态。 |
 
 任务状态固定为 `processing`、`awaiting_human`、`done`、`error`、`cancelled`。前端优先使用 `GET /tasks/{task_id}/stream`，连接失败时回退到 `GET /tasks/{task_id}`。
 
@@ -146,7 +146,7 @@ opencli weixin search ...
 | `app/core/integration_status.py` | 集成状态聚合。 |
 | `app/core/router.py` | `ServiceRouter`，按 `config/services.toml` 构造 provider。 |
 | `app/core/config.py` | 服务配置加载与校验。 |
-| `app/providers/` | document、OCR、embedding、vector、search、scraping、LLM、evaluation、structured output provider；email/database/MCP 实现保留为代码能力，但当前未注册为可用服务。 |
+| `app/providers/` | document、OCR、embedding、vector、search、scraping、LLM、evaluation、structured output provider；email/database 实现保留为代码能力，但当前未注册为可用服务。 |
 | `app/skills/tech_space.py` | 12 个机器人岗位、能力标准和团队画像。 |
 | `app/skills/search_sources.py` | 搜索来源目录。 |
 | `app/db/schema.py` / `app/models/` | 项目库 schema/model。 |
@@ -156,7 +156,6 @@ opencli weixin search ...
 | `frontend/src/pages/` | Dashboard、Jobs、TalentMap、Candidates、Scenarios、Outreach、Reports、Tasks、Integrations 页面。 |
 | `frontend/src/features/projects/components/` | 项目工作台复用组件：HumanGate、LiveTaskSummary、进度表、摘要卡、周报卡等。 |
 | `frontend/src/shared/api/client.ts` | 前端统一 API client、拦截器、错误处理和请求日志。 |
-| `frontend/src/capabilities/capabilityRegistry.js` | 前端能力、路径产品化状态和风险元数据。 |
 | `frontend/src/shared/hooks/useTaskStream.ts` | SSE + polling task stream hook。 |
 | `scripts/smoke_search_sources.py` | live search / external tool smoke。 |
 | `scripts/run_watchlist.py` | 不启动 API 的 watchlist CLI。 |

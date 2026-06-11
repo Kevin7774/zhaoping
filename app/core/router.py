@@ -4,7 +4,6 @@ from functools import cached_property
 from typing import Any
 
 from app.core.config import AppConfig, ServiceConfig, load_app_config
-from app.core.mcp_registry import MCPRegistry
 from app.providers.database import PostgresDatabaseProvider
 from app.providers.common import DisabledProvider
 from app.providers.document import AutoDocumentParser, DoclingDocumentParser, PlainTextDocumentParser
@@ -98,9 +97,6 @@ class ServiceRouter:
     def ocr(self, service_name: str | None = None):
         return self.resolve("ocr", service_name)
 
-    def mcp(self, service_name: str | None = None):
-        return self.resolve("mcp", service_name)
-
     def structured_output(self, service_name: str | None = None):
         return self.resolve("structured_output", service_name)
 
@@ -129,10 +125,6 @@ class ServiceRouter:
     @cached_property
     def skill_registry(self) -> SkillRegistry:
         return SkillRegistry(self.config)
-
-    @cached_property
-    def mcp_registry(self) -> MCPRegistry:
-        return MCPRegistry(self.config)
 
     def _build(self, service: ServiceConfig):
         provider = service.provider
