@@ -168,6 +168,16 @@ provider payloads. Runtime calls are bounded by a live-provider budget; skipped
 sources must be reported as `missing_credentials`, `missing_tool`,
 `manual_setup`, or `deferred_by_live_budget` instead of failing silently.
 
+`talent_source_catalog` is the planning catalog, not a crawler by itself. Catalog
+results must include both human-facing source metadata and routing hints:
+`executable_services` lists concrete provider service IDs, and
+`frontend_layers` maps the source to the structured source-layer controls. When
+`search_config.source_layers` is present, catalog planning filters recommended
+sources to the enabled layers. `due_diligence_federated_search` forwards this
+search config into `plan`, `evidence`, and `brief`, and Scenario B uses catalog
+recommendations to prioritize matching live providers before applying the normal
+layer round-robin and provider budget.
+
 Project scenario tasks should prefer structured search control in
 `frontend_state`: `search_profile`, `execution_policy`, `source_layers`, and
 `search_budget`. `search_profile` describes the intent, such as candidate
@@ -198,7 +208,9 @@ sources; normalized evidence records; live result summaries; provider errors;
 evidence gaps; next queries; and guardrails. This reuses the JSONL archive and
 does not require a database migration.
 
-Keep planned/source-catalog entries in `app/skills/search_sources.py` aligned with concrete services in `config/services.toml`.
+Keep planned/source-catalog entries in `app/skills/search_sources.py` aligned
+with concrete services in `config/services.toml` and with
+`SearchSourceCatalogProvider.EXECUTION_HINTS`.
 
 ## Adding A Static Skill
 

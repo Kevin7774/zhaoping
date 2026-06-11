@@ -30,6 +30,7 @@ class CandidateLead:
     matched_keywords: list[str]
     confidence: float
     requires_compliance_review: bool
+    identity_confidence: str
     raw_payload: dict[str, Any]
 
 
@@ -131,6 +132,9 @@ PUBLIC_EMAIL_SOURCE_MARKERS = (
     "linkedin",
 )
 TRUSTED_DIRECT_CONTACT_SOURCES = {"resume_file", "manual", "referral", "hr_upload"}
+IDENTITY_VERIFIED_DIRECT = "verified_direct"
+IDENTITY_PUBLIC_PROFILE = "public_profile"
+IDENTITY_REVIEW_NOTE = "身份提示｜公开渠道线索（非实名认证身份），外联前需人工复核身份与联系方式"
 
 
 def normalize_candidate_lead(raw: Mapping[str, Any]) -> NormalizationResult:
@@ -180,6 +184,7 @@ def normalize_candidate_lead(raw: Mapping[str, Any]) -> NormalizationResult:
         matched_keywords=matched_keywords,
         confidence=_confidence(_first_present(payload, ("confidence", "score", "match_score", "matchScore"))),
         requires_compliance_review=_requires_contact_compliance_review(payload),
+        identity_confidence=_identity_confidence(payload),
         raw_payload=payload,
     )
 
@@ -241,6 +246,7 @@ def empty_lead_ingestion_result(source_task_id: str, reason: str | None = None) 
         "duplicates": 0,
         "rejected": 0,
         "compliance_review_required": 0,
+        "identity_review_required": 0,
         "rejected_reasons": {},
         "source_task_id": source_task_id,
     }
@@ -327,6 +333,7 @@ def preview_candidate_leads(
             "confidence": lead.confidence,
             "matched_job": job.title,
             "compliance_status": PENDING_COMPLIANCE_REVIEW_STATUS if lead.requires_compliance_review else "clear",
+            "identity_confidence": lead.identity_confidence,
             "ingestion_action": ingestion_action,
         }
         _attach_github_preview_fields(item, lead.raw_payload)
@@ -398,11 +405,16 @@ def ingest_candidate_leads(
                 JobCandidate.candidate_id == candidate.id,
             )
         )
+        if lead.identity_confidence == IDENTITY_PUBLIC_PROFILE:
+            result["identity_review_required"] += 1
+
         if link is None:
             match_score, screening_note = _screen_lead_against_job(job_profile, lead)
             evidence = list(lead.evidence)
             if screening_note:
                 evidence.append(screening_note)
+            if lead.identity_confidence == IDENTITY_PUBLIC_PROFILE:
+                evidence.append(IDENTITY_REVIEW_NOTE)
             session.add(
                 JobCandidate(
                     project_id=project_id,
@@ -761,6 +773,20 @@ def _first_present(payload: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
         if value not in (None, "", [], {}):
             return value
     return None
+
+
+def _identity_confidence(payload: Mapping[str, Any]) -> str:
+    """Public-web leads are real public profiles, not HR-verified identities.
+
+    They stay usable as sourcing leads but must carry an explicit marker so
+    outreach always goes through a human identity check first."""
+
+    source_platform = str(
+        _first_present(payload, ("source_platform", "sourcePlatform", "source_key", "sourceKey", "platform", "source_name")) or ""
+    ).casefold()
+    if source_platform in TRUSTED_DIRECT_CONTACT_SOURCES:
+        return IDENTITY_VERIFIED_DIRECT
+    return IDENTITY_PUBLIC_PROFILE
 
 
 def _requires_contact_compliance_review(payload: Mapping[str, Any]) -> bool:

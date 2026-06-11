@@ -354,16 +354,17 @@ async function setFileInput(cdp, selector, filePath) {
   const documentInfo = await cdp.send("DOM.getDocument", { depth: 1 });
   const node = await cdp.send("DOM.querySelector", { nodeId: documentInfo.root.nodeId, selector });
   if (!node.nodeId) throw new Error(`file input not found: ${selector}`);
+  // DOM.setFileInputFiles 自身会触发 input/change，这里只校验文件已挂载，
+  // 不再手动派发事件，否则 onChange 会触发两次造成重复上传。
   await cdp.send("DOM.setFileInputFiles", { nodeId: node.nodeId, files: [filePath] });
-  await evaluate(
+  const attached = await evaluate(
     cdp,
     `(() => {
       const input = document.querySelector(${jsString(selector)});
-      input?.dispatchEvent(new Event('input', { bubbles: true }));
-      input?.dispatchEvent(new Event('change', { bubbles: true }));
       return Boolean(input?.files?.length);
     })()`,
   );
+  if (!attached) throw new Error(`file not attached to input: ${selector}`);
 }
 
 function findEntry(entries, { method, pathIncludes, since = 0, bodyPredicate = null, statusPredicate = null }) {

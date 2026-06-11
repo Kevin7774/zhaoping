@@ -443,6 +443,31 @@ export function getIntegrationsStatus() {
   return apiClient.get<IntegrationsStatusResponse>("/integrations/status");
 }
 
+export interface SearchProviderProbe {
+  service: string;
+  name_zh?: string;
+  probe_status: "verified" | "probe_failed" | "probe_timeout" | string;
+  latency_ms?: number;
+  result_count?: number;
+  reason?: string;
+}
+
+export interface SearchProbeResponse {
+  probe_query?: string;
+  timeout_seconds?: number;
+  probed: number;
+  verified: number;
+  failed: number;
+  probes: SearchProviderProbe[];
+}
+
+export function probeSearchProviders(services?: string[], timeoutSeconds = 12) {
+  return apiClient.post<SearchProbeResponse>("/integrations/search/probe", {
+    services: services && services.length ? services : null,
+    timeout_seconds: timeoutSeconds,
+  });
+}
+
 export function createOutreachDraft(request: {
   projectId: string;
   jobId: string;

@@ -483,6 +483,7 @@ def test_candidate_lead_preview_redacts_email_and_reports_ingestion_action(
         "confidence": 0.91,
         "matched_job": "VLA / 具身智能算法工程师",
         "compliance_status": "pending_compliance_review",
+        "identity_confidence": "public_profile",
         "ingestion_action": "insert",
         "email": "[redacted]",
     }

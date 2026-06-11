@@ -12,6 +12,7 @@ task so the UI behaves like an agent runtime dashboard instead of a video player
 from __future__ import annotations
 
 import asyncio
+import inspect
 import importlib.util
 import os
 import re
@@ -1803,6 +1804,38 @@ def _live_services_for_search_config(search_config: dict[str, Any]) -> tuple[str
     return tuple(dict.fromkeys(services))
 
 
+def _prioritize_live_services_from_recommendations(
+    live_services: tuple[str, ...],
+    recommended_sources: list[dict[str, Any]] | None,
+    search_config: dict[str, Any],
+) -> tuple[str, ...]:
+    if not recommended_sources:
+        return live_services
+    live_service_set = set(live_services)
+    enabled_layers = {
+        str(layer_name)
+        for layer_name, enabled in (search_config.get("source_layers") or {}).items()
+        if bool(enabled)
+    }
+    prioritized: list[str] = []
+    for source in recommended_sources:
+        if not isinstance(source, dict):
+            continue
+        frontend_layers = {str(layer) for layer in source.get("frontend_layers", []) if str(layer)}
+        if frontend_layers and enabled_layers and not (frontend_layers & enabled_layers):
+            continue
+        candidate_services = [str(service) for service in source.get("executable_services", []) if str(service)]
+        source_key = str(source.get("source_key") or "").removeprefix("catalog:")
+        if source_key:
+            candidate_services.append(source_key)
+        for service_name in candidate_services:
+            if service_name in live_service_set and service_name not in prioritized:
+                prioritized.append(service_name)
+    if not prioritized:
+        return live_services
+    return tuple(dict.fromkeys([*prioritized, *live_services]))
+
+
 def _external_request_policy_for_search_config(search_config: dict[str, Any]) -> str:
     execution_policy = str(search_config.get("execution_policy") or DEFAULT_EXECUTION_POLICY)
     metadata = SEARCH_EXECUTION_POLICY_METADATA.get(execution_policy, SEARCH_EXECUTION_POLICY_METADATA[DEFAULT_EXECUTION_POLICY])
@@ -1939,6 +1972,22 @@ def _search_next_queries(query: str, search_config: dict[str, Any]) -> list[str]
     return next_queries[:4]
 
 
+def _call_search_method_with_optional_config(
+    method: Callable[..., dict[str, Any]],
+    query: str,
+    *,
+    limit: int,
+    search_config: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if "search_config" in parameters:
+        return method(query, limit=limit, search_config=search_config)
+    return method(query, limit=limit)
+
+
 def _source_intelligence(
     user_input: str,
     role_key: str,
@@ -1997,7 +2046,12 @@ def _source_intelligence(
         )
         plan = (
             call_with_retries(
-                lambda: search.plan(query, limit=limit),
+                lambda: _call_search_method_with_optional_config(
+                    search.plan,
+                    query,
+                    limit=limit,
+                    search_config=search_config,
+                ),
                 provider="Search plan",
                 policy=RetryPolicy(attempts=2),
             )
@@ -2006,7 +2060,12 @@ def _source_intelligence(
         )
         evidence = (
             call_with_retries(
-                lambda: search.evidence(query, limit=limit),
+                lambda: _call_search_method_with_optional_config(
+                    search.evidence,
+                    query,
+                    limit=limit,
+                    search_config=search_config,
+                ),
                 provider="Search evidence",
                 policy=RetryPolicy(attempts=2),
             )
@@ -2074,6 +2133,7 @@ def _source_intelligence(
         query,
         role_key=live_role_key,
         search_config=search_config,
+        recommended_sources=recommended_sources,
     )
     search_run_trace = _build_search_run_trace(
         query=query,
@@ -2338,13 +2398,18 @@ def _live_search_context(
     per_service_limit: int | None = None,
     timeout_seconds: float | None = None,
     search_config: dict[str, Any] | None = None,
+    recommended_sources: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     config = search_config or _normalize_search_config({})
     budget = config.get("budget") if isinstance(config.get("budget"), dict) else {}
     max_providers = int(budget.get("max_providers", MAX_LIVE_RECRUITING_PROVIDERS))
     service_limit = int(per_service_limit if per_service_limit is not None else budget.get("per_provider_limit", 2))
     service_timeout = float(timeout_seconds if timeout_seconds is not None else budget.get("timeout_seconds", 6.0))
-    live_services = _live_services_for_search_config(config)
+    live_services = _prioritize_live_services_from_recommendations(
+        _live_services_for_search_config(config),
+        recommended_sources,
+        config,
+    )
     if not live_services:
         return _empty_live_search_context(
             query,

@@ -5,6 +5,8 @@ import importlib.util
 import shutil
 import subprocess
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, wait
+from time import monotonic
 from typing import Any
 
 from app.core.config import AppConfig, ServiceConfig, load_app_config
@@ -269,6 +271,142 @@ PROVIDER_CODE_PATHS = {
 }
 
 
+PROBE_ERROR_STATUSES = {
+    "error",
+    "failed",
+    "timeout",
+    "setup_required",
+    "manual_required",
+    "manual_setup",
+    "config_error",
+    "temporarily_unavailable",
+    "skipped",
+    "deferred",
+}
+PROBE_DEFAULT_QUERY = "robotics"
+PROBE_DEFAULT_TIMEOUT_SECONDS = 12.0
+PROBE_MAX_TIMEOUT_SECONDS = 30.0
+
+
+def probe_search_services(
+    config: AppConfig | None = None,
+    services: list[str] | None = None,
+    timeout_seconds: float = PROBE_DEFAULT_TIMEOUT_SECONDS,
+    probe_query: str = PROBE_DEFAULT_QUERY,
+) -> dict[str, Any]:
+    """Live preflight: run a 1-result query against each configured search service.
+
+    Config-level status only proves keys/tools exist; rate limits, query
+    restrictions, and upstream outages surface only on a real request. The
+    result distinguishes verified / probe_failed / probe_timeout so the UI can
+    stop showing config-only services as unconditionally ready."""
+
+    from app.core.router import ServiceRouter
+
+    config = config or load_app_config()
+    timeout = max(1.0, min(float(timeout_seconds), PROBE_MAX_TIMEOUT_SECONDS))
+    requested = {str(name) for name in services} if services else None
+
+    candidates: list[dict[str, Any]] = []
+    for service in config.services.values():
+        if service.type != "search":
+            continue
+        if requested is not None and service.name not in requested:
+            continue
+        status = _service_status(config, service)
+        if status["status"] in {"active", "available"}:
+            candidates.append(status)
+
+    router = ServiceRouter(config)
+    probes: list[dict[str, Any]] = []
+    if candidates:
+        executor = ThreadPoolExecutor(max_workers=min(16, len(candidates)))
+        future_map = {
+            executor.submit(_probe_one_search_service, router, status["name"], probe_query): status
+            for status in candidates
+        }
+        done, pending = wait(future_map, timeout=timeout)
+        for future in done:
+            status = future_map[future]
+            try:
+                probes.append(future.result())
+            except Exception as exc:  # noqa: BLE001 - probe must report, not crash.
+                probes.append(
+                    {
+                        "service": status["name"],
+                        "name_zh": status["name_zh"],
+                        "probe_status": "probe_failed",
+                        "reason": str(exc)[:300],
+                    }
+                )
+        for future in pending:
+            status = future_map[future]
+            future.cancel()
+            probes.append(
+                {
+                    "service": status["name"],
+                    "name_zh": status["name_zh"],
+                    "probe_status": "probe_timeout",
+                    "reason": f"timeout_after_{timeout:g}s",
+                }
+            )
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    probes.sort(key=lambda item: str(item.get("service") or ""))
+    verified = sum(1 for item in probes if item["probe_status"] == "verified")
+    return {
+        "probe_query": probe_query,
+        "timeout_seconds": timeout,
+        "probed": len(probes),
+        "verified": verified,
+        "failed": len(probes) - verified,
+        "probes": probes,
+    }
+
+
+def _probe_one_search_service(router: Any, service_name: str, probe_query: str) -> dict[str, Any]:
+    started = monotonic()
+    name_zh = SERVICE_NAME_ZH.get(service_name, service_name)
+    try:
+        provider = router.search(service_name)
+        raw_results = list(provider.search(probe_query, 1) or [])
+    except Exception as exc:  # noqa: BLE001 - any provider failure is a probe result.
+        return {
+            "service": service_name,
+            "name_zh": name_zh,
+            "probe_status": "probe_failed",
+            "latency_ms": int((monotonic() - started) * 1000),
+            "reason": str(exc)[:300],
+        }
+
+    latency_ms = int((monotonic() - started) * 1000)
+    real_results = []
+    error_reasons = []
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("retrieval_status") or "").strip().lower()
+        if status in PROBE_ERROR_STATUSES:
+            error_reasons.append(str(item.get("error") or item.get("snippet") or status)[:200])
+        elif status != "empty":
+            real_results.append(item)
+    if not real_results and error_reasons:
+        return {
+            "service": service_name,
+            "name_zh": name_zh,
+            "probe_status": "probe_failed",
+            "latency_ms": latency_ms,
+            "reason": "; ".join(error_reasons[:3]),
+        }
+    return {
+        "service": service_name,
+        "name_zh": name_zh,
+        "probe_status": "verified",
+        "latency_ms": latency_ms,
+        "result_count": len(real_results),
+    }
+
+
 def get_integration_status(config: AppConfig | None = None) -> dict[str, Any]:
     """Return safe, UI-ready integration status from the service registry.
 
@@ -347,6 +485,8 @@ def _service_status(config: AppConfig, service: ServiceConfig) -> dict[str, Any]
         "description": service.description,
         "is_default": is_default,
         "status": status,
+        # 配置级检查只验证密钥/工具存在；429、查询限制、上游故障要实测才知道。
+        "verification": "config_only",
         "code_path": _provider_code_path(service) if status in CODED_STATUSES else None,
         "credentials": credentials,
         "runtime_requirements": runtime_requirements,

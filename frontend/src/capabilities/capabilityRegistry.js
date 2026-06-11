@@ -21,6 +21,7 @@ export const PATH_PRODUCTIZATION = {
   '/auth/me': 'productized',
   '/health': 'system',
   '/integrations/env': 'system',
+  '/integrations/search/probe': 'system',
   '/integrations/status': 'system',
   '/jobs/match': 'productized',
   '/monitor/start': 'system',

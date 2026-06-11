@@ -30,6 +30,7 @@ from app.core.orchestrator import (
 )
 from app.core.router import ServiceRouter
 from app.api.main import app
+from app.providers.search import DueDiligenceFederatedSearchProvider
 from app.rag.ingest_worker import chunk_markdown, stable_point_id
 from app.schemas.tasks import AgentEventCreate
 from app.skills.tech_space import (
@@ -2166,6 +2167,72 @@ def test_search_source_catalog_provider_returns_recruiting_sources() -> None:
     assert plan["recommended_sources"]
     assert any(source["source_key"] == "conference_paper_lists" for source in plan["recommended_sources"])
     assert any("不绕过登录" in guardrail for guardrail in plan["guardrails"])
+
+
+def test_search_source_catalog_exposes_executable_services_and_respects_layers() -> None:
+    router = ServiceRouter(load_app_config())
+    search = router.search("talent_source_catalog")
+
+    results = search.search("GitHub robotics VLA open source", limit=5)
+    github_source = next(source for source in results if source["source_key"] == "github")
+    assert "github_repositories" in github_source["executable_services"]
+    assert "github_candidates" in github_source["executable_services"]
+    assert github_source["frontend_layers"] == ["code_model"]
+
+    plan = search.plan(
+        "OpenCLI Twitter GitHub robot policy",
+        limit=10,
+        search_config={
+            "source_layers": {
+                "code_model": True,
+                "social": False,
+                "academic": False,
+                "live_web": False,
+                "news_funding": False,
+                "education_competition": False,
+                "crawler_snapshot": False,
+                "due_diligence": False,
+            }
+        },
+    )
+    source_keys = {source["source_key"] for source in plan["recommended_sources"]}
+    assert "github" in source_keys
+    assert "opencli_platform_search" not in source_keys
+
+
+def test_due_diligence_search_accepts_legacy_catalog_without_search_config() -> None:
+    class LegacyCatalog:
+        def search(self, query: str, limit: int = 5) -> list[dict]:
+            return [
+                {
+                    "source_key": "legacy_catalog",
+                    "name_zh": "旧版来源目录",
+                    "source_names": ["Legacy"],
+                    "talent_signals": ["public profile"],
+                    "suggested_queries": [query],
+                    "access_pattern": "public",
+                    "risk_level": "low",
+                    "freshness": "manual",
+                    "source_type": "source_catalog",
+                    "score": 1,
+                }
+            ][:limit]
+
+        def plan(self, query: str, limit: int = 5) -> dict:
+            return {
+                "query": query,
+                "recommended_sources": self.search(query, limit=limit),
+                "guardrails": ["legacy guardrail"],
+            }
+
+    search = DueDiligenceFederatedSearchProvider(source_catalog=LegacyCatalog())
+    search_config = {"source_layers": {"code_model": True}}
+
+    results = search.search("robotics", limit=1, search_config=search_config)
+    plan = search.plan("robotics", limit=1, search_config=search_config)
+
+    assert results[0]["source_key"] == "catalog:legacy_catalog"
+    assert plan["recommended_sources"][0]["source_key"] == "legacy_catalog"
 
 
 def test_due_diligence_federated_search_plans_financial_intelligence_sources() -> None:

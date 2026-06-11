@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import re
 import importlib.util
 import io
@@ -27,13 +28,145 @@ class SearchProviderProtocol:
 
 
 class SearchSourceCatalogProvider:
+    EXECUTION_HINTS: dict[str, dict[str, list[str]]] = {
+        "open_web": {
+            "executable_services": ["brave_web_search"],
+            "frontend_layers": ["live_web"],
+        },
+        "company_websites": {
+            "executable_services": ["brave_web_search", "opencli_web_read_search"],
+            "frontend_layers": ["live_web", "crawler_snapshot"],
+        },
+        "github": {
+            "executable_services": [
+                "github_candidates",
+                "github_repositories",
+                "github_code",
+                "github_topics",
+                "github_users",
+            ],
+            "frontend_layers": ["code_model"],
+        },
+        "model_hubs": {
+            "executable_services": ["huggingface_models"],
+            "frontend_layers": ["code_model"],
+        },
+        "datasets_benchmarks": {
+            "executable_services": ["huggingface_models", "github_repositories", "semantic_scholar_papers_search"],
+            "frontend_layers": ["code_model", "academic"],
+        },
+        "scholar_arxiv": {
+            "executable_services": ["openalex_works_search", "semantic_scholar_papers_search"],
+            "frontend_layers": ["academic"],
+        },
+        "openalex_author_institution_search": {
+            "executable_services": ["openalex_works_search", "openalex_authors_search", "openalex_institutions_search"],
+            "frontend_layers": ["academic"],
+        },
+        "semantic_scholar_research": {
+            "executable_services": ["semantic_scholar_papers_search", "semantic_scholar_authors_search"],
+            "frontend_layers": ["academic"],
+        },
+        "conference_paper_lists": {
+            "executable_services": [
+                "openalex_works_search",
+                "openalex_authors_search",
+                "semantic_scholar_papers_search",
+                "semantic_scholar_authors_search",
+            ],
+            "frontend_layers": ["academic"],
+        },
+        "university_labs": {
+            "executable_services": [
+                "openalex_institutions_search",
+                "openalex_authors_search",
+                "education_competition_monitor",
+                "opencli_web_read_search",
+            ],
+            "frontend_layers": ["academic", "education_competition", "crawler_snapshot"],
+        },
+        "education_competition_monitor": {
+            "executable_services": ["education_competition_monitor"],
+            "frontend_layers": ["education_competition"],
+        },
+        "linkedin": {
+            "executable_services": ["opencli_platform_search"],
+            "frontend_layers": ["social"],
+        },
+        "ai_communities": {
+            "executable_services": ["agent_reach_social_search", "opencli_platform_search"],
+            "frontend_layers": ["social"],
+        },
+        "agent_reach_social_search": {
+            "executable_services": ["agent_reach_social_search"],
+            "frontend_layers": ["social"],
+        },
+        "opencli_platform_search": {
+            "executable_services": ["opencli_platform_search"],
+            "frontend_layers": ["social"],
+        },
+        "video_platforms": {
+            "executable_services": ["opencli_platform_search"],
+            "frontend_layers": ["social"],
+        },
+        "opencli_web_read_search": {
+            "executable_services": ["opencli_web_read_search"],
+            "frontend_layers": ["crawler_snapshot"],
+        },
+        "opencli_crawl_scrape": {
+            "executable_services": ["opencli_web_read_search"],
+            "frontend_layers": ["crawler_snapshot"],
+        },
+        "news_media": {
+            "executable_services": ["gdelt_doc_news", "gnews_funding_news"],
+            "frontend_layers": ["news_funding"],
+        },
+        "funding_private_market": {
+            "executable_services": ["gnews_funding_news", "gdelt_doc_news"],
+            "frontend_layers": ["news_funding"],
+        },
+        "filings_annual_reports": {
+            "executable_services": ["sec_edgar_company_filings", "sec_company_facts"],
+            "frontend_layers": ["due_diligence"],
+        },
+        "regulatory_filings_global": {
+            "executable_services": [
+                "sec_edgar_company_filings",
+                "sec_company_facts",
+                "sec_insider_transactions",
+                "sec_ownership_activism",
+                "sec_investment_adviser_reports",
+                "federal_register_documents",
+            ],
+            "frontend_layers": ["due_diligence"],
+        },
+        "patent_databases": {
+            "executable_services": ["patentsview_patents"],
+            "frontend_layers": ["due_diligence"],
+        },
+        "regulatory_risk_litigation": {
+            "executable_services": ["sec_enforcement_search", "federal_register_documents", "ofac_sanctions_lists"],
+            "frontend_layers": ["due_diligence"],
+        },
+        "procurement_tenders": {
+            "executable_services": ["usaspending_awards", "grants_gov_opportunities"],
+            "frontend_layers": ["due_diligence"],
+        },
+        "standards_certifications": {
+            "executable_services": ["federal_register_documents"],
+            "frontend_layers": ["due_diligence"],
+        },
+    }
+
     def __init__(self, data_sources: dict[str, dict[str, Any]]) -> None:
         self.data_sources = data_sources
 
-    def search(self, query: str, limit: int = 5) -> list[dict]:
+    def search(self, query: str, limit: int = 5, search_config: dict[str, Any] | None = None) -> list[dict]:
+        enabled_layers = self._enabled_frontend_layers(search_config)
         scored = [
             (self._score_source(query, source), source_key, source)
             for source_key, source in self.data_sources.items()
+            if self._source_matches_enabled_layers(source_key, source, enabled_layers)
         ]
         ranked = sorted(scored, key=lambda item: (-item[0], item[1]))
         return [
@@ -48,10 +181,10 @@ class SearchSourceCatalogProvider:
             for source_key, source in self.data_sources.items()
         ]
 
-    def plan(self, query: str, limit: int = 8) -> dict:
+    def plan(self, query: str, limit: int = 8, search_config: dict[str, Any] | None = None) -> dict:
         return {
             "query": query,
-            "recommended_sources": self.search(query, limit=limit),
+            "recommended_sources": self.search(query, limit=limit, search_config=search_config),
             "guardrails": [
                 "优先使用官方 API、授权账号、公开网页、公开论文/披露文件或人工导出。",
                 "不绕过登录、付费墙、robots.txt、平台反爬或访问控制。",
@@ -86,8 +219,9 @@ class SearchSourceCatalogProvider:
             if token.strip(" ,，/|:：()（）[]【】")
         ]
 
-    @staticmethod
-    def _to_result(source_key: str, source: dict[str, Any], score: int) -> dict:
+    @classmethod
+    def _to_result(cls, source_key: str, source: dict[str, Any], score: int) -> dict:
+        execution_hint = cls._execution_hint(source_key, source)
         return {
             "source_key": source_key,
             "name_zh": source["name_zh"],
@@ -99,8 +233,41 @@ class SearchSourceCatalogProvider:
             "risk_level": source["risk_level"],
             "freshness": source["freshness"],
             "source_type": source.get("source_type", "source_catalog"),
+            "executable_services": execution_hint["executable_services"],
+            "frontend_layers": execution_hint["frontend_layers"],
             "score": score,
         }
+
+    @classmethod
+    def _execution_hint(cls, source_key: str, source: dict[str, Any]) -> dict[str, list[str]]:
+        hint = cls.EXECUTION_HINTS.get(source_key, {})
+        executable_services = source.get("executable_services", hint.get("executable_services", []))
+        frontend_layers = source.get("frontend_layers", hint.get("frontend_layers", []))
+        return {
+            "executable_services": [str(item) for item in executable_services],
+            "frontend_layers": [str(item) for item in frontend_layers],
+        }
+
+    @classmethod
+    def _source_matches_enabled_layers(
+        cls,
+        source_key: str,
+        source: dict[str, Any],
+        enabled_layers: set[str] | None,
+    ) -> bool:
+        if enabled_layers is None:
+            return True
+        frontend_layers = set(cls._execution_hint(source_key, source)["frontend_layers"])
+        return not frontend_layers or bool(frontend_layers & enabled_layers)
+
+    @staticmethod
+    def _enabled_frontend_layers(search_config: dict[str, Any] | None) -> set[str] | None:
+        if not isinstance(search_config, dict):
+            return None
+        source_layers = search_config.get("source_layers") or search_config.get("sourceLayers")
+        if not isinstance(source_layers, dict):
+            return None
+        return {str(layer_name) for layer_name, enabled in source_layers.items() if bool(enabled)}
 
 
 class ExternalSearchToolProvider:
@@ -5630,7 +5797,7 @@ class DueDiligenceFederatedSearchProvider:
         self.web_enabled_by_default = web_enabled_by_default
         self.live_enabled_by_default = live_enabled_by_default
 
-    def search(self, query: str, limit: int = 10) -> list[dict]:
+    def search(self, query: str, limit: int = 10, search_config: dict[str, Any] | None = None) -> list[dict]:
         normalized_limit = max(1, int(limit))
         catalog_limit = max(8, normalized_limit)
         results = [
@@ -5641,7 +5808,12 @@ class DueDiligenceFederatedSearchProvider:
                 "retrieval_status": "planned",
                 "retrieved_at": self._now(),
             }
-            for source in self.source_catalog.search(query, limit=catalog_limit)
+            for source in self._call_catalog_method_with_optional_config(
+                self.source_catalog.search,
+                query,
+                limit=catalog_limit,
+                search_config=search_config,
+            )
         ]
 
         if self.web_search and self.web_enabled_by_default:
@@ -5651,8 +5823,13 @@ class DueDiligenceFederatedSearchProvider:
 
         return results[:normalized_limit]
 
-    def plan(self, query: str, limit: int = 12) -> dict:
-        source_plan = self.source_catalog.plan(query, limit=limit)
+    def plan(self, query: str, limit: int = 12, search_config: dict[str, Any] | None = None) -> dict:
+        source_plan = self._call_catalog_method_with_optional_config(
+            self.source_catalog.plan,
+            query,
+            limit=limit,
+            search_config=search_config,
+        )
         registered_live_sources = self._registered_live_sources()
         coverage = self._coverage_matrix(source_plan["recommended_sources"] + registered_live_sources)
         return {
@@ -5725,10 +5902,16 @@ class DueDiligenceFederatedSearchProvider:
             ],
         }
 
-    def evidence(self, query: str, limit: int = 12, claim: str | None = None) -> dict:
+    def evidence(
+        self,
+        query: str,
+        limit: int = 12,
+        claim: str | None = None,
+        search_config: dict[str, Any] | None = None,
+    ) -> dict:
         records = [
             self._to_evidence_record(query=query, result=result, claim=claim)
-            for result in self.search(query, limit=limit)
+            for result in self.search(query, limit=limit, search_config=search_config)
         ]
         by_validation: dict[str, int] = {}
         by_source_tier: dict[str, int] = {}
@@ -5755,9 +5938,15 @@ class DueDiligenceFederatedSearchProvider:
             ],
         }
 
-    def brief(self, query: str, limit: int = 12, claim: str | None = None) -> dict:
-        plan = self.plan(query, limit=limit)
-        evidence = self.evidence(query, limit=limit, claim=claim)
+    def brief(
+        self,
+        query: str,
+        limit: int = 12,
+        claim: str | None = None,
+        search_config: dict[str, Any] | None = None,
+    ) -> dict:
+        plan = self.plan(query, limit=limit, search_config=search_config)
+        evidence = self.evidence(query, limit=limit, claim=claim, search_config=search_config)
         records = evidence["records"]
         top_records = sorted(records, key=lambda record: (-float(record["confidence"]), record["source_key"]))[:5]
         return {
@@ -5789,6 +5978,22 @@ class DueDiligenceFederatedSearchProvider:
                 "涉及个人和候选人时，仅允许使用公开职业信息和岗位相关能力证据。",
             ],
         }
+
+    @staticmethod
+    def _call_catalog_method_with_optional_config(
+        method: Any,
+        query: str,
+        *,
+        limit: int,
+        search_config: dict[str, Any] | None,
+    ) -> Any:
+        try:
+            parameters = inspect.signature(method).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+        if "search_config" in parameters:
+            return method(query, limit=limit, search_config=search_config)
+        return method(query, limit=limit)
 
     def _safe_web_results(self, query: str, limit: int) -> list[dict]:
         if not self.web_search or limit <= 0:

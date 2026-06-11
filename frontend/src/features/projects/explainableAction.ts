@@ -75,8 +75,8 @@ const DEFAULT_SOURCE_LAYERS: SearchSourceLayers = {
 };
 
 const POLICY_BUDGETS: Record<SearchExecutionPolicy, SearchBudget> = {
-  bounded_live: { maxProviders: 9, perProviderLimit: 2, timeoutSeconds: 6, maxCrawlPages: 0 },
-  deep_live: { maxProviders: 14, perProviderLimit: 3, timeoutSeconds: 12, maxCrawlPages: 3 },
+  bounded_live: { maxProviders: 17, perProviderLimit: 3, timeoutSeconds: 10, maxCrawlPages: 0 },
+  deep_live: { maxProviders: 28, perProviderLimit: 4, timeoutSeconds: 18, maxCrawlPages: 3 },
 };
 
 export const SEARCH_SOURCE_LAYER_SERVICES: Record<SearchSourceLayer, string[]> = {

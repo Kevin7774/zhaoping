@@ -19,6 +19,7 @@ import {
   getProjectJobs,
   getTask,
   previewProjectFromBp,
+  probeSearchProviders,
   querySegmentCandidates,
   retryTask,
   runJobMatch,
@@ -39,6 +40,7 @@ import {
   type ProjectRecord,
   type ProjectScenarioRunOptions,
   type RunProjectScenarioAction,
+  type SearchProbeResponse,
   type SegmentRecord,
   type WeeklyReport,
   updateOutreachDraft,
@@ -327,6 +329,9 @@ export function ProjectDetailPage() {
   const [visibleCandidates, setVisibleCandidates] = useState<Candidate[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationsStatusResponse | null>(null);
   const [integrationsError, setIntegrationsError] = useState<string | null>(null);
+  const [searchProbe, setSearchProbe] = useState<SearchProbeResponse | null>(null);
+  const [searchProbeBusy, setSearchProbeBusy] = useState(false);
+  const [searchProbeError, setSearchProbeError] = useState<string | null>(null);
   const [candidateTotalCount, setCandidateTotalCount] = useState<number | null>(null);
   const [hasMoreCandidates, setHasMoreCandidates] = useState(false);
   const [loadingMoreCandidates, setLoadingMoreCandidates] = useState(false);
@@ -637,6 +642,20 @@ export function ProjectDetailPage() {
     () => providerPreflightSummary(searchProviderPreflight),
     [searchProviderPreflight],
   );
+  const runSearchProviderProbe = useCallback(async () => {
+    setSearchProbeBusy(true);
+    setSearchProbeError(null);
+    try {
+      const services = searchProviderPreflight
+        .filter((item) => ["active", "available", "ready"].includes(item.status))
+        .map((item) => item.service);
+      setSearchProbe(await probeSearchProviders(services));
+    } catch (error) {
+      setSearchProbeError(error instanceof Error ? error.message : "搜索源实测失败");
+    } finally {
+      setSearchProbeBusy(false);
+    }
+  }, [searchProviderPreflight]);
   const actionAvailability = useMemo(
     () => ({
       job_analysis: llmGate.enabled
@@ -1475,6 +1494,37 @@ export function ProjectDetailPage() {
                   </span>
                 ))}
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runSearchProviderProbe()}
+                  disabled={searchProbeBusy}
+                  className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-1 text-[12px] font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {searchProbeBusy ? "实测中…" : "实测探测搜索源"}
+                </button>
+                <span className="text-[11px] text-[#6B7280]">
+                  {searchProbe
+                    ? `实测 ${searchProbe.probed} 项：${searchProbe.verified} 项可用，${searchProbe.failed} 项失败`
+                    : "状态为配置级检查，限流/超时需实测才能发现"}
+                </span>
+              </div>
+              {searchProbe ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {searchProbe.probes.map((probe) => (
+                    <span
+                      key={`probe-${probe.service}`}
+                      className={`rounded-[7px] px-2 py-0.5 text-[11px] ${
+                        probe.probe_status === "verified" ? "bg-[#ECFDF5] text-[#047857]" : "bg-[#FEF2F2] text-[#B91C1C]"
+                      }`}
+                      title={probe.reason || (probe.latency_ms != null ? `${probe.latency_ms}ms` : undefined)}
+                    >
+                      {probe.service}: {probe.probe_status === "verified" ? `可用 ${probe.latency_ms ?? "-"}ms` : probe.reason || probe.probe_status}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {searchProbeError ? <div className="mt-1 text-[#EF4444]">{searchProbeError}</div> : null}
               {integrationsError ? <div className="mt-1 text-[#EF4444]">{integrationsError}</div> : null}
             </details>
           </div>

@@ -1,0 +1,321 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1900 1640">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+    </marker>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+      text { font-family: 'JetBrains Mono', 'Noto Sans SC', 'PingFang SC', sans-serif; }
+      .title { fill: #f8fafc; font-size: 22px; font-weight: 700; }
+      .subtitle { fill: #94a3b8; font-size: 12px; }
+      .section-title { fill: #f8fafc; font-size: 14px; font-weight: 700; }
+      .label { fill: #f8fafc; font-size: 11px; font-weight: 600; }
+      .small { fill: #cbd5e1; font-size: 9px; }
+      .tiny { fill: #94a3b8; font-size: 8px; }
+      .code { fill: #bae6fd; font-size: 8px; }
+      .muted { fill: #94a3b8; font-size: 9px; }
+      .warn { fill: #fcd34d; font-size: 9px; font-weight: 600; }
+      .ok { fill: #86efac; font-size: 9px; font-weight: 600; }
+      .danger { fill: #fda4af; font-size: 9px; font-weight: 600; }
+      .box-primary { fill: rgba(8,51,68,0.48); stroke: #22d3ee; stroke-width: 1.4; }
+      .box-secondary { fill: rgba(6,78,59,0.42); stroke: #34d399; stroke-width: 1.4; }
+      .box-tertiary { fill: rgba(76,29,149,0.42); stroke: #a78bfa; stroke-width: 1.4; }
+      .box-accent { fill: rgba(120,53,15,0.34); stroke: #fbbf24; stroke-width: 1.4; }
+      .box-alert { fill: rgba(136,19,55,0.42); stroke: #fb7185; stroke-width: 1.4; }
+      .box-neutral { fill: rgba(30,41,59,0.56); stroke: #94a3b8; stroke-width: 1.2; }
+      .mask { fill: #0f172a; }
+      .region { fill: none; stroke: #334155; stroke-width: 1.2; stroke-dasharray: 8 5; }
+      .connector { fill: none; stroke: #64748b; stroke-width: 1.6; marker-end: url(#arrow); }
+      .connector-cyan { fill: none; stroke: #22d3ee; stroke-width: 1.8; marker-end: url(#arrow-cyan); }
+      .connector-amber { fill: none; stroke: #fbbf24; stroke-width: 1.8; marker-end: url(#arrow-amber); }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1640" fill="#0f172a"/>
+  <rect width="1900" height="1640" fill="url(#grid)"/>
+
+  <text x="40" y="44" class="title">zhaoping 搜索能力状态图</text>
+  <text x="40" y="68" class="subtitle">当前快照：Search API 注册 44 个 search service = 1 active 默认 + 42 available 可路由 + 1 disabled；ProjectDetailPage 前端直接映射 29 个，其中默认找候选人层 17 个。</text>
+
+  <!-- Summary counters -->
+  <g transform="translate(40,92)">
+    <rect class="mask" x="0" y="0" width="280" height="76" rx="8"/>
+    <rect class="box-secondary" x="0" y="0" width="280" height="76" rx="8"/>
+    <text x="18" y="25" class="label">后端 Search API</text>
+    <text x="18" y="48" class="ok">43 provided = 1 active + 42 available</text>
+    <text x="18" y="64" class="tiny">1 disabled placeholder</text>
+  </g>
+  <g transform="translate(340,92)">
+    <rect class="mask" x="0" y="0" width="300" height="76" rx="8"/>
+    <rect class="box-primary" x="0" y="0" width="300" height="76" rx="8"/>
+    <text x="18" y="25" class="label">前端 ProjectDetailPage</text>
+    <text x="18" y="48" class="ok">29 provider mapped in source layers</text>
+    <text x="18" y="64" class="tiny">默认开启 17；可选 12；peopleDatabase 0</text>
+  </g>
+  <g transform="translate(660,92)">
+    <rect class="mask" x="0" y="0" width="300" height="76" rx="8"/>
+    <rect class="box-accent" x="0" y="0" width="300" height="76" rx="8"/>
+    <text x="18" y="25" class="label">默认执行预算</text>
+    <text x="18" y="48" class="ok">bounded_live 17 / 3 / 10s</text>
+    <text x="18" y="64" class="tiny">deep_live 28 / 4 / 18s + crawl 3</text>
+  </g>
+  <g transform="translate(980,92)">
+    <rect class="mask" x="0" y="0" width="300" height="76" rx="8"/>
+    <rect class="box-tertiary" x="0" y="0" width="300" height="76" rx="8"/>
+    <text x="18" y="25" class="label">默认 Search Provider</text>
+    <text x="18" y="48" class="ok">due_diligence_federated_search</text>
+    <text x="18" y="64" class="tiny">uses catalog + optional live providers</text>
+  </g>
+  <g transform="translate(1300,92)">
+    <rect class="mask" x="0" y="0" width="540" height="76" rx="8"/>
+    <rect class="box-alert" x="0" y="0" width="540" height="76" rx="8"/>
+    <text x="18" y="25" class="label">已同步的点</text>
+    <text x="18" y="48" class="ok">前端 POLICY_BUDGETS 与后端 bounded_live/deep_live 对齐。</text>
+    <text x="18" y="64" class="tiny">catalog 推荐会影响 live provider 排序，然后再受预算截断。</text>
+  </g>
+
+  <!-- Main flow regions -->
+  <rect class="region" x="36" y="195" width="560" height="575" rx="14"/>
+  <text x="56" y="220" class="section-title">后端注册与状态</text>
+  <text x="56" y="240" class="tiny">config/services.toml + app/core/integration_status.py</text>
+
+  <rect class="region" x="670" y="195" width="560" height="575" rx="14"/>
+  <text x="690" y="220" class="section-title">前端可选来源层</text>
+  <text x="690" y="240" class="tiny">frontend/src/features/projects/explainableAction.ts + ProjectDetailPage.tsx</text>
+
+  <rect class="region" x="1304" y="195" width="540" height="575" rx="14"/>
+  <text x="1324" y="220" class="section-title">运行时选择与输出</text>
+  <text x="1324" y="240" class="tiny">/api/scenarios/run -> orchestrator -> search_run_trace</text>
+
+  <!-- Backend column -->
+  <g transform="translate(60,266)">
+    <rect class="mask" x="0" y="0" width="500" height="70" rx="7"/>
+    <rect class="box-tertiary" x="0" y="0" width="500" height="70" rx="7"/>
+    <text x="18" y="24" class="label">active 默认服务：due_diligence_federated_search</text>
+    <text x="18" y="43" class="small">中文名：尽调级联邦情报搜索；默认 Search API connected_name_zh</text>
+    <text x="18" y="59" class="tiny">role：联邦编排，不是单一站点；可聚合 source_catalog / web / live provider</text>
+  </g>
+  <g transform="translate(60,352)">
+    <rect class="mask" x="0" y="0" width="500" height="92" rx="7"/>
+    <rect class="box-accent" x="0" y="0" width="500" height="92" rx="7"/>
+    <text x="18" y="24" class="label">available 内部规划：talent_source_catalog</text>
+    <text x="18" y="43" class="small">本身不抓取；输出推荐信源 + executable_services/frontend_layers。</text>
+    <text x="18" y="59" class="small">被 due_diligence_federated_search 引用，也被 /search/plan、/search/evidence 用于证据结构。</text>
+    <text x="18" y="76" class="tiny">provider=source_catalog；数据来自 app/skills/search_sources.py 的 SEARCH_DATA_SOURCES</text>
+  </g>
+  <g transform="translate(60,460)">
+    <rect class="mask" x="0" y="0" width="500" height="110" rx="7"/>
+    <rect class="box-secondary" x="0" y="0" width="500" height="110" rx="7"/>
+    <text x="18" y="24" class="label">available 候选人搜索主路径：17 个默认来源层 provider</text>
+    <text x="18" y="43" class="small">Brave, OpenAlex x3, Semantic Scholar x2, GitHub x5, Hugging Face,</text>
+    <text x="18" y="59" class="small">Agent-Reach, OpenCLI Platform, GDELT, GNews, Education Competition</text>
+    <text x="18" y="76" class="ok">这些是后端 candidate_sourcing 默认层组合。</text>
+    <text x="18" y="93" class="tiny">如果前端预算 max_providers 足够，普通“找候选人”会覆盖这 17 个。</text>
+  </g>
+  <g transform="translate(60,586)">
+    <rect class="mask" x="0" y="0" width="500" height="92" rx="7"/>
+    <rect class="box-primary" x="0" y="0" width="500" height="92" rx="7"/>
+    <text x="18" y="24" class="label">available 可选尽调/抓取：12 个前端可勾选 provider</text>
+    <text x="18" y="43" class="small">OpenCLI web read + SEC x5 + PatentsView + OFAC + Federal Register</text>
+    <text x="18" y="59" class="small">+ CPSC + FDA Enforcement + SEC Enforcement</text>
+    <text x="18" y="76" class="tiny">需要 deep_live 或勾选“尽调源/网页抓取”；默认找候选人不开。</text>
+  </g>
+  <g transform="translate(60,694)">
+    <rect class="mask" x="0" y="0" width="500" height="52" rx="7"/>
+    <rect class="box-alert" x="0" y="0" width="500" height="52" rx="7"/>
+    <text x="18" y="23" class="label">disabled：disabled_search</text>
+    <text x="18" y="40" class="tiny">placeholder，仅用于配置占位；不是可执行搜索能力。</text>
+  </g>
+
+  <!-- Frontend column -->
+  <g transform="translate(696,266)">
+    <rect class="mask" x="0" y="0" width="500" height="84" rx="7"/>
+    <rect class="box-primary" x="0" y="0" width="500" height="84" rx="7"/>
+    <text x="18" y="24" class="label">系统预检</text>
+    <text x="18" y="43" class="small">GET /api/integrations/status -> search_api.services[44]</text>
+    <text x="18" y="60" class="small">providerPreflightFromIntegrations 按来源层过滤当前选中 provider。</text>
+  </g>
+  <g transform="translate(696,366)">
+    <rect class="mask" x="0" y="0" width="500" height="132" rx="7"/>
+    <rect class="box-secondary" x="0" y="0" width="500" height="132" rx="7"/>
+    <text x="18" y="24" class="label">默认勾选层：6 层 -> 17 个 provider</text>
+    <text x="18" y="44" class="small">开放网页：brave_web_search</text>
+    <text x="18" y="60" class="small">学术：OpenAlex x3 + Semantic Scholar x2</text>
+    <text x="18" y="76" class="small">代码/模型：GitHub x5 + Hugging Face</text>
+    <text x="18" y="92" class="small">社媒：Agent-Reach + OpenCLI Platform</text>
+    <text x="18" y="108" class="small">新闻融资：GDELT + GNews；学校竞赛：Education Monitor</text>
+  </g>
+  <g transform="translate(696,514)">
+    <rect class="mask" x="0" y="0" width="500" height="100" rx="7"/>
+    <rect class="box-accent" x="0" y="0" width="500" height="100" rx="7"/>
+    <text x="18" y="24" class="label">可选层：2 层 -> 12 个 provider</text>
+    <text x="18" y="44" class="small">网页抓取：opencli_web_read_search</text>
+    <text x="18" y="60" class="small">尽调源：SEC x5 + PatentsView + OFAC + Federal Register + CPSC</text>
+    <text x="18" y="76" class="small">+ FDA Enforcement + SEC Enforcement</text>
+    <text x="18" y="91" class="tiny">crawlerSnapshot 只有 deep_live 且 max_crawl_pages > 0 才会生效。</text>
+  </g>
+  <g transform="translate(696,630)">
+    <rect class="mask" x="0" y="0" width="500" height="64" rx="7"/>
+    <rect class="box-neutral" x="0" y="0" width="500" height="64" rx="7"/>
+    <text x="18" y="24" class="label">peopleDatabase 层</text>
+    <text x="18" y="43" class="tiny">前端有枚举，但当前 SEARCH_SOURCE_LAYER_SERVICES.peopleDatabase = []，没有 provider。</text>
+  </g>
+  <g transform="translate(696,710)">
+    <rect class="mask" x="0" y="0" width="500" height="44" rx="7"/>
+    <rect class="box-alert" x="0" y="0" width="500" height="44" rx="7"/>
+    <text x="18" y="24" class="ok">预算已同步：bounded_live 17/3/10s；deep_live 28/4/18s。</text>
+  </g>
+
+  <!-- Runtime column -->
+  <g transform="translate(1330,266)">
+    <rect class="mask" x="0" y="0" width="480" height="72" rx="7"/>
+    <rect class="box-primary" x="0" y="0" width="480" height="72" rx="7"/>
+    <text x="18" y="24" class="label">1. 用户点击“找候选人”</text>
+    <text x="18" y="44" class="small">ProjectDetailPage -> runProjectScenario -> POST /api/scenarios/run</text>
+  </g>
+  <g transform="translate(1330,354)">
+    <rect class="mask" x="0" y="0" width="480" height="86" rx="7"/>
+    <rect class="box-secondary" x="0" y="0" width="480" height="86" rx="7"/>
+    <text x="18" y="24" class="label">2. 后端规范化搜索配置</text>
+    <text x="18" y="44" class="small">_search_config_from_ctx -> source_layers + search_budget</text>
+    <text x="18" y="61" class="tiny">无前端配置时使用后端默认；有前端配置时以前端传入预算为准。</text>
+  </g>
+  <g transform="translate(1330,456)">
+    <rect class="mask" x="0" y="0" width="480" height="98" rx="7"/>
+    <rect class="box-accent" x="0" y="0" width="480" height="98" rx="7"/>
+    <text x="18" y="24" class="label">3. Catalog 推荐优先 + 分层轮转</text>
+    <text x="18" y="44" class="small">先把 recommended_sources 映射到 executable_services 并前置。</text>
+    <text x="18" y="61" class="small">再按 max_providers 截断；未选中记为 deferred_by_live_budget。</text>
+    <text x="18" y="78" class="tiny">这就是为什么注册 43 个，但普通任务不会全部跑。</text>
+  </g>
+  <g transform="translate(1330,570)">
+    <rect class="mask" x="0" y="0" width="480" height="72" rx="7"/>
+    <rect class="box-tertiary" x="0" y="0" width="480" height="72" rx="7"/>
+    <text x="18" y="24" class="label">4. 并发执行 + 返回审计</text>
+    <text x="18" y="44" class="small">ThreadPoolExecutor -> provider.search -> provider errors/results</text>
+  </g>
+  <g transform="translate(1330,658)">
+    <rect class="mask" x="0" y="0" width="480" height="88" rx="7"/>
+    <rect class="box-secondary" x="0" y="0" width="480" height="88" rx="7"/>
+    <text x="18" y="24" class="label">5. 输出给前端</text>
+    <text x="18" y="44" class="small">搜索运行追踪 search_run_trace</text>
+    <text x="18" y="60" class="small">包含 selected/errors/provider_health/layer_coverage/evidence_gaps</text>
+    <text x="18" y="76" class="tiny">LiveTaskSummary 和 HumanGate 可展示 trace。</text>
+  </g>
+
+  <!-- Arrows -->
+  <path class="connector-cyan" d="M 560 389 L 696 389"/>
+  <text x="628" y="377" class="tiny" text-anchor="middle">status + services</text>
+  <path class="connector-cyan" d="M 1196 390 L 1330 390"/>
+  <text x="1263" y="378" class="tiny" text-anchor="middle">frontend_state</text>
+  <path class="connector-amber" d="M 1196 733 L 1330 505"/>
+  <text x="1265" y="610" class="tiny" text-anchor="middle">budget gates</text>
+
+  <!-- Detailed mapping table -->
+  <rect class="region" x="36" y="810" width="1808" height="740" rx="14"/>
+  <text x="56" y="838" class="section-title">详细分类矩阵：后端提供 / 前端暴露 / 默认是否执行</text>
+  <text x="56" y="858" class="tiny">“前端暴露”指 ProjectDetailPage 岗位搜索设置里能通过 source layer 间接选择；不是指 /search/run 低层 API 是否能手动指定 service。</text>
+
+  <!-- Header -->
+  <g transform="translate(56,880)">
+    <rect class="mask" x="0" y="0" width="1768" height="42" rx="6"/>
+    <rect class="box-neutral" x="0" y="0" width="1768" height="42" rx="6"/>
+    <text x="18" y="26" class="label">分类</text>
+    <text x="265" y="26" class="label">服务状态</text>
+    <text x="420" y="26" class="label">前端暴露</text>
+    <text x="580" y="26" class="label">默认执行</text>
+    <text x="742" y="26" class="label">Provider / Service IDs</text>
+  </g>
+
+  <g transform="translate(56,934)">
+    <rect class="mask" x="0" y="0" width="1768" height="74" rx="6"/>
+    <rect class="box-secondary" x="0" y="0" width="1768" height="74" rx="6"/>
+    <text x="18" y="24" class="label">候选人默认层</text>
+    <text x="265" y="24" class="ok">available x17</text>
+    <text x="420" y="24" class="ok">是</text>
+    <text x="580" y="24" class="ok">前后端默认 17</text>
+    <text x="742" y="23" class="code">brave_web_search, openalex_works_search, openalex_authors_search, openalex_institutions_search, semantic_scholar_papers_search, semantic_scholar_authors_search</text>
+    <text x="742" y="41" class="code">github_candidates, github_repositories, github_code, github_topics, github_users, huggingface_models, agent_reach_social_search, opencli_platform_search</text>
+    <text x="742" y="59" class="code">gdelt_doc_news, gnews_funding_news, education_competition_monitor</text>
+  </g>
+
+  <g transform="translate(56,1022)">
+    <rect class="mask" x="0" y="0" width="1768" height="72" rx="6"/>
+    <rect class="box-accent" x="0" y="0" width="1768" height="72" rx="6"/>
+    <text x="18" y="24" class="label">前端可选尽调/抓取层</text>
+    <text x="265" y="24" class="ok">available x12</text>
+    <text x="420" y="24" class="ok">是</text>
+    <text x="580" y="24" class="warn">否；需手动开启</text>
+    <text x="742" y="23" class="code">opencli_web_read_search, sec_edgar_company_filings, sec_company_facts, sec_insider_transactions, sec_ownership_activism, sec_investment_adviser_reports</text>
+    <text x="742" y="41" class="code">patentsview_patents, ofac_sanctions_lists, federal_register_documents, cpsc_recalls, fda_enforcement_recalls, sec_enforcement_search</text>
+  </g>
+
+  <g transform="translate(56,1108)">
+    <rect class="mask" x="0" y="0" width="1768" height="92" rx="6"/>
+    <rect class="box-tertiary" x="0" y="0" width="1768" height="92" rx="6"/>
+    <text x="18" y="24" class="label">默认联邦搜索</text>
+    <text x="265" y="24" class="ok">active x1</text>
+    <text x="420" y="24" class="warn">不是来源层</text>
+    <text x="580" y="24" class="small">默认 API；非勾选项</text>
+    <text x="742" y="23" class="code">due_diligence_federated_search</text>
+    <text x="742" y="42" class="tiny">用途：统一计划、覆盖矩阵、证据记录和可选 live_search_services；默认 web/live 关闭，避免意外重型联网。</text>
+    <text x="742" y="61" class="tiny">配置：source_catalog_service=talent_source_catalog, web_search_service=brave_web_search, live_search_services 包含多数具体 provider。</text>
+  </g>
+
+  <g transform="translate(56,1214)">
+    <rect class="mask" x="0" y="0" width="1768" height="86" rx="6"/>
+    <rect class="box-accent" x="0" y="0" width="1768" height="86" rx="6"/>
+    <text x="18" y="24" class="label">内部规划/目录</text>
+    <text x="265" y="24" class="ok">available x1</text>
+    <text x="420" y="24" class="warn">不是来源层</text>
+    <text x="580" y="24" class="small">规划 + 路由提示</text>
+    <text x="742" y="23" class="code">talent_source_catalog</text>
+    <text x="742" y="42" class="tiny">返回 recommended_sources、source_names、talent_signals、executable_services、frontend_layers。</text>
+    <text x="742" y="61" class="tiny">作用：告诉 Agent 去哪类源查，并把推荐映射到可执行 provider 优先级。</text>
+  </g>
+
+  <g transform="translate(56,1314)">
+    <rect class="mask" x="0" y="0" width="1768" height="92" rx="6"/>
+    <rect class="box-neutral" x="0" y="0" width="1768" height="92" rx="6"/>
+    <text x="18" y="24" class="label">后端有，前端 ProjectDetail 未直接暴露</text>
+    <text x="265" y="24" class="ok">available x12</text>
+    <text x="420" y="24" class="danger">否</text>
+    <text x="580" y="24" class="danger">否</text>
+    <text x="742" y="23" class="code">fdic_bankfind_institutions, fda_device_510k, fda_device_events, fda_device_classification, fda_device_registration_listing, cfpb_consumer_complaints</text>
+    <text x="742" y="41" class="code">nhtsa_recalls, epa_echo_facilities, clinicaltrials_studies, cms_openpayments, usaspending_awards, grants_gov_opportunities</text>
+    <text x="742" y="61" class="tiny">这些仍可被 due_diligence_federated_search 的 live_search_services 引用，或通过底层 service 参数手动调用；但当前项目页来源层未映射。</text>
+  </g>
+
+  <g transform="translate(56,1420)">
+    <rect class="mask" x="0" y="0" width="1768" height="52" rx="6"/>
+    <rect class="box-alert" x="0" y="0" width="1768" height="52" rx="6"/>
+    <text x="18" y="24" class="label">未提供/禁用</text>
+    <text x="265" y="24" class="danger">disabled x1</text>
+    <text x="420" y="24" class="danger">否</text>
+    <text x="580" y="24" class="danger">否</text>
+    <text x="742" y="23" class="code">disabled_search</text>
+    <text x="742" y="40" class="tiny">占位配置，不能作为真实搜索能力使用。</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(56,1580)">
+    <text x="0" y="0" class="tiny">Legend：</text>
+    <rect x="58" y="-12" width="18" height="12" class="box-secondary"/>
+    <text x="84" y="0" class="tiny">默认候选人路径</text>
+    <rect x="190" y="-12" width="18" height="12" class="box-accent"/>
+    <text x="216" y="0" class="tiny">规划/预算/可选能力</text>
+    <rect x="346" y="-12" width="18" height="12" class="box-tertiary"/>
+    <text x="372" y="0" class="tiny">默认联邦搜索</text>
+    <rect x="498" y="-12" width="18" height="12" class="box-alert"/>
+    <text x="524" y="0" class="tiny">禁用或需修正</text>
+  </g>
+</svg>

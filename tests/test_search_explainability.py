@@ -273,6 +273,62 @@ def test_source_intelligence_uses_project_job_query_for_live_search(monkeypatch:
     assert "robot system architecture" not in str(captured["query"])
 
 
+def test_live_search_context_prioritizes_catalog_recommended_services(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        orchestrator,
+        "_search_service_health",
+        lambda _router, service_name: {
+            "service": service_name,
+            "provider": "fake",
+            "status": "ready",
+            "missing_credentials": [],
+            "missing_runtime": [],
+            "missing_manual_setup": [],
+        },
+    )
+
+    class FakeProvider:
+        def __init__(self, service_name: str) -> None:
+            self.service_name = service_name
+
+        def search(self, query: str, limit: int = 5) -> list[dict]:
+            return [
+                {
+                    "source_key": self.service_name,
+                    "title": f"{self.service_name} hit",
+                    "url": f"https://example.com/{self.service_name}",
+                    "snippet": query,
+                    "rank": 1,
+                }
+            ][:limit]
+
+    class FakeRouter:
+        @staticmethod
+        def search(service_name: str) -> FakeProvider:
+            return FakeProvider(service_name)
+
+    live_context = orchestrator._live_search_context(
+        FakeRouter(),
+        "robotics diffusion policy",
+        search_config={
+            "search_profile": "candidate_sourcing",
+            "execution_policy": "bounded_live",
+            "source_layers": {"academic": True, "social": True},
+            "budget": {"max_providers": 1, "per_provider_limit": 1, "timeout_seconds": 5, "max_crawl_pages": 0},
+        },
+        recommended_sources=[
+            {
+                "source_key": "opencli_platform_search",
+                "executable_services": ["opencli_platform_search"],
+                "frontend_layers": ["social"],
+            }
+        ],
+    )
+
+    assert live_context["services"] == ["opencli_platform_search"]
+    assert live_context["results"][0]["source_key"] == "opencli_platform_search"
+
+
 def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> None:
     trace = orchestrator._build_search_run_trace(
         query="robotics diffusion policy hiring",

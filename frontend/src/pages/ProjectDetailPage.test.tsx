@@ -601,7 +601,8 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByText("展开设置"));
     expect(screen.getAllByText("GitHub/代码/模型").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/GitHub 搜人、Repo、Code、Topic/)).toBeTruthy();
-    expect(screen.getByText(/最多 9 个 provider/)).toBeTruthy();
+    expect(screen.getByText(/最多 17 个 provider/)).toBeTruthy();
+    expect(screen.getAllByText(/单源 3 条/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole("option", { name: "仅规划" })).toBeNull();
     expect(screen.getByText(/当前已选 17 个 provider/)).toBeTruthy();
     expect(screen.getByText(/开放网页 · 1 provider/)).toBeTruthy();

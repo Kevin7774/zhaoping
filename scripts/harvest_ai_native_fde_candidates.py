@@ -149,53 +149,94 @@ def find_job(project_id: str, requested_job_id: str | None) -> Job:
         return preferred[0] if preferred else jobs[0]
 
 
-def run_provider_searches(target: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _progress(started_at: float, message: str) -> None:
+    elapsed = time.monotonic() - started_at
+    print(f"[harvest +{elapsed:7.1f}s] {message}", file=sys.stderr, flush=True)
+
+
+def _interleaved_work_items() -> list[tuple[str, str, int]]:
+    """Round-robin across providers so the target is filled from mixed sources,
+    not exhausted by whichever provider happens to be first in the plan."""
+
+    items: list[tuple[str, str, int]] = []
+    max_queries = max(len(queries) for _, queries, _ in PROVIDER_PLAN)
+    for index in range(max_queries):
+        for service, queries, limit in PROVIDER_PLAN:
+            if index < len(queries):
+                items.append((service, queries[index], limit))
+    return items
+
+
+def run_provider_searches(
+    target: int,
+    max_seconds: float = 600.0,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     router = get_router()
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
     traces: list[dict[str, Any]] = []
+    providers: dict[str, Any] = {}
+    started_at = time.monotonic()
+    work_items = _interleaved_work_items()
+    _progress(started_at, f"sweep start: {len(work_items)} queries across {len({s for s, _, _ in PROVIDER_PLAN})} providers, target={target}, deadline={max_seconds:g}s")
 
-    for service, queries, limit in PROVIDER_PLAN:
+    for item_index, (service, query, limit) in enumerate(work_items):
         if len(selected) >= target:
+            _progress(started_at, f"target reached ({len(selected)}/{target}), stopping sweep")
             break
-        try:
-            provider = router.search(service)
-        except Exception as exc:  # noqa: BLE001
-            traces.append({"service": service, "status": "provider_unavailable", "error": str(exc)})
-            continue
-        for query in queries:
-            if len(selected) >= target:
-                break
-            trace: dict[str, Any] = {"service": service, "query": query, "limit": limit, "status": "started"}
-            started = time.monotonic()
+        if time.monotonic() - started_at >= max_seconds:
+            remaining = len(work_items) - item_index
+            traces.append({"status": "deferred_deadline", "deferred_queries": remaining, "max_seconds": max_seconds})
+            _progress(started_at, f"deadline {max_seconds:g}s reached, {remaining} queries deferred")
+            break
+
+        if service not in providers:
             try:
-                results = provider.search(query, limit=limit)
-                trace["status"] = "retrieved"
-                trace["result_count"] = len(results)
-                leads = extract_candidate_leads({"搜索证据": {"实时检索": {"results": results}}})
-                trace["lead_count"] = len(leads)
-                added = 0
-                for lead in leads:
-                    if not usable_lead(lead):
-                        continue
-                    key = lead_key(lead)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    lead["matched_keywords"] = list(dict.fromkeys([*lead.get("matched_keywords", []), *query.split()]))
-                    if not lead.get("skills"):
-                        lead["skills"] = [item for item in query.split() if len(item) > 2][:8]
-                    selected.append(lead)
-                    added += 1
-                    if len(selected) >= target:
-                        break
-                trace["selected_count"] = added
+                providers[service] = router.search(service)
             except Exception as exc:  # noqa: BLE001
-                trace["status"] = "error"
-                trace["error"] = str(exc)
-            finally:
-                trace["elapsed_seconds"] = round(time.monotonic() - started, 2)
-                traces.append(trace)
+                providers[service] = None
+                traces.append({"service": service, "status": "provider_unavailable", "error": str(exc)})
+                _progress(started_at, f"{service} unavailable: {exc}")
+        provider = providers[service]
+        if provider is None:
+            continue
+
+        trace: dict[str, Any] = {"service": service, "query": query, "limit": limit, "status": "started"}
+        started = time.monotonic()
+        try:
+            results = provider.search(query, limit=limit)
+            trace["status"] = "retrieved"
+            trace["result_count"] = len(results)
+            leads = extract_candidate_leads({"搜索证据": {"实时检索": {"results": results}}})
+            trace["lead_count"] = len(leads)
+            added = 0
+            for lead in leads:
+                if not usable_lead(lead):
+                    continue
+                key = lead_key(lead)
+                if key in seen:
+                    continue
+                seen.add(key)
+                lead["matched_keywords"] = list(dict.fromkeys([*lead.get("matched_keywords", []), *query.split()]))
+                if not lead.get("skills"):
+                    lead["skills"] = [item for item in query.split() if len(item) > 2][:8]
+                selected.append(lead)
+                added += 1
+                if len(selected) >= target:
+                    break
+            trace["selected_count"] = added
+        except Exception as exc:  # noqa: BLE001
+            trace["status"] = "error"
+            trace["error"] = str(exc)
+        finally:
+            trace["elapsed_seconds"] = round(time.monotonic() - started, 2)
+            traces.append(trace)
+            _progress(
+                started_at,
+                f"{service} query={query[:48]!r} status={trace['status']} "
+                f"results={trace.get('result_count', 0)} leads={trace.get('lead_count', 0)} "
+                f"selected={len(selected)}/{target} ({trace['elapsed_seconds']}s)",
+            )
     return selected[:target], traces
 
 
@@ -206,6 +247,12 @@ def main() -> None:
     parser.add_argument("--target", type=int, default=int(os.environ.get("GOAL_TARGET_CANDIDATES", "20")))
     parser.add_argument("--report-path", default=os.environ.get("GOAL_HARVEST_REPORT_PATH", "artifacts/e2e_evidence/goal-ai-native-fde-harvest.json"))
     parser.add_argument("--env-file", default=".env")
+    parser.add_argument(
+        "--max-seconds",
+        type=float,
+        default=float(os.environ.get("GOAL_HARVEST_MAX_SECONDS", "600")),
+        help="overall sweep deadline; remaining queries are recorded as deferred_deadline",
+    )
     args = parser.parse_args()
 
     load_env_file(Path(args.env_file))
@@ -216,7 +263,7 @@ def main() -> None:
     before = existing_candidates(args.project_id, job.id)
     need = max(0, args.target - len(before))
     task_id = f"manual_system_harvest_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-    selected, traces = ([], []) if need == 0 else run_provider_searches(args.target + 12)
+    selected, traces = ([], []) if need == 0 else run_provider_searches(args.target + 12, max_seconds=args.max_seconds)
 
     with project_session_factory()() as session:
         ingestion = ingest_candidate_leads(

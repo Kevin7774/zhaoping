@@ -30,19 +30,25 @@
   "execution_policy": "bounded_live",
   "source_layers": ["academic", "code_model", "social", "news_funding"],
   "search_budget": {
-    "max_providers": 9,
-    "per_provider_limit": 2,
-    "timeout_seconds": 6,
+    "max_providers": 17,
+    "per_provider_limit": 3,
+    "timeout_seconds": 10,
     "max_crawl_pages": 0
   }
 }
 ```
 
+`talent_source_catalog` 是来源规划目录，不直接抓取网页。它会根据 query
+返回推荐信源、风险提示、建议 query，以及 `executable_services` /
+`frontend_layers` 路由提示。场景 B 会把这些推荐映射到真实 provider，先按
+catalog 推荐排序，再受 `source_layers` 和 `search_budget` 约束执行 live
+search。
+
 `execution_policy` 当前有效值：
 
 | 值 | 行为 |
 | --- | --- |
-| `bounded_live` | 默认标准联网，受 provider 数、每 provider 数量和 timeout 控制。默认 provider 上限为 9，覆盖 `agent_reach_social_search` 和 `opencli_platform_search`。 |
+| `bounded_live` | 默认标准联网，受 provider 数、每 provider 数量和 timeout 控制。默认 provider 上限为 17，覆盖 `agent_reach_social_search` 和 `opencli_platform_search`。 |
 | `deep_live` | 深度联网，默认 provider 上限更高，并且只有 `search_budget.max_crawl_pages > 0` 时才启用 crawler snapshot。 |
 
 ### Live Search Provider

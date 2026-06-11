@@ -26,7 +26,7 @@ from app.db.session import get_project_session
 from app.models import Candidate, Job, JobCandidate
 from app.core.env_store import save_env_values
 from app.core.intelligence_archive import IntelligenceArchive
-from app.core.integration_status import get_integration_status
+from app.core.integration_status import get_integration_status, probe_search_services
 from app.core.candidate_search_scheduler import CandidateSearchScheduler, candidate_search_scheduler_enabled
 from app.core.orchestrator import (
     cancel_task,
@@ -200,6 +200,11 @@ class SearchEvidenceRequest(SearchRequest):
     claim: Optional[str] = None
 
 
+class SearchProbeRequest(BaseModel):
+    services: Optional[list[str]] = None
+    timeout_seconds: float = 12.0
+
+
 class SearchArchiveRequest(SearchEvidenceRequest):
     artifact_type: Literal["evidence", "brief"] = "brief"
 
@@ -307,6 +312,19 @@ def workflow_meta() -> dict:
 def integrations_status() -> dict:
     """Safe service/API-key status for the frontend. Secret values are never returned."""
     return get_integration_status()
+
+
+@app.post("/integrations/search/probe")
+def integrations_search_probe(request: SearchProbeRequest) -> dict:
+    """Live preflight for search providers: one tiny real query per ready service.
+
+    Config status only proves keys/tools exist; rate limits, query restrictions,
+    and upstream outages only surface on a real request."""
+
+    return probe_search_services(
+        services=request.services,
+        timeout_seconds=request.timeout_seconds,
+    )
 
 
 @app.post("/integrations/env")
