@@ -25,6 +25,8 @@ from typing import Any
 
 from app.core.prompt_config import load_system_prompt
 
+_STAGE_MAX_TOKENS_CEILING = 24000
+
 CLAIMS_PROMPT = "bp_claims_v1"
 CAPABILITY_PROMPT = "bp_capability_graph_v1"
 GAP_PROMPT = "bp_gap_analysis_v1"
@@ -70,7 +72,7 @@ def run_bp_pipeline(
     minimum_role_count: int,
     call_timeout_seconds: float,
     max_attempts: int = 3,
-    claims_max_tokens: int = 3000,
+    claims_max_tokens: int = 5000,
     roles_max_tokens: int = 12000,
 ) -> dict[str, Any]:
     """Run all five stages and return a matrix compatible with the BP initialize response."""
@@ -315,8 +317,10 @@ def _run_stage(
     prompt = f"{system_prompt}\n\n" + "\n\n".join(f"{label}:\n{text}" for label, text in sections)
     last_error = "unknown structured output error"
     for _attempt in range(max_attempts):
+        # 截断是 JSON 失败的主因：重试时按倍数提升 token 上限，而不是在同一上限下反复截断。
+        attempt_tokens = min(max_tokens * (2**_attempt), _STAGE_MAX_TOKENS_CEILING)
         output = _run_with_timeout(
-            lambda: _llm_json_text(llm, prompt, max_tokens=max_tokens),
+            lambda: _llm_json_text(llm, prompt, max_tokens=attempt_tokens),
             timeout_seconds=timeout_seconds,
             label=f"BP pipeline stage {prompt_name}",
         )
@@ -326,11 +330,15 @@ def _run_stage(
             return payload
         except (ValueError, BpStageOutputError) as exc:
             last_error = str(exc)
+            truncation_hint = ""
+            if not output.rstrip().endswith("}"):
+                truncation_hint = "\n你的上一次输出在 token 上限处被截断。请压缩各字段的文字（保留 JSON 结构和必填字段），确保 JSON 完整闭合。"
             prompt = (
                 f"{system_prompt}\n\n"
                 + "\n\n".join(f"{label}:\n{text}" for label, text in sections)
                 + "\n\n上一次输出不合法，错误是：\n"
                 + last_error
+                + truncation_hint
                 + "\n\n请重新输出一个完整、合法、紧凑的 JSON 对象，不要输出其他内容。"
                 + f"\n上一次输出（截断）：\n{output[:1500]}"
             )
