@@ -216,6 +216,69 @@ def test_source_intelligence_archives_search_evidence_ledger(
     assert artifact["evidence_records"][0]["validation_status"] == "verified"
 
 
+def test_source_intelligence_uses_project_job_query_for_live_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeSearch:
+        @staticmethod
+        def plan(query: str, limit: int = 12) -> dict:
+            return {"recommended_sources": [{"source_key": "github", "suggested_queries": [query]}]}
+
+        @staticmethod
+        def evidence(query: str, limit: int = 12) -> dict:
+            return {"records": []}
+
+    class FakeRouter:
+        @staticmethod
+        def search(*_args, **_kwargs):
+            return FakeSearch()
+
+    def fake_live_context(router, query: str, *, role_key=None, **kwargs):  # noqa: ANN001, ANN003
+        captured["query"] = query
+        captured["role_key"] = role_key
+        return {
+            "search_mode": "live_recruiting",
+            "mode_label": "实时招聘搜索",
+            "search_profile": "candidate_sourcing",
+            "execution_policy": "bounded_live",
+            "source_layers": {"code_model": True},
+            "external_request_policy": "bounded_live",
+            "services": ["github_candidates"],
+            "query": query,
+            "results": [],
+            "errors": [],
+            "result_count": 0,
+            "research_layers": [],
+            "provider_health": [{"service": "github_candidates", "status": "ready"}],
+            "provider_budget": {"max_live_providers": 8, "selected": 1, "skipped": 0},
+        }
+
+    monkeypatch.setattr(orchestrator, "get_router", lambda: FakeRouter())
+    monkeypatch.setattr(orchestrator, "_live_search_context", fake_live_context)
+
+    orchestrator._source_intelligence(
+        "请为 AI Native FDE 找候选人",
+        "robot_system_architect",
+        limit=3,
+        ctx={
+            "sourcing_job_profile": {
+                "id": "job_fde",
+                "title": "AI Native FDE / Agentic Builder",
+                "must_have_skills": ["Agentic workflow", "AI coding 实战", "全栈开发"],
+                "rationale": {"sourcing_keywords": ["MCP", "RAG", "Tool Calling"]},
+            },
+            "frontend_state": {"search_profile": "candidate_sourcing", "execution_policy": "bounded_live"},
+            "data": {},
+        },
+        agent_id="test",
+    )
+
+    assert captured["role_key"] is None
+    assert "AI Native FDE / Agentic Builder" in str(captured["query"])
+    assert "Agentic workflow" in str(captured["query"])
+    assert "robot system architecture" not in str(captured["query"])
+
+
 def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> None:
     trace = orchestrator._build_search_run_trace(
         query="robotics diffusion policy hiring",

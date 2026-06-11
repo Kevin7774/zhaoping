@@ -22,8 +22,14 @@ export type Candidate = {
   sourcePlatform: string;
   sourceUrl?: string;
   currentCompany?: string;
+  location?: string;
   city?: string;
   email?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  homepageUrl?: string;
+  skills?: string[];
+  sourceTaskId?: string;
   title: string;
   isAiNativeTalent: boolean;
   technicalLayerTags: string[];

@@ -64,11 +64,40 @@ function avatarText(name: string) {
 
 function candidateDisplayKind(candidate: Candidate) {
   const source = candidate.sourcePlatform.toLowerCase();
+  if ((source === "github_candidates" || source === "github_users") && candidate.githubUrl) return "候选人";
+  if (source.includes("author") || candidate.linkedinUrl) return "候选人";
   const name = candidate.name.toLowerCase();
   const hasPersonSignal = Boolean(candidate.email || candidate.currentCompany);
   const sourceLooksLikeArtifact = /github|repository|repo|paper|arxiv|huggingface|model|project|url/.test(source);
   const nameLooksLikeArtifact = /[-_/]|\$|\d{4,}|transformer|diffusion|repository|equation|dataset|benchmark|model/.test(name);
   return !hasPersonSignal && (sourceLooksLikeArtifact || nameLooksLikeArtifact) ? "线索" : "候选人";
+}
+
+function detailFields(candidate: Candidate) {
+  return [
+    ["候选人 ID", candidate.candidateId],
+    ["关联 ID", candidate.jobCandidateId ? String(candidate.jobCandidateId) : undefined],
+    ["姓名", candidate.name],
+    ["目标岗位", candidate.title],
+    ["当前公司", candidate.currentCompany],
+    ["城市", candidate.city],
+    ["地区", candidate.location],
+    ["邮箱", candidate.email],
+    ["来源", candidate.sourcePlatform],
+    ["匹配分", candidate.matchScore !== null ? String(candidate.matchScore) : undefined],
+    ["状态", statusLabel(candidate)],
+    ["触达", candidate.outreachStatus],
+    ["来源任务", candidate.sourceTaskId],
+  ].filter(([, value]) => Boolean(value));
+}
+
+function candidateLinks(candidate: Candidate) {
+  return [
+    ["来源 URL", candidate.sourceUrl],
+    ["GitHub", candidate.githubUrl],
+    ["LinkedIn", candidate.linkedinUrl],
+    ["Homepage", candidate.homepageUrl],
+  ].filter(([, value]) => Boolean(value));
 }
 
 export function CandidateTable({
@@ -223,7 +252,79 @@ export function CandidateTable({
                   </div>
                   {expandedCandidateId === candidate.candidateId ? (
                     <div className="bg-[#FAFBFD] px-5 py-3">
-                        <div className="space-y-2 rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] leading-[18px] text-[#374151]">
+                        <div className="space-y-3 rounded-[10px] border border-[#E5E7EB] bg-white px-3 py-3 text-[12px] leading-[18px] text-[#374151]">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {detailFields(candidate).map(([label, value]) => (
+                              <div key={`${candidate.candidateId}-${label}`} className="min-w-0">
+                                <span className="font-semibold text-[#111827]">{label}</span>
+                                <span className="ml-2 break-words">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {candidateLinks(candidate).length ? (
+                            <div className="space-y-1">
+                              {candidateLinks(candidate).map(([label, url]) => (
+                                <div key={`${candidate.candidateId}-${label}`} className="break-all">
+                                  <span className="font-semibold text-[#111827]">{label}：</span>
+                                  <a href={url} target="_blank" rel="noreferrer" className="text-[#2563EB] hover:underline">
+                                    {url}
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {candidate.skills?.length ? (
+                            <div>
+                              <div className="mb-1 font-semibold text-[#111827]">技能</div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {candidate.skills.map((skill) => (
+                                  <span key={`${candidate.candidateId}-skill-${skill}`} className="rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[#374151]">
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {candidate.technicalLayerTags.length || candidate.parsedCapabilities.length ? (
+                            <div className="grid gap-2 md:grid-cols-2">
+                              {candidate.technicalLayerTags.length ? (
+                                <div>
+                                  <div className="mb-1 font-semibold text-[#111827]">技术标签</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {candidate.technicalLayerTags.map((tag) => (
+                                      <span key={`${candidate.candidateId}-tag-${tag}`} className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[#1D4ED8]">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              {candidate.parsedCapabilities.length ? (
+                                <div>
+                                  <div className="mb-1 font-semibold text-[#111827]">能力</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {candidate.parsedCapabilities.map((capability) => (
+                                      <span key={`${candidate.candidateId}-capability-${capability}`} className="rounded-full bg-[#ECFDF3] px-2 py-0.5 text-[#047857]">
+                                        {capability}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {candidate.riskAlerts.length ? (
+                            <div>
+                              <div className="mb-1 font-semibold text-[#111827]">风险</div>
+                              <ul className="space-y-1">
+                                {candidate.riskAlerts.map((risk) => (
+                                  <li key={`${candidate.candidateId}-risk-${risk}`}>{risk}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          <div>
+                            <div className="mb-1 font-semibold text-[#111827]">证据</div>
                           {candidate.evidence.length ? (
                             candidate.evidence.map((item) => (
                               <div key={`${item.label}-${item.summary}`}>
@@ -234,9 +335,7 @@ export function CandidateTable({
                           ) : (
                             <div className="text-[#9CA3AF]">暂无证据摘要</div>
                           )}
-                          {candidate.sourceUrl ? (
-                            <div className="break-all text-[#2563EB]">{candidate.sourceUrl}</div>
-                          ) : null}
+                          </div>
                         </div>
                     </div>
                   ) : null}

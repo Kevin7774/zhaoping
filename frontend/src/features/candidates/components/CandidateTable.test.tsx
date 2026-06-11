@@ -118,6 +118,28 @@ describe("CandidateTable", () => {
     expect(screen.queryByRole("columnheader", { name: "当前公司" })).toBeNull();
   });
 
+  it("treats GitHub person provider results as candidates even without email or company", () => {
+    render(
+      <CandidateTable
+        candidates={[
+          {
+            ...candidate,
+            candidateId: "github_person",
+            name: "xuxiang",
+            currentCompany: undefined,
+            email: undefined,
+            sourcePlatform: "github_candidates",
+            githubUrl: "https://github.com/xu-xiang",
+          },
+        ]}
+        onSendEmail={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("候选人")).toBeTruthy();
+    expect(screen.queryByText("线索")).toBeNull();
+  });
+
   it("shows a dash when the backend candidate has no match score", () => {
     render(<CandidateTable candidates={[{ ...candidate, matchScore: null }]} onSendEmail={() => undefined} />);
 
@@ -196,5 +218,48 @@ describe("CandidateTable", () => {
 
     expect(screen.getByText("维护 robot-vla 项目。")).toBeTruthy();
     expect(screen.getByText("https://github.com/example/robot-vla")).toBeTruthy();
+  });
+
+  it("expands all available candidate details when clicking view", () => {
+    render(
+      <CandidateTable
+        candidates={[
+          {
+            ...candidate,
+            sourcePlatform: "github_candidates",
+            sourceUrl: "https://github.com/example/agentic-fde",
+            githubUrl: "https://github.com/example",
+            linkedinUrl: "https://www.linkedin.com/in/example",
+            homepageUrl: "https://example.dev",
+            skills: ["Agentic workflow", "RAG", "Full-stack"],
+            riskAlerts: ["需要确认最近上线项目"],
+            evidence: [{ label: "GitHub", source: "github", summary: "维护 agentic-fde 项目。" }],
+          },
+        ]}
+        onSendEmail={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看" }));
+
+    expect(screen.getByText("邮箱")).toBeTruthy();
+    expect(screen.getByText("zhou.han@example.com")).toBeTruthy();
+    expect(screen.getByText("城市")).toBeTruthy();
+    expect(screen.getByText("上海")).toBeTruthy();
+    expect(screen.getByText("来源")).toBeTruthy();
+    expect(screen.getAllByText("github_candidates").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^GitHub/).length).toBeGreaterThan(0);
+    expect(screen.getByText("https://github.com/example")).toBeTruthy();
+    expect(screen.getByText(/^LinkedIn/)).toBeTruthy();
+    expect(screen.getByText("https://www.linkedin.com/in/example")).toBeTruthy();
+    expect(screen.getByText(/^Homepage/)).toBeTruthy();
+    expect(screen.getByText("https://example.dev")).toBeTruthy();
+    expect(screen.getByText("技能")).toBeTruthy();
+    expect(screen.getByText("Agentic workflow")).toBeTruthy();
+    expect(screen.getByText("RAG")).toBeTruthy();
+    expect(screen.getByText("Full-stack")).toBeTruthy();
+    expect(screen.getByText("风险")).toBeTruthy();
+    expect(screen.getByText("需要确认最近上线项目")).toBeTruthy();
+    expect(screen.getByText("维护 agentic-fde 项目。")).toBeTruthy();
   });
 });

@@ -358,7 +358,98 @@ def test_extract_candidate_leads_from_search_and_structured_outputs() -> None:
     assert leads[2]["name"] == "Ada Lovelace"
     assert leads[2]["title"] == "Robotics Lead"
     assert leads[2]["current_company"] == "Physical Intelligence"
-    assert leads[2]["linkedin_url"] == "https://www.linkedin.com/in/ada-robotics"
+
+
+def test_extract_candidate_leads_filters_non_person_search_results() -> None:
+    from app.core.candidate_lead_ingestion import extract_candidate_leads
+
+    payload = {
+        "搜索证据": {
+            "实时检索": {
+                "results": [
+                    {
+                        "source_key": "brave_web_search",
+                        "source_type": "open_web",
+                        "title": "Robotics Software Engineer Jobs",
+                        "url": "https://example.com/jobs/robotics-software-engineer",
+                        "snippet": "A job listing page is not a candidate.",
+                    },
+                    {
+                        "source_key": "openalex_works_search",
+                        "source_type": "academic",
+                        "title": "A paper about agentic workflows",
+                        "url": "https://doi.org/10.0000/example",
+                        "snippet": "A paper result is not a candidate.",
+                    },
+                    {
+                        "source_key": "agent_reach_social_search",
+                        "source_type": "social_platform_search",
+                        "title": "B站 error",
+                        "url": "https://github.com/Panniantong/Agent-Reach",
+                        "snippet": "tool failed",
+                        "retrieval_status": "error",
+                    },
+                    {
+                        "source_key": "github_repositories",
+                        "source_type": "code_repository",
+                        "title": "builderhan/agentic-commerce",
+                        "url": "https://github.com/builderhan/agentic-commerce",
+                        "owner_login": "builderhan",
+                        "owner_type": "User",
+                        "snippet": "Agentic commerce workflow with RAG and tool calling.",
+                    },
+                    {
+                        "source_key": "github_repositories",
+                        "source_type": "code_repository",
+                        "title": "acme/agentic-commerce",
+                        "url": "https://github.com/acme/agentic-commerce",
+                        "owner_login": "acme",
+                        "owner_type": "Organization",
+                        "snippet": "Organization repository should not become a person.",
+                    },
+                    {
+                        "source_key": "github_users",
+                        "source_type": "developer_profile",
+                        "title": "Acme AI",
+                        "url": "https://github.com/acme-ai",
+                        "account_type": "Organization",
+                        "snippet": "Organization account should not become a person.",
+                    },
+                    {
+                        "source_key": "github_users",
+                        "source_type": "developer_profile",
+                        "title": "Grace Hopper",
+                        "url": "https://github.com/gracehopper",
+                        "account_type": "User",
+                        "snippet": "Builds agent workflow developer tools.",
+                    },
+                    {
+                        "source_key": "openalex_authors_search",
+                        "source_type": "academic_author",
+                        "title": "Lin Chen",
+                        "url": "https://openalex.org/A123",
+                        "snippet": "机构: Example University；方向: AI agents",
+                        "institutions": ["Example University"],
+                    },
+                    {
+                        "source_key": "agent_reach_social_search",
+                        "source_type": "social_platform_search",
+                        "title": "Ada Lovelace",
+                        "url": "https://www.linkedin.com/in/ada-agentic-builder",
+                        "snippet": "Agentic builder at Independent Apps.",
+                        "job_title": "AI Native Full-stack Engineer",
+                        "company": "Independent Apps",
+                    },
+                ]
+            }
+        }
+    }
+
+    leads = extract_candidate_leads(payload)
+
+    assert [lead["name"] for lead in leads] == ["builderhan", "Grace Hopper", "Lin Chen", "Ada Lovelace"]
+    assert all("Jobs" not in str(lead.get("title")) for lead in leads)
+    assert leads[3]["linkedin_url"] == "https://www.linkedin.com/in/ada-agentic-builder"
 
 
 def test_candidate_lead_preview_redacts_email_and_reports_ingestion_action(

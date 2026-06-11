@@ -51,6 +51,29 @@ LEAD_COLLECTION_KEYS = {
 LIVE_RESULT_CONTAINER_KEYS = {"实时检索", "live_search", "liveSearch"}
 LIVE_RESULT_KEYS = {"results", "items", "records"}
 URL_FIELDS = ("source_url", "sourceUrl", "profile_url", "profileUrl", "url", "html_url", "htmlUrl", "link")
+PERSON_SEARCH_SOURCE_KEYS = {
+    "github_candidates",
+    "github_users",
+    "openalex_authors_search",
+    "semantic_scholar_authors_search",
+}
+PERSON_SEARCH_SOURCE_TYPES = {
+    "developer_profile",
+    "academic_author",
+    "professional_profile",
+    "identity_enrichment",
+}
+GITHUB_OWNER_RESULT_SOURCE_KEYS = {"github_repositories", "github_code"}
+NON_CANDIDATE_RETRIEVAL_STATUSES = {
+    "error",
+    "failed",
+    "setup_required",
+    "manual_required",
+    "planned",
+    "planned_external_tool",
+    "skipped",
+    "deferred",
+}
 STRING_LIMITS = {
     "name": 128,
     "current_company": 128,
@@ -198,7 +221,9 @@ def extract_candidate_leads(payload: Any) -> list[dict[str, Any]]:
                     if isinstance(results, list):
                         for item in results:
                             if isinstance(item, Mapping):
-                                leads.append(_lead_from_search_result(item))
+                                lead = _lead_from_search_result(item)
+                                if lead is not None:
+                                    leads.append(lead)
                 continue
             visit(child, str(key))
 
@@ -462,17 +487,31 @@ def _attach_github_preview_fields(item: dict[str, Any], payload: Mapping[str, An
             item[key] = value
 
 
-def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
+def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any] | None:
     url = _clean_url(_first_present(result, URL_FIELDS))
     owner_login = _clean_string(result.get("owner_login") or result.get("author"), "name")
-    source_key = result.get("source_key") or result.get("source_platform") or result.get("source_name")
-    is_people_source = str(source_key or "").casefold() in {
-        "openalex_authors_search",
-        "semantic_scholar_authors_search",
-        "agent_reach_social_search",
-    }
-    evidence = _string_list([result.get("title"), result.get("snippet") or result.get("description")])
-    skills = _string_list(result.get("topics") or result.get("tags") or result.get("matched_keywords"))
+    source_key = _squash(_first_present(result, ("source_key", "source_platform", "source_name", "platform")))
+    if not _is_person_search_result(result, url=url, source_key=source_key, owner_login=owner_login):
+        return None
+
+    source_key_normalized = source_key.casefold()
+    is_people_source = (
+        source_key_normalized in PERSON_SEARCH_SOURCE_KEYS
+        or _squash(result.get("source_type")).casefold() in PERSON_SEARCH_SOURCE_TYPES
+        or _is_linkedin_profile_url(url)
+    )
+    name = _clean_string(
+        _first_present(result, ("name", "candidate_name", "candidateName", "display_name", "title", "owner_login", "author")),
+        "name",
+    )
+    evidence = _unique_strings(
+        [
+            *_string_list(_first_present(result, ("evidence", "evidences", "evidence_items", "evidenceItems"))),
+            *_string_list(result.get("repository_evidence")),
+            *_string_list([result.get("title"), result.get("snippet") or result.get("description")]),
+        ]
+    )
+    skills = _string_list(result.get("skills") or result.get("topics") or result.get("tags") or result.get("matched_keywords"))
     company = _first_present(
         result,
         (
@@ -487,9 +526,9 @@ def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
         ),
     )
     lead = {
-        "name": owner_login or _name_from_title(result.get("title")),
+        "name": owner_login or name or _name_from_title(result.get("title")),
         "current_company": _first_string(company),
-        "title": _first_present(result, ("job_title", "headline", "position")) if is_people_source else result.get("title"),
+        "title": _first_present(result, ("job_title", "jobTitle", "headline", "position", "title")) if is_people_source else result.get("title"),
         "location": result.get("location"),
         "email": result.get("email"),
         "source_platform": source_key or "search_result",
@@ -507,6 +546,36 @@ def _lead_from_search_result(result: Mapping[str, Any]) -> dict[str, Any]:
     elif url:
         lead["homepage_url"] = url
     return lead
+
+
+def _is_person_search_result(
+    result: Mapping[str, Any],
+    *,
+    url: str | None,
+    source_key: str,
+    owner_login: str | None,
+) -> bool:
+    retrieval_status = _squash(result.get("retrieval_status") or result.get("status")).casefold()
+    if retrieval_status in NON_CANDIDATE_RETRIEVAL_STATUSES:
+        return False
+
+    source_key_normalized = source_key.casefold()
+    source_type = _squash(result.get("source_type")).casefold()
+    if source_key_normalized in {"github_candidates", "github_users"}:
+        account_type = _squash(result.get("account_type") or result.get("type")).casefold()
+        return account_type in {"", "user"}
+
+    if source_key_normalized in PERSON_SEARCH_SOURCE_KEYS or source_type in PERSON_SEARCH_SOURCE_TYPES:
+        return True
+
+    if source_key_normalized in GITHUB_OWNER_RESULT_SOURCE_KEYS:
+        owner_type = _squash(result.get("owner_type")).casefold()
+        return bool(owner_login and owner_type == "user")
+
+    if source_key_normalized == "agent_reach_social_search":
+        return _is_linkedin_profile_url(url)
+
+    return _is_linkedin_profile_url(url)
 
 
 def _first_string(value: Any) -> str | None:
@@ -803,6 +872,13 @@ def _squash(value: Any) -> str:
 def _is_domain(url: str, domain: str) -> bool:
     host = urlparse(url).netloc.casefold().removeprefix("www.")
     return host == domain or host.endswith(f".{domain}")
+
+
+def _is_linkedin_profile_url(url: str | None) -> bool:
+    if not url or not _is_domain(url, "linkedin.com"):
+        return False
+    parts = [part.casefold() for part in urlparse(url).path.split("/") if part]
+    return len(parts) >= 2 and parts[0] == "in"
 
 
 def _github_profile_url_from_url(url: str) -> str | None:

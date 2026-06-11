@@ -2022,6 +2022,7 @@ def _source_intelligence(
         focus_terms = [capability["capability_name_zh"] for capability in get_capabilities_for_role(role_key)]
     search_config = _search_config_from_ctx(ctx)
     search_mode = str(search_config["search_mode"])
+    live_role_key = None if job_profile is not None else role_key
     query = " ".join(
         [
             user_input,
@@ -2090,7 +2091,7 @@ def _source_intelligence(
             "证据记录": [],
             "实时检索": _empty_live_search_context(
                 query,
-                role_key,
+                live_role_key,
                 search_mode,
                 reason="search_provider_unavailable",
                 search_config=search_config,
@@ -2102,7 +2103,7 @@ def _source_intelligence(
                 records=[],
                 live_context=_empty_live_search_context(
                     query,
-                    role_key,
+                    live_role_key,
                     search_mode,
                     reason="search_provider_unavailable",
                     search_config=search_config,
@@ -2137,7 +2138,7 @@ def _source_intelligence(
     if search_config["execution_policy"] == "planning_only":
         live_context = _empty_live_search_context(
             query,
-            role_key,
+            live_role_key,
             search_mode,
             reason="planning_only_selected",
             search_config=search_config,
@@ -2146,7 +2147,7 @@ def _source_intelligence(
         live_context = _live_search_context(
             router,
             query,
-            role_key=role_key,
+            role_key=live_role_key,
             search_mode=search_mode,
             search_config=search_config,
         )

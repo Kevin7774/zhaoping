@@ -366,15 +366,22 @@ def test_no_key_or_unavailable_integrations_are_not_registered() -> None:
     }
 
     assert retired_services.isdisjoint(config.services)
-    assert "email_discovery" not in config.defaults
-    assert "email_verification" not in config.defaults
-    assert "email_delivery" not in config.defaults
+    # Email capabilities are first-class registered services; without keys they
+    # surface as missing_key instead of pretending the capability doesn't exist.
+    assert config.default_service_name("email_delivery") == "resend_email_delivery"
+    assert config.default_service_name("email_discovery") == "hunter_email_discovery"
+    assert config.default_service_name("email_verification") == "zerobounce_email_verification"
     assert config.default_service_name("scraping") == "opencli_crawl_scrape"
 
     status = get_integration_status(config)
     services = {service["name"]: service for service in status["services"]}
     assert retired_services.isdisjoint(services)
-    assert not [service for service in services.values() if service["status"] == "missing_key"]
+    # Only the explicitly onboarded email capabilities may sit in missing_key
+    # while their credentials are pending; everything else must be keyed or retired.
+    missing_key_types = {
+        service["type"] for service in services.values() if service["status"] == "missing_key"
+    }
+    assert missing_key_types <= {"email_delivery", "email_discovery", "email_verification"}
 
 
 def test_search_source_layers_reference_real_routable_providers() -> None:
@@ -5269,9 +5276,11 @@ def test_openrouter_chat_provider_maps_messages_and_models(monkeypatch: pytest.M
 def test_recruiting_growth_services_are_configured() -> None:
     config = load_app_config()
 
-    assert "email_discovery" not in config.defaults
-    assert "email_verification" not in config.defaults
-    assert "email_delivery" not in config.defaults
+    # Email capabilities are first-class registered services; without keys they
+    # surface as missing_key instead of pretending the capability doesn't exist.
+    assert config.default_service_name("email_delivery") == "resend_email_delivery"
+    assert config.default_service_name("email_discovery") == "hunter_email_discovery"
+    assert config.default_service_name("email_verification") == "zerobounce_email_verification"
     assert config.default_service_name("scraping") == "opencli_crawl_scrape"
 
     retired_services = {
@@ -5340,9 +5349,11 @@ def test_recruiting_growth_services_show_status_without_secret_values(monkeypatc
         "browserbase_session",
     }
     assert retired_services.isdisjoint(services)
-    assert capabilities["email_discovery_api"]["status"] == "not_configured"
-    assert capabilities["email_verification_api"]["status"] == "not_configured"
-    assert capabilities["email_delivery_api"]["status"] == "not_configured"
+    # Hunter/ZeroBounce keys are set by this test, so discovery/verification
+    # connect; delivery still lacks RESEND_API_KEY/OUTREACH_FROM_EMAIL.
+    assert capabilities["email_discovery_api"]["status"] in {"active", "available"}
+    assert capabilities["email_verification_api"]["status"] in {"active", "available"}
+    assert capabilities["email_delivery_api"]["status"] == "missing_key"
     assert capabilities["scraping_api"]["connected_name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["code_path"] == "app/providers/scraping.py"

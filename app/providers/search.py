@@ -1296,6 +1296,7 @@ class GitHubUserSearchProvider:
             "url": html_url,
             "source_url": html_url,
             "github_url": html_url,
+            "account_type": profile.get("type") or item.get("type"),
             "name": profile.get("name") or login,
             "current_company": profile.get("company"),
             "location": profile.get("location"),
@@ -1704,6 +1705,7 @@ class GitHubCandidateSearchProvider:
             "url": github_url,
             "source_url": github_url,
             "github_url": github_url,
+            "account_type": profile.get("type"),
             "name": profile.get("name") or login,
             "current_company": profile.get("company"),
             "location": profile.get("location"),
@@ -1734,6 +1736,7 @@ class GitHubCandidateSearchProvider:
                 "profile": {
                     "login": login,
                     "html_url": github_url,
+                    "type": profile.get("type"),
                     "company": profile.get("company"),
                     "location": profile.get("location"),
                     "public_repos": profile.get("public_repos"),

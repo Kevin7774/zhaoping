@@ -285,8 +285,13 @@ type CandidateBackendResponse = {
   sourcePlatform?: string | null;
   sourceUrl?: string | null;
   currentCompany?: string | null;
+  location?: string | null;
   city?: string | null;
   email?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  homepageUrl?: string | null;
+  skills?: string[] | null;
   matchScore?: number | null;
   pipelineStatus?: string | null;
   outreachStatus?: "not_sent" | "drafted" | "sent" | null;
@@ -306,6 +311,7 @@ type CandidateBackendResponse = {
         summary?: string;
       }
   > | null;
+  sourceTaskId?: string | null;
 };
 
 export function getProject(projectId: string): Promise<ProjectRecord> {
@@ -726,8 +732,14 @@ function mapCandidate(candidate: CandidateBackendResponse): Candidate {
     sourcePlatform: candidate.sourcePlatform || "Backend",
     sourceUrl: candidate.sourceUrl ?? undefined,
     currentCompany: candidate.currentCompany ?? undefined,
+    location: candidate.location ?? undefined,
     city: candidate.city ?? undefined,
     email: candidate.email ?? undefined,
+    githubUrl: candidate.githubUrl ?? undefined,
+    linkedinUrl: candidate.linkedinUrl ?? undefined,
+    homepageUrl: candidate.homepageUrl ?? undefined,
+    skills: Array.isArray(candidate.skills) ? candidate.skills : [],
+    sourceTaskId: candidate.sourceTaskId ?? undefined,
     title: candidate.jobTitle || "—",
     isAiNativeTalent: false,
     technicalLayerTags: [],
