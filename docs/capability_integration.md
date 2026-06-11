@@ -155,7 +155,7 @@ The search stack now includes executable or routable providers for recruiting, a
 - `semantic_scholar_papers_search`, `semantic_scholar_authors_search`: Semantic Scholar Graph API providers for papers, authors, venues, h-index, and citation evidence.
 - `github_candidates`, `github_users`, `github_repositories`, `github_code`, `github_topics`: GitHub REST providers for public developer profiles, repositories, code snippets, topics, representative repository evidence, deterministic GitHub scoring, and HumanGate-ready candidate lead previews. Token-required providers are gated by `GITHUB_TOKEN` and can be disabled with `GITHUB_SEARCH_ENABLED=false`.
 - `education_competition_monitor`: curated monitoring target provider for school/lab pages and competitions such as Tianchi, DataFountain, CCF, ICPC/CCPC, Lanqiao, and Kaggle.
-- `opencli_platform_search` (`search` / `opencli_command`): local OpenCLI browser-backed platform commands for Bilibili, Zhihu, Xiaohongshu, LinkedIn, and YouTube. It requires the `opencli` command and a connected Browser Bridge extension.
+- `opencli_platform_search` (`search` / `opencli_command`): local OpenCLI browser-backed platform commands for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search. It requires the `opencli` command and a connected Browser Bridge extension.
 - `opencli_web_read_search` (`search` / `opencli_command`): URL-backed OpenCLI web reader facade for crawler snapshot workflows. It returns `requires_url` without launching a browser when the query is not an absolute `http(s)` URL.
 - `opencli_crawl_scrape`: local OpenCLI web reader using `opencli web read --url {url} -f json`. The CLI can be installed while Browser Bridge remains disconnected; live browser-backed reads require the Chrome/Chromium extension. Integration status reports command absence as `missing_tool` and disconnected Browser Bridge as `manual_setup`.
 
@@ -172,8 +172,7 @@ Project scenario tasks should prefer structured search control in
 `frontend_state`: `search_profile`, `execution_policy`, `source_layers`, and
 `search_budget`. `search_profile` describes the intent, such as candidate
 sourcing or due diligence. `execution_policy` controls depth and external
-request risk: `planning_only` must not call live providers, `bounded_live`
-uses a capped provider budget, and `deep_live` allows a larger bounded budget.
+request risk: `bounded_live` uses a capped provider budget. The default bounded live provider cap is sized to include both social adapters (`agent_reach_social_search` and `opencli_platform_search`) in the candidate-sourcing workflow. `deep_live` allows a larger bounded budget.
 `source_layers` is additive, not mutually exclusive; layers such as academic,
 code/model, social, news/funding, school/competition, crawler snapshot, and due
 diligence can be enabled together. `search_budget` caps provider count,
@@ -181,12 +180,6 @@ per-provider limit, timeout, and crawl pages. The `crawler_snapshot` layer is
 accepted only when `execution_policy = "deep_live"` and
 `search_budget.max_crawl_pages > 0`; otherwise it is normalized off before live
 provider selection.
-
-Legacy `frontend_state.search_mode` values (`planning_only`,
-`live_recruiting`, `due_diligence`, `social_expansion`) remain accepted for
-task retries and older clients. They are normalized into the structured model;
-notably `social_expansion` is treated as adding social sources on top of the
-candidate-sourcing defaults rather than excluding other source layers.
 
 Search-driven steps must return a lightweight `搜索运行追踪` /
 `search_run_trace` object with the query, selected profile/policy/layers,

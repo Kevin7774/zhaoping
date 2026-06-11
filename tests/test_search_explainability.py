@@ -7,29 +7,17 @@ import pytest
 from app.core import orchestrator
 
 
-def test_planning_only_search_mode_skips_live_provider_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_live_search(*_args, **_kwargs):  # noqa: ANN002, ANN003
-        raise AssertionError("planning_only must not call live search providers")
-
-    monkeypatch.setattr(orchestrator, "_live_search_context", fail_live_search)
-
-    intelligence = orchestrator._source_intelligence(
-        "请围绕 VLA 机器人岗位生成人才地图",
-        "vla_embodied_expert",
-        limit=3,
-        ctx={"frontend_state": {"search_mode": "planning_only"}, "data": {}},
-        agent_id="test",
+def test_unknown_execution_policy_falls_back_to_bounded_live() -> None:
+    config = orchestrator._search_config_from_ctx(
+        {"frontend_state": {"execution_policy": "unsupported_policy", "source_layers": {"social": True}}}
     )
+    services = orchestrator._live_services_for_search_config(config)
 
-    trace = intelligence["搜索运行追踪"]
-
-    assert intelligence["实时检索"]["search_mode"] == "planning_only"
-    assert intelligence["实时检索"]["services"] == []
-    assert trace["search_mode"] == "planning_only"
-    assert trace["external_request_policy"] == "blocked_by_mode"
-    assert trace["provider_budget"]["selected"] == 0
-    assert trace["evidence_counts"]["recommended_sources"] >= 0
-    assert trace["next_actions"]
+    assert config["execution_policy"] == "bounded_live"
+    assert config["budget"]["max_providers"] == orchestrator.MAX_LIVE_RECRUITING_PROVIDERS
+    assert "agent_reach_social_search" in services
+    assert "opencli_platform_search" in services
+    assert "search_mode" not in config
 
 
 def test_search_config_layers_are_additive_and_budgeted() -> None:
@@ -79,6 +67,15 @@ def test_search_config_layers_are_additive_and_budgeted() -> None:
     assert "pdl_people_search" not in services
 
 
+def test_default_candidate_sourcing_budget_reaches_opencli_platform_search() -> None:
+    config = orchestrator._search_config_from_ctx({"frontend_state": {}})
+    services = orchestrator._live_services_for_search_config(config)
+    opencli_index = services.index("opencli_platform_search") + 1
+
+    assert "opencli_platform_search" in services
+    assert config["budget"]["max_providers"] >= opencli_index
+
+
 def test_crawler_snapshot_layer_requires_deep_live_crawl_budget() -> None:
     bounded_config = orchestrator._search_config_from_ctx(
         {
@@ -107,8 +104,8 @@ def test_crawler_snapshot_layer_requires_deep_live_crawl_budget() -> None:
     assert "opencli_web_read_search" not in orchestrator._live_services_for_search_config(zero_budget_config)
 
 
-def test_legacy_social_expansion_search_mode_is_additive() -> None:
-    config = orchestrator._search_config_from_ctx({"frontend_state": {"search_mode": "social_expansion"}})
+def test_legacy_search_mode_field_is_ignored_after_structured_search_cutover() -> None:
+    config = orchestrator._search_config_from_ctx({"frontend_state": {"search_mode": "legacy_mode"}})
     services = orchestrator._live_services_for_search_config(config)
 
     assert config["search_profile"] == "candidate_sourcing"
@@ -117,6 +114,7 @@ def test_legacy_social_expansion_search_mode_is_additive() -> None:
     assert "x_recent_posts_search" not in services
     assert "github_repositories" in services
     assert "openalex_works_search" in services
+    assert "search_mode" not in config
 
 
 def test_source_intelligence_archives_search_evidence_ledger(
@@ -161,8 +159,6 @@ def test_source_intelligence_archives_search_evidence_ledger(
         orchestrator,
         "_live_search_context",
         lambda *_args, **_kwargs: {
-            "search_mode": "live_recruiting",
-            "mode_label": "实时招聘搜索",
             "search_profile": "candidate_sourcing",
             "execution_policy": "bounded_live",
             "source_layers": {"academic": True, "code_model": True},
@@ -237,8 +233,6 @@ def test_source_intelligence_uses_project_job_query_for_live_search(monkeypatch:
         captured["query"] = query
         captured["role_key"] = role_key
         return {
-            "search_mode": "live_recruiting",
-            "mode_label": "实时招聘搜索",
             "search_profile": "candidate_sourcing",
             "execution_policy": "bounded_live",
             "source_layers": {"code_model": True},
@@ -282,7 +276,6 @@ def test_source_intelligence_uses_project_job_query_for_live_search(monkeypatch:
 def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> None:
     trace = orchestrator._build_search_run_trace(
         query="robotics diffusion policy hiring",
-        search_mode="social_expansion",
         search_config={
             "search_profile": "candidate_sourcing",
             "execution_policy": "bounded_live",
@@ -296,8 +289,6 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
             {"source_tier": "primary", "validation_status": "verified"},
         ],
         live_context={
-            "search_mode": "social_expansion",
-            "mode_label": "社媒扩展",
             "services": ["agent_reach_social_search"],
             "result_count": 2,
             "errors": [{"service": "github_code", "reason": "deferred_by_live_budget"}],
@@ -313,8 +304,6 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
 
     assert trace == {
         "query": "robotics diffusion policy hiring",
-        "search_mode": "social_expansion",
-        "search_mode_label": "社媒扩展",
         "search_profile": "candidate_sourcing",
         "execution_policy": "bounded_live",
         "source_layers": {"academic": True, "social": True},
@@ -339,7 +328,7 @@ def test_build_search_run_trace_summarizes_evidence_and_provider_health() -> Non
         "evidence_gaps": [],
         "next_queries": ["robotics diffusion policy hiring site:github.com", "robotics diffusion policy hiring demo hiring team"],
         "next_actions": [
-            "补齐缺失 provider 的凭证或本地工具后重跑同一 search_mode。",
+            "补齐缺失 provider 的凭证或本地工具后重跑同一搜索配置。",
             "优先复核 primary/verified 证据；needs_cross_check 只能作为线索。",
             "将高置信来源写入候选人或情报归档前保留 source_url 和 validation_status。",
         ],

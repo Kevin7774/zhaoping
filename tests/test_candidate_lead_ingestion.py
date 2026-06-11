@@ -593,6 +593,7 @@ def test_recruiting_live_search_services_cover_top_down_people_and_social_source
     assert "github_candidates" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
     assert "github_users" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
     assert "agent_reach_social_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
+    assert "opencli_platform_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
     assert "semantic_scholar_authors_search" in orchestrator.LIVE_RECRUITING_SEARCH_SERVICES
 
 

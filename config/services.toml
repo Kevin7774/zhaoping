@@ -146,14 +146,14 @@ source_type = "browser_platform_search"
 project_url = "https://github.com/jackwener/OpenCLI"
 required_command = "opencli"
 requires_browser_bridge = true
-supported_platforms = ["B站", "知乎", "小红书", "LinkedIn", "YouTube"]
+supported_platforms = ["B站", "知乎", "小红书", "LinkedIn", "YouTube", "X/Twitter", "Reddit", "微信公众号"]
 timeout_seconds = 60
 purpose = "Use OpenCLI built-in browser-backed commands to search authorized public/platform pages for social, video, and professional evidence."
 access_pattern = "Only use public pages, official site behavior, or user-authorized browser login state; do not bypass login, paywalls, robots.txt, access controls, or platform terms."
 risk_level = "high"
 freshness = "daily"
 guardrails = ["复用用户授权浏览器登录态前必须确认用途和范围。", "平台内容只能作为线索，关键结论必须回看原文并交叉验证。", "候选人相关信息仅限公开职业信息和岗位相关能力证据。"]
-description = "OpenCLI browser-backed platform search provider for Bilibili, Zhihu, Xiaohongshu, LinkedIn, and YouTube."
+description = "OpenCLI browser-backed platform search provider for Bilibili, Zhihu, Xiaohongshu, LinkedIn, YouTube, X/Twitter, Reddit, and WeChat Official Account article search."
 
 [services.opencli_platform_search.platform_commands.bilibili]
 name_zh = "B站"
@@ -174,6 +174,18 @@ args = ["linkedin", "people-search", "{query}", "--limit", "{limit}", "-f", "jso
 [services.opencli_platform_search.platform_commands.youtube]
 name_zh = "YouTube"
 args = ["youtube", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.twitter]
+name_zh = "X/Twitter"
+args = ["twitter", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.reddit]
+name_zh = "Reddit"
+args = ["reddit", "search", "{query}", "--limit", "{limit}", "-f", "json"]
+
+[services.opencli_platform_search.platform_commands.weixin]
+name_zh = "微信公众号"
+args = ["weixin", "search", "{query}", "--limit", "{limit}", "-f", "json"]
 
 [services.opencli_web_read_search]
 type = "search"

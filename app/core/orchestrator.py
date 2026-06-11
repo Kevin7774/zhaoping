@@ -184,41 +184,16 @@ LIVE_RECRUITING_SEARCH_SERVICES = (
     "huggingface_models",
     "brave_web_search",
     "agent_reach_social_search",
+    "opencli_platform_search",
     "gdelt_doc_news",
     "gnews_funding_news",
     "education_competition_monitor",
 )
-MAX_LIVE_RECRUITING_PROVIDERS = 8
+MAX_LIVE_RECRUITING_PROVIDERS = 9
 MAX_DEEP_LIVE_PROVIDERS = 14
 
 LIVE_RESULT_SOURCE_KEYS = {
     *LIVE_RECRUITING_SEARCH_SERVICES,
-}
-
-DEFAULT_SEARCH_MODE = "live_recruiting"
-SEARCH_MODE_METADATA: dict[str, dict[str, Any]] = {
-    "planning_only": {
-        "label": "规划模式",
-        "live_services": (),
-        "external_request_policy": "blocked_by_mode",
-    },
-    "live_recruiting": {
-        "label": "实时招聘搜索",
-        "live_services": LIVE_RECRUITING_SEARCH_SERVICES,
-        "external_request_policy": "bounded_live",
-    },
-    "due_diligence": {
-        "label": "尽调深搜",
-        "live_services": LIVE_RECRUITING_SEARCH_SERVICES,
-        "external_request_policy": "bounded_live",
-    },
-    "social_expansion": {
-        "label": "社媒扩展",
-        "live_services": (
-            "agent_reach_social_search",
-        ),
-        "external_request_policy": "bounded_live",
-    },
 }
 
 DEFAULT_SEARCH_PROFILE = "candidate_sourcing"
@@ -233,18 +208,9 @@ SEARCH_PROFILE_METADATA: dict[str, dict[str, str]] = {
         "label": "尽调深搜",
         "description": "在候选人搜索基础上叠加公司、监管、专利、诉讼和合规信号。",
     },
-    "social_expansion": {
-        "label": "社媒扩展",
-        "description": "在基础证据上强化社媒、社区和新鲜动态线索。",
-    },
 }
 
 SEARCH_EXECUTION_POLICY_METADATA: dict[str, dict[str, Any]] = {
-    "planning_only": {
-        "label": "仅规划",
-        "external_request_policy": "blocked_by_mode",
-        "budget": {"max_providers": 0, "per_provider_limit": 0, "timeout_seconds": 0, "max_crawl_pages": 0},
-    },
     "bounded_live": {
         "label": "标准联网",
         "external_request_policy": "bounded_live",
@@ -317,6 +283,12 @@ SEARCH_SOURCE_LAYER_METADATA: dict[str, dict[str, Any]] = {
     },
 }
 
+SERVICE_SOURCE_LAYER_INDEX: dict[str, str] = {
+    str(service): layer_name
+    for layer_name, layer in SEARCH_SOURCE_LAYER_METADATA.items()
+    for service in layer.get("services", ())
+}
+
 SEARCH_PROFILE_DEFAULT_LAYERS: dict[str, tuple[str, ...]] = {
     "candidate_sourcing": (
         "live_web",
@@ -335,13 +307,6 @@ SEARCH_PROFILE_DEFAULT_LAYERS: dict[str, tuple[str, ...]] = {
         "education_competition",
         "due_diligence",
     ),
-    "social_expansion": (
-        "live_web",
-        "academic",
-        "code_model",
-        "social",
-        "news_funding",
-    ),
 }
 
 SEARCH_SOURCE_LAYER_ALIASES = {
@@ -352,29 +317,6 @@ SEARCH_SOURCE_LAYER_ALIASES = {
     "crawlerSnapshot": "crawler_snapshot",
     "dueDiligence": "due_diligence",
     "liveWeb": "live_web",
-}
-
-LEGACY_SEARCH_MODE_CONFIG: dict[str, dict[str, Any]] = {
-    "planning_only": {
-        "search_profile": DEFAULT_SEARCH_PROFILE,
-        "execution_policy": "planning_only",
-        "source_layers": {},
-    },
-    "live_recruiting": {
-        "search_profile": DEFAULT_SEARCH_PROFILE,
-        "execution_policy": "bounded_live",
-        "source_layers": {},
-    },
-    "due_diligence": {
-        "search_profile": "due_diligence",
-        "execution_policy": "bounded_live",
-        "source_layers": {},
-    },
-    "social_expansion": {
-        "search_profile": DEFAULT_SEARCH_PROFILE,
-        "execution_policy": "bounded_live",
-        "source_layers": {"social": True},
-    },
 }
 
 TOP_DOWN_RESEARCH_LAYERS = (
@@ -1698,36 +1640,25 @@ def _apply_human_edits(ctx: Dict[str, Any], result: Dict[str, Any]) -> None:
         result["人工决策"] = human["decision"]
 
 
-def _search_mode_from_ctx(ctx: Dict[str, Any] | None) -> str:
-    return str(_search_config_from_ctx(ctx)["search_mode"])
-
-
-def _normalize_search_mode(value: Any) -> str:
-    mode = str(value or DEFAULT_SEARCH_MODE).strip()
-    return mode if mode in SEARCH_MODE_METADATA else DEFAULT_SEARCH_MODE
-
-
 def _search_config_from_ctx(ctx: Dict[str, Any] | None) -> dict[str, Any]:
     state = (ctx or {}).get("frontend_state")
     return _normalize_search_config(state if isinstance(state, dict) else {})
 
 
 def _normalize_search_config(value: Any) -> dict[str, Any]:
-    state = value if isinstance(value, dict) else {"search_mode": value}
-    legacy_mode = _normalize_search_mode(state.get("search_mode") or state.get("searchMode"))
-    legacy_config = LEGACY_SEARCH_MODE_CONFIG.get(legacy_mode, LEGACY_SEARCH_MODE_CONFIG[DEFAULT_SEARCH_MODE])
+    state = value if isinstance(value, dict) else {}
 
-    raw_profile = state.get("search_profile") or state.get("searchProfile") or legacy_config["search_profile"]
+    raw_profile = state.get("search_profile") or state.get("searchProfile") or DEFAULT_SEARCH_PROFILE
     search_profile = str(raw_profile or DEFAULT_SEARCH_PROFILE).strip()
     if search_profile not in SEARCH_PROFILE_METADATA:
         search_profile = DEFAULT_SEARCH_PROFILE
 
-    raw_policy = state.get("execution_policy") or state.get("executionPolicy") or legacy_config["execution_policy"]
+    raw_policy = state.get("execution_policy") or state.get("executionPolicy") or DEFAULT_EXECUTION_POLICY
     execution_policy = str(raw_policy or DEFAULT_EXECUTION_POLICY).strip()
     if execution_policy not in SEARCH_EXECUTION_POLICY_METADATA:
         execution_policy = DEFAULT_EXECUTION_POLICY
 
-    raw_layers = state.get("source_layers") or state.get("sourceLayers") or legacy_config.get("source_layers") or {}
+    raw_layers = state.get("source_layers") or state.get("sourceLayers") or {}
     budget = _normalize_search_budget(execution_policy, state.get("search_budget") or state.get("budget") or {})
     source_layers = _normalize_source_layers(search_profile, raw_layers)
     if source_layers.get("crawler_snapshot") and (
@@ -1735,13 +1666,7 @@ def _normalize_search_config(value: Any) -> dict[str, Any]:
     ):
         source_layers["crawler_snapshot"] = False
 
-    if execution_policy == "planning_only":
-        search_mode = "planning_only"
-    else:
-        search_mode = legacy_mode if legacy_mode != "planning_only" else _legacy_mode_for_profile(search_profile)
-
     return {
-        "search_mode": search_mode,
         "search_profile": search_profile,
         "execution_policy": execution_policy,
         "source_layers": source_layers,
@@ -1802,26 +1727,7 @@ def _normalize_search_budget(execution_policy: str, raw_budget: Any) -> dict[str
     }
 
 
-def _legacy_mode_for_profile(search_profile: str) -> str:
-    if search_profile == "due_diligence":
-        return "due_diligence"
-    if search_profile == "social_expansion":
-        return "social_expansion"
-    return DEFAULT_SEARCH_MODE
-
-
-def _search_mode_label(search_mode: str) -> str:
-    return str(SEARCH_MODE_METADATA[_normalize_search_mode(search_mode)]["label"])
-
-
-def _live_services_for_search_mode(search_mode: str) -> tuple[str, ...]:
-    return _live_services_for_search_config(_normalize_search_config({"search_mode": search_mode}))
-
-
 def _live_services_for_search_config(search_config: dict[str, Any]) -> tuple[str, ...]:
-    if str(search_config.get("execution_policy") or DEFAULT_EXECUTION_POLICY) == "planning_only":
-        return ()
-
     layer_services: list[list[str]] = []
     source_layers = search_config.get("source_layers")
     if not isinstance(source_layers, dict):
@@ -1851,10 +1757,6 @@ def _live_services_for_search_config(search_config: dict[str, Any]) -> tuple[str
     return tuple(dict.fromkeys(services))
 
 
-def _external_request_policy(search_mode: str) -> str:
-    return _external_request_policy_for_search_config(_normalize_search_config({"search_mode": search_mode}))
-
-
 def _external_request_policy_for_search_config(search_config: dict[str, Any]) -> str:
     execution_policy = str(search_config.get("execution_policy") or DEFAULT_EXECUTION_POLICY)
     metadata = SEARCH_EXECUTION_POLICY_METADATA.get(execution_policy, SEARCH_EXECUTION_POLICY_METADATA[DEFAULT_EXECUTION_POLICY])
@@ -1864,17 +1766,13 @@ def _external_request_policy_for_search_config(search_config: dict[str, Any]) ->
 def _empty_live_search_context(
     query: str,
     role_key: str | None,
-    search_mode: str,
     provider_health: list[dict[str, Any]] | None = None,
     reason: str | None = None,
     search_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    mode = _normalize_search_mode(search_mode)
-    config = search_config or _normalize_search_config({"search_mode": mode})
+    config = search_config or _normalize_search_config({})
     errors = [{"service": "live_search", "reason": reason}] if reason else []
     return {
-        "search_mode": mode,
-        "mode_label": _search_mode_label(mode),
         "search_profile": config.get("search_profile"),
         "execution_policy": config.get("execution_policy"),
         "source_layers": config.get("source_layers", {}),
@@ -1896,21 +1794,17 @@ def _empty_live_search_context(
 
 def _build_search_run_trace(
     query: str,
-    search_mode: str,
     recommended_sources: list[dict[str, Any]],
     records: list[dict[str, Any]],
     live_context: dict[str, Any],
     search_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    mode = _normalize_search_mode(search_mode)
-    config = search_config or _normalize_search_config({"search_mode": mode})
+    config = search_config or _normalize_search_config({})
     source_layers = config.get("source_layers", {})
     if not isinstance(source_layers, dict):
         source_layers = {}
     return {
         "query": query,
-        "search_mode": mode,
-        "search_mode_label": str(live_context.get("mode_label") or _search_mode_label(mode)),
         "search_profile": str(config.get("search_profile") or DEFAULT_SEARCH_PROFILE),
         "execution_policy": str(config.get("execution_policy") or DEFAULT_EXECUTION_POLICY),
         "source_layers": source_layers,
@@ -1939,7 +1833,7 @@ def _build_search_run_trace(
         "evidence_gaps": _search_evidence_gaps(config, live_context, records),
         "next_queries": _search_next_queries(query, config),
         "next_actions": [
-            "补齐缺失 provider 的凭证或本地工具后重跑同一 search_mode。",
+            "补齐缺失 provider 的凭证或本地工具后重跑同一搜索配置。",
             "优先复核 primary/verified 证据；needs_cross_check 只能作为线索。",
             "将高置信来源写入候选人或情报归档前保留 source_url 和 validation_status。",
         ],
@@ -2021,7 +1915,6 @@ def _source_intelligence(
         focus_role_name = ROBOT_ROLES_METADATA[role_key]["name_zh"]
         focus_terms = [capability["capability_name_zh"] for capability in get_capabilities_for_role(role_key)]
     search_config = _search_config_from_ctx(ctx)
-    search_mode = str(search_config["search_mode"])
     live_role_key = None if job_profile is not None else role_key
     query = " ".join(
         [
@@ -2040,8 +1933,6 @@ def _source_intelligence(
             "tool": "ServiceRouter.search",
             "query_preview": query[:240],
             "limit": limit,
-            "search_mode": search_mode,
-            "search_mode_label": _search_mode_label(search_mode),
             "search_profile": search_config["search_profile"],
             "execution_policy": search_config["execution_policy"],
             "source_layers": search_config["source_layers"],
@@ -2092,19 +1983,16 @@ def _source_intelligence(
             "实时检索": _empty_live_search_context(
                 query,
                 live_role_key,
-                search_mode,
                 reason="search_provider_unavailable",
                 search_config=search_config,
             ),
             "搜索运行追踪": _build_search_run_trace(
                 query=query,
-                search_mode=search_mode,
                 recommended_sources=[],
                 records=[],
                 live_context=_empty_live_search_context(
                     query,
                     live_role_key,
-                    search_mode,
                     reason="search_provider_unavailable",
                     search_config=search_config,
                 ),
@@ -2135,25 +2023,14 @@ def _source_intelligence(
         }
         for record in evidence.get("records", [])[:limit]
     ]
-    if search_config["execution_policy"] == "planning_only":
-        live_context = _empty_live_search_context(
-            query,
-            live_role_key,
-            search_mode,
-            reason="planning_only_selected",
-            search_config=search_config,
-        )
-    else:
-        live_context = _live_search_context(
-            router,
-            query,
-            role_key=live_role_key,
-            search_mode=search_mode,
-            search_config=search_config,
-        )
+    live_context = _live_search_context(
+        router,
+        query,
+        role_key=live_role_key,
+        search_config=search_config,
+    )
     search_run_trace = _build_search_run_trace(
         query=query,
-        search_mode=search_mode,
         recommended_sources=recommended_sources,
         records=records,
         live_context=live_context,
@@ -2414,11 +2291,9 @@ def _live_search_context(
     role_key: str | None = None,
     per_service_limit: int | None = None,
     timeout_seconds: float | None = None,
-    search_mode: str = DEFAULT_SEARCH_MODE,
     search_config: dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    config = search_config or _normalize_search_config({"search_mode": search_mode})
-    mode = _normalize_search_mode(str(config.get("search_mode") or search_mode))
+    config = search_config or _normalize_search_config({})
     budget = config.get("budget") if isinstance(config.get("budget"), dict) else {}
     max_providers = int(budget.get("max_providers", MAX_LIVE_RECRUITING_PROVIDERS))
     service_limit = int(per_service_limit if per_service_limit is not None else budget.get("per_provider_limit", 2))
@@ -2428,45 +2303,68 @@ def _live_search_context(
         return _empty_live_search_context(
             query,
             role_key,
-            mode,
             reason="live_search_blocked_by_mode",
             search_config=config,
         )
 
-    providers = []
     skipped = []
     provider_health = []
+    ready_by_layer: dict[str, list[str]] = {}
     for service_name in live_services:
         health = _search_service_health(router, service_name)
         provider_health.append(health)
         if health["status"] != "ready":
             skipped.append({"service": service_name, "reason": _provider_skip_reason(health)})
             continue
-        if len(providers) >= max_providers:
-            skipped.append({"service": service_name, "reason": "deferred_by_live_budget"})
-            continue
+        layer_name = SERVICE_SOURCE_LAYER_INDEX.get(service_name, "other")
+        ready_by_layer.setdefault(layer_name, []).append(service_name)
+
+    # 层间轮转分配预算：每轮从每个信源层各取一个 ready provider，保证学术、
+    # 代码/模型、社媒、新闻等层都先有覆盖，预算才轮到层内的次选 provider。
+    selected_services: list[str] = []
+    round_index = 0
+    while len(selected_services) < max_providers:
+        appended = False
+        for layer_ready in ready_by_layer.values():
+            if round_index >= len(layer_ready) or len(selected_services) >= max_providers:
+                continue
+            selected_services.append(layer_ready[round_index])
+            appended = True
+        if not appended:
+            break
+        round_index += 1
+    selected_set = set(selected_services)
+    for layer_ready in ready_by_layer.values():
+        for service_name in layer_ready:
+            if service_name not in selected_set:
+                skipped.append({"service": service_name, "reason": "deferred_by_live_budget"})
+
+    providers = []
+    for service_name in selected_services:
         try:
             providers.append((service_name, router.search(service_name)))
         except Exception as exc:  # noqa: BLE001
             skipped.append({"service": service_name, "reason": str(exc)})
 
     results: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = skipped
+    errors: list[dict[str, Any]] = list(skipped)
     if providers:
-        executor = ThreadPoolExecutor(max_workers=min(4, len(providers)))
+        executor = ThreadPoolExecutor(max_workers=min(16, len(providers)))
         future_map = {
-            executor.submit(provider.search, _live_query(query, role_key, service_name), service_limit): service_name
+            executor.submit(_provider_live_search, provider, _live_query(query, role_key, service_name), service_limit): service_name
             for service_name, provider in providers
         }
         done, pending = wait(future_map, timeout=service_timeout)
         for future in done:
             service_name = future_map[future]
             try:
-                service_results = future.result()
+                payload = future.result()
             except Exception as exc:  # noqa: BLE001
                 errors.append({"service": service_name, "reason": str(exc)})
                 continue
-            results.extend(_summarize_live_result(item) for item in service_results)
+            for provider_error in payload["errors"]:
+                errors.append({"service": service_name, **provider_error})
+            results.extend(_summarize_live_result(item) for item in payload["results"])
         for future in pending:
             service_name = future_map[future]
             future.cancel()
@@ -2474,9 +2372,11 @@ def _live_search_context(
         executor.shutdown(wait=False, cancel_futures=True)
 
     bounded_results = results[: max(1, service_limit) * max(1, len(providers))]
+    layer_coverage: dict[str, int] = {}
+    for service_name, _ in providers:
+        layer_name = SERVICE_SOURCE_LAYER_INDEX.get(service_name, "other")
+        layer_coverage[layer_name] = layer_coverage.get(layer_name, 0) + 1
     return {
-        "search_mode": mode,
-        "mode_label": _search_mode_label(mode),
         "search_profile": config.get("search_profile"),
         "execution_policy": config.get("execution_policy"),
         "source_layers": config.get("source_layers", {}),
@@ -2491,9 +2391,59 @@ def _live_search_context(
         "provider_budget": {
             "max_live_providers": max_providers,
             "selected": len(providers),
-            "skipped": len(errors),
+            "skipped": len(skipped),
+            "layer_coverage": layer_coverage,
         },
     }
+
+
+LIVE_RESULT_ERROR_STATUSES = {
+    "error",
+    "failed",
+    "timeout",
+    "setup_required",
+    "manual_required",
+    "manual_setup",
+    "config_error",
+    "temporarily_unavailable",
+    "skipped",
+    "deferred",
+    "empty",
+}
+
+
+def _provider_live_search(provider, query: str, limit: int) -> dict[str, list[dict[str, Any]]]:
+    """Run one provider search and keep error/status entries out of results.
+
+    Providers that expose search_with_errors already separate the two; for the
+    rest, entries whose retrieval_status marks a failure are rerouted to errors
+    so they never reach lead extraction or evidence summaries as results."""
+
+    search_with_errors = getattr(provider, "search_with_errors", None)
+    if callable(search_with_errors):
+        payload = search_with_errors(query, limit)
+        raw_results = list(payload.get("results") or [])
+        errors = [dict(error) for error in payload.get("errors") or []]
+    else:
+        raw_results = list(provider.search(query, limit) or [])
+        errors = []
+
+    results: list[dict[str, Any]] = []
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("retrieval_status") or "").strip().lower()
+        if status in LIVE_RESULT_ERROR_STATUSES:
+            error_entry: dict[str, Any] = {
+                "status": status,
+                "reason": str(item.get("error") or item.get("snippet") or status)[:300],
+            }
+            if item.get("platform"):
+                error_entry["platform"] = item["platform"]
+            errors.append(error_entry)
+            continue
+        results.append(item)
+    return {"results": results, "errors": errors}
 
 
 def _search_service_health(router, service_name: str) -> dict[str, Any]:

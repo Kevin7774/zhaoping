@@ -180,6 +180,9 @@ def test_service_config_defaults_exist() -> None:
         "xiaohongshu",
         "linkedin",
         "youtube",
+        "twitter",
+        "reddit",
+        "weixin",
     }
     assert config.service("opencli_web_read_search").provider == "opencli_command"
     assert config.service("opencli_web_read_search").model_extra["source_type"] == "adaptive_web_scraping"
@@ -5964,6 +5967,9 @@ def test_opencli_platform_search_provider_runs_configured_command(monkeypatch: p
 
     assert calls[0] == ["opencli", "doctor"]
     assert calls[1] == ["opencli", "bilibili", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"]
+    assert ["opencli", "twitter", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
+    assert ["opencli", "reddit", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
+    assert ["opencli", "weixin", "search", "robotics diffusion policy", "--limit", "2", "-f", "json"] in calls
     assert results[0]["source_key"] == "opencli_platform_search"
     assert results[0]["name_zh"] == "OpenCLI 平台搜索"
     assert results[0]["source_type"] == "browser_platform_search"

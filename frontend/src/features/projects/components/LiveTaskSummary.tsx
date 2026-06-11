@@ -24,7 +24,7 @@ type LeadIngestionStats = {
 };
 
 type SearchRunTrace = {
-  searchModeLabel: string;
+  searchProfile: string;
   executionPolicy: string;
   sourceLayers: string[];
   resultCount: number;
@@ -121,7 +121,7 @@ function SearchRunTraceSummary({ trace }: { trace: SearchRunTrace }) {
       <div className="flex items-center justify-between gap-3">
         <div className="text-[12px] font-semibold text-[#6B7280]">搜索运行追踪</div>
         <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-medium text-[#2563EB]">
-          {trace.searchModeLabel}
+          {trace.searchProfile}
         </span>
       </div>
       <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] leading-[16px] text-[#6B7280]">
@@ -243,7 +243,7 @@ function normalizeSearchRunTrace(value: unknown): SearchRunTrace | null {
     : [];
   const rawErrors = Array.isArray(providers.errors) ? providers.errors : [];
   return {
-    searchModeLabel: readString(value.search_mode_label) || readString(value.search_mode) || "搜索模式未知",
+    searchProfile: readString(value.search_profile) || "candidate_sourcing",
     executionPolicy: readString(value.execution_policy) || "",
     sourceLayers,
     resultCount: readNumber(value.result_count),

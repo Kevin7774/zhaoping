@@ -23,7 +23,7 @@ describe("LiveTaskSummary", () => {
             message: "检索证据生成",
             data: {
               search_run_trace: {
-                search_mode_label: "社媒扩展",
+                search_profile: "candidate_sourcing",
                 execution_policy: "deep_live",
                 source_layers: { academic: true, social: true, code_model: true },
                 result_count: 7,
@@ -51,7 +51,8 @@ describe("LiveTaskSummary", () => {
     );
 
     expect(screen.getByText("搜索运行追踪")).toBeTruthy();
-    expect(screen.getByText("社媒扩展")).toBeTruthy();
+    expect(screen.getByText("candidate_sourcing")).toBeTruthy();
+    expect(screen.queryByText("社媒扩展")).toBeNull();
     expect(screen.getByText("deep_live")).toBeTruthy();
     expect(screen.getByText("academic / social / code_model")).toBeTruthy();
     expect(screen.getByText("7")).toBeTruthy();

@@ -354,20 +354,23 @@ class AgentReachSocialSearchProvider:
         self.freshness = freshness
 
     def search(self, query: str, limit: int = 5) -> list[dict]:
+        return self.search_with_errors(query, limit)["results"]
+
+    def search_with_errors(self, query: str, limit: int = 5) -> dict[str, list[dict[str, Any]]]:
+        """Fan out to platform CLIs; real hits go to results, failures go to errors."""
         normalized_limit = max(1, min(int(limit), 20))
         results: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
         rank = 1
         for platform, settings in self.platform_commands.items():
             command = str(settings.get("command") or "")
             args_template = [str(item) for item in settings.get("args", [])]
             name_zh = str(settings.get("name_zh") or platform)
             if not command or not args_template:
-                results.append(self._status_result(query, rank, platform, name_zh, "config_error", "Missing command config."))
-                rank += 1
+                errors.append(self._error_entry(platform, name_zh, "config_error", "Missing command config."))
                 continue
             if not shutil.which(command):
-                results.append(self._status_result(query, rank, platform, name_zh, "setup_required", f"Missing command: {command}"))
-                rank += 1
+                errors.append(self._error_entry(platform, name_zh, "setup_required", f"Missing command: {command}"))
                 continue
 
             args = [command, *self._render_args(args_template, query=query, limit=normalized_limit)]
@@ -379,25 +382,22 @@ class AgentReachSocialSearchProvider:
                     text=True,
                     timeout=self.timeout_seconds,
                 )
-            except subprocess.TimeoutExpired as exc:
-                results.append(self._status_result(query, rank, platform, name_zh, "error", f"Timed out after {self.timeout_seconds}s"))
-                rank += 1
+            except subprocess.TimeoutExpired:
+                errors.append(self._error_entry(platform, name_zh, "timeout", f"Timed out after {self.timeout_seconds}s"))
                 continue
             if completed.returncode != 0:
                 message = (completed.stderr or completed.stdout or "").strip()[:300]
-                results.append(self._status_result(query, rank, platform, name_zh, "error", message))
-                rank += 1
+                errors.append(self._error_entry(platform, name_zh, "error", message))
                 continue
 
             items = self._items_from_output(completed.stdout)
             if not items:
-                results.append(self._status_result(query, rank, platform, name_zh, "empty", "No results returned."))
-                rank += 1
+                errors.append(self._error_entry(platform, name_zh, "empty", "No results returned."))
                 continue
             for item in items[:normalized_limit]:
                 results.append(self._to_result(query=query, rank=rank, platform=platform, name_zh=name_zh, item=item))
                 rank += 1
-        return results
+        return {"results": results, "errors": errors}
 
     def plan(self, query: str, limit: int = 5) -> dict[str, Any]:
         return {
@@ -519,23 +519,14 @@ class AgentReachSocialSearchProvider:
             "raw": item,
         }
 
-    def _status_result(self, query: str, rank: int, platform: str, name_zh: str, status: str, message: str) -> dict[str, Any]:
+    def _error_entry(self, platform: str, name_zh: str, status: str, message: str) -> dict[str, Any]:
         return {
             "source_key": self.service_name,
-            "name_zh": "Agent-Reach 社媒搜索",
-            "source_type": "social_platform_search",
-            "query": query,
-            "rank": rank,
             "platform": platform,
             "platform_name_zh": name_zh,
-            "title": f"{name_zh} {status}",
-            "url": self.project_url,
-            "snippet": message,
-            "published_at": None,
-            "retrieval_status": status,
-            "error": message if status in {"setup_required", "config_error", "error"} else None,
-            "risk_level": self.risk_level,
-            "freshness": self.freshness,
+            "status": status,
+            "reason": message[:300],
+            "setup_url": self.project_url,
         }
 
     def _runtime_requirements(self) -> list[dict[str, Any]]:

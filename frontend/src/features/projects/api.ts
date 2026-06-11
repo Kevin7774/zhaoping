@@ -8,7 +8,6 @@ import {
   type ActionExplanation,
   type ProviderPreflightItem,
   type SearchConfig,
-  type SearchMode,
 } from "./explainableAction";
 
 export type WeeklyReport = {
@@ -36,7 +35,6 @@ export type ProjectRecord = {
 export type RunProjectScenarioAction = "job_analysis" | "find_candidates" | "candidate_evaluation";
 
 export type ProjectScenarioRunOptions = {
-  searchMode?: SearchMode;
   searchConfig?: SearchConfig;
   providerPreflight?: ProviderPreflightItem[];
   actionExplanation?: ActionExplanation;
@@ -595,9 +593,7 @@ export function runProjectScenario(
       action,
       ...(options.searchConfig
         ? { ...searchConfigToBackendState(options.searchConfig), archive_search_evidence: true }
-        : options.searchMode
-          ? { search_mode: options.searchMode, searchMode: options.searchMode }
-          : {}),
+        : {}),
       ...(options.providerPreflight ? { provider_preflight: options.providerPreflight } : {}),
       ...(options.actionExplanation ? { action_explainability: options.actionExplanation } : {}),
     },

@@ -1,6 +1,5 @@
-export type SearchMode = "planning_only" | "live_recruiting" | "due_diligence" | "social_expansion";
-export type SearchProfile = "candidate_sourcing" | "due_diligence" | "social_expansion";
-export type SearchExecutionPolicy = "planning_only" | "bounded_live" | "deep_live";
+export type SearchProfile = "candidate_sourcing" | "due_diligence";
+export type SearchExecutionPolicy = "bounded_live" | "deep_live";
 export type SearchSourceLayer =
   | "liveWeb"
   | "academic"
@@ -41,23 +40,14 @@ export type ActionExplanation = {
   inputSummary: string;
   expectedOutput: string;
   capabilityGate: string;
-  searchMode?: SearchMode;
   searchConfig?: SearchConfig;
   providerPreflight?: ProviderPreflightItem[];
   taskId?: string;
   failureReason?: string;
 };
 
-export const SEARCH_MODE_OPTIONS: Array<{ value: SearchMode; label: string }> = [
-  { value: "live_recruiting", label: "实时招聘搜索" },
-  { value: "planning_only", label: "规划模式" },
-  { value: "due_diligence", label: "尽调深搜" },
-  { value: "social_expansion", label: "社媒扩展" },
-];
-
 export const SEARCH_EXECUTION_POLICY_OPTIONS: Array<{ value: SearchExecutionPolicy; label: string }> = [
   { value: "bounded_live", label: "标准联网" },
-  { value: "planning_only", label: "仅规划" },
   { value: "deep_live", label: "深度联网" },
 ];
 
@@ -72,13 +62,6 @@ export const SEARCH_SOURCE_LAYER_OPTIONS: Array<{ value: SearchSourceLayer; labe
   { value: "dueDiligence", label: "尽调源", highRisk: true },
 ];
 
-const SEARCH_MODE_SERVICE_FILTER: Record<SearchMode, Set<string> | null> = {
-  planning_only: null,
-  live_recruiting: null,
-  due_diligence: null,
-  social_expansion: new Set(["agent_reach_social_search", "opencli_platform_search"]),
-};
-
 const DEFAULT_SOURCE_LAYERS: SearchSourceLayers = {
   liveWeb: true,
   academic: true,
@@ -92,8 +75,7 @@ const DEFAULT_SOURCE_LAYERS: SearchSourceLayers = {
 };
 
 const POLICY_BUDGETS: Record<SearchExecutionPolicy, SearchBudget> = {
-  planning_only: { maxProviders: 0, perProviderLimit: 0, timeoutSeconds: 0, maxCrawlPages: 0 },
-  bounded_live: { maxProviders: 8, perProviderLimit: 2, timeoutSeconds: 6, maxCrawlPages: 0 },
+  bounded_live: { maxProviders: 9, perProviderLimit: 2, timeoutSeconds: 6, maxCrawlPages: 0 },
   deep_live: { maxProviders: 14, perProviderLimit: 3, timeoutSeconds: 12, maxCrawlPages: 3 },
 };
 
@@ -225,7 +207,7 @@ export async function runExplainableAction<T>({
 
 export function providerPreflightFromIntegrations(
   integrations: IntegrationLike | null,
-  searchConfigOrMode: SearchConfig | SearchMode,
+  searchConfig: SearchConfig,
 ): ProviderPreflightItem[] {
   const searchCapability = integrations?.capabilities?.find(
     (item) => item.service_type === "search" || item.id === "search_api",
@@ -235,13 +217,8 @@ export function providerPreflightFromIntegrations(
   }
 
   const services = Array.isArray(searchCapability.services) ? searchCapability.services : [];
-  const filter = providerFilterForSearchInput(searchConfigOrMode);
-  const planningOnly = isSearchConfig(searchConfigOrMode) && searchConfigOrMode.executionPolicy === "planning_only";
-  const filteredServices = planningOnly
-    ? services.filter((service) => service.name === "talent_source_catalog" || service.connected)
-    : filter
-      ? services.filter((service) => service.name && filter.has(service.name))
-      : services;
+  const filter = providerFilterForSearchConfig(searchConfig);
+  const filteredServices = filter ? services.filter((service) => service.name && filter.has(service.name)) : services;
 
   if (!filteredServices.length) {
     return [
@@ -267,21 +244,15 @@ export function providerPreflightSummary(items: ProviderPreflightItem[]) {
   return { total, ready, blocked };
 }
 
-function providerFilterForSearchInput(searchConfigOrMode: SearchConfig | SearchMode): Set<string> | null {
-  if (!isSearchConfig(searchConfigOrMode)) return SEARCH_MODE_SERVICE_FILTER[searchConfigOrMode];
-  if (searchConfigOrMode.executionPolicy === "planning_only") return null;
+function providerFilterForSearchConfig(searchConfig: SearchConfig): Set<string> | null {
   const services = new Set<string>();
-  for (const [layer, enabled] of Object.entries(searchConfigOrMode.sourceLayers)) {
+  for (const [layer, enabled] of Object.entries(searchConfig.sourceLayers)) {
     if (!enabled) continue;
     for (const service of SEARCH_SOURCE_LAYER_SERVICES[layer as SearchSourceLayer] ?? []) {
       services.add(service);
     }
   }
   return services;
-}
-
-function isSearchConfig(value: SearchConfig | SearchMode): value is SearchConfig {
-  return typeof value === "object" && value !== null && "sourceLayers" in value;
 }
 
 function statusReason(status?: string) {
