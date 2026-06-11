@@ -15,14 +15,15 @@
 | JSON Workflow | 支持 `search`、`llm_prompt`、`structured_extract`、`save_artifact`、`human_gate`；长 search 输出写入 artifact。 | `app/core/workflow_dsl.py`、`app/core/workflow_runner.py` |
 | 搜索情报 | `plan -> run -> evidence -> brief -> archive`，支持 watchlist、recent/diff、Evidence Ledger。 | `app/providers/search.py`、`app/core/intelligence_archive.py` |
 | 候选人数据 | 简历解析、项目岗位简历上传、本地简历导入、向量入库、项目库/向量库匹配、候选人线索入库。 | `app/api/routers/resumes.py`、`app/rag/ingest_worker.py` |
-| 分群与触达 | Segment 查询/保存/读取；邮件草稿、人工编辑、模拟或真实发送保护、触达历史。 | `app/api/routers/segments.py`、`app/api/routers/outreach.py` |
+| 分群与触达 | Segment 查询/保存/读取；邮件草稿、人工编辑、模拟触达历史。 | `app/api/routers/segments.py`、`app/api/routers/outreach.py` |
 | 评估闭环 | Self-RSI local/full 评估，输出能力 trace、反馈缺口、测试结果和迭代计划。 | `app/providers/evaluation.py` |
-| 集成状态 | 动态读取 `config/services.toml`，返回 provider 状态、中文名、代码路径、缺密钥/缺工具状态，不返回密钥值。 | `GET /integrations/status` |
+| 集成状态 | 动态读取 `config/services.toml`，返回 provider 状态、中文名、代码路径和服务明细；当前注册表不保留 disabled / missing_key 占位项。 | `GET /integrations/status` |
 | 前端控制台 | Workflow、Search Intel、Archive Watch、Candidate、Evaluation、Ops 工作区和能力注册表。 | `frontend/src/capabilities/capabilityRegistry.js` |
 
 ## 最新搜索能力
 
 搜索能力分为本地目录规划、可控 live provider、浏览器授权平台搜索和网页正文读取。搜索型项目任务使用结构化 `frontend_state`。
+当前 `config/services.toml` 中 search service 共 38 个：1 个默认联邦入口、1 个 catalog 规划服务、36 个前端来源层可执行 provider。ProjectDetailPage 默认启用 14 个候选人搜索 provider，深度联网可手动扩展到 36 个。
 
 ```json
 {
@@ -107,7 +108,7 @@ opencli weixin search ...
 | 原子工作流 | `GET /workflow/meta`、`POST /workflow/sessions`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/run`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/retry`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/skip` | system | 节点级控制 A/B/C/D。 |
 | JSON Workflow | `POST /workflows/validate`、`POST /workflows/run` | productized/system | 校验并运行自定义 search、LLM、结构化抽取、artifact 和 human gate 流程。 |
 | RSI 评估 | `POST /rsi/evaluate` | productized | 运行 local/full 评估。 |
-| 分群与触达 | `POST /segments/query`、`POST/GET /segments`、`GET /segments/{segment_id}`、`POST /outreach/draft`、`PATCH /outreach/drafts/{draft_id}`、`POST /outreach/send`、`GET /outreach/history` | productized | Segment、邮件草稿、人工编辑、发送和历史。 |
+| 分群与触达 | `POST /segments/query`、`POST/GET /segments`、`GET /segments/{segment_id}`、`POST /outreach/draft`、`PATCH /outreach/drafts/{draft_id}`、`POST /outreach/send`、`GET /outreach/history` | productized | Segment、邮件草稿、人工编辑、模拟确认和历史。 |
 | 周报 | `POST /reports/weekly`、`GET /projects/{project_id}/reports/latest`、`GET /reports/{report_id}` | productized | 周报写入与读取。 |
 | 认证与开发监控 | `POST /auth/login`、`GET /auth/me`、`POST /monitor/start`、`GET /monitor/status` | productized/system | 登录态和开发监控。 |
 
@@ -129,7 +130,7 @@ opencli weixin search ...
 | `app/core/integration_status.py` | 集成状态聚合。 |
 | `app/core/router.py` | `ServiceRouter`，按 `config/services.toml` 构造 provider。 |
 | `app/core/config.py` | 服务配置加载与校验。 |
-| `app/providers/` | document、OCR、embedding、vector、search、scraping、LLM、email、database、MCP、evaluation、structured output provider。 |
+| `app/providers/` | document、OCR、embedding、vector、search、scraping、LLM、evaluation、structured output provider；email/database/MCP 实现保留为代码能力，但当前未注册为可用服务。 |
 | `app/skills/tech_space.py` | 12 个机器人岗位、能力标准和团队画像。 |
 | `app/skills/search_sources.py` | 搜索来源目录。 |
 | `app/db/schema.py` / `app/models/` | 项目库 schema/model。 |
@@ -155,16 +156,14 @@ pnpm --dir frontend install
 `.env` 只保存在本机，不提交。常用变量：
 
 ```bash
-PROJECT_DATABASE_URL=postgresql+psycopg://...
 TASK_DATABASE_URL=postgresql+psycopg://...
+PROJECT_DATABASE_URL=postgresql+psycopg://...
+DATABASE_URL=postgresql+psycopg://...
 OPENROUTER_API_KEY=...
 BRAVE_SEARCH_API_KEY=...
 GITHUB_TOKEN=...
 HF_TOKEN=...
 GNEWS_API_KEY=...
-RESEND_API_KEY=...
-HUNTER_API_KEY=...
-ZEROBOUNCE_API_KEY=...
 ALIBABA_CLOUD_ACCESS_KEY_ID=...
 ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 ```
@@ -195,7 +194,7 @@ psql "$DATABASE_URL" -f app/db/create_schema.sql
 .venv/bin/python scripts/create_db.py
 ```
 
-如果不配置数据库，项目仍可使用本地默认 SQLite task DB 和 disabled project DB 路由，但项目持久化能力会受限。
+如果不配置数据库，本地开发会回退到 SQLite 项目库和 SQLite task DB；生产环境应配置 PostgreSQL，避免使用 SQLite 兜底。
 
 ## 启动
 
@@ -378,24 +377,19 @@ opencli twitter search "robotics diffusion policy" --limit 1 -f json
 
 ## 统一配置和路由
 
-所有外部能力先在 `config/services.toml` 注册，再通过 `ServiceRouter` 调用。业务代码不要直接硬编码 OCR、搜索、Embedding、Qdrant、MCP、LLM、邮件或 scraping 实现。
+所有外部能力先在 `config/services.toml` 注册，再通过 `ServiceRouter` 调用。业务代码不要直接硬编码 OCR、搜索、Embedding、Qdrant、LLM 或 scraping 实现；没有注册在 services 的 provider 不作为当前可用能力展示。
 
 当前默认服务：
 
 ```toml
 [defaults]
-email_delivery = "resend_email_delivery"
-email_discovery = "hunter_email_discovery"
-email_verification = "zerobounce_email_verification"
 document_parser = "auto_document_parser"
 embedding = "bge_m3_local"
 evaluation = "self_rsi_evaluator"
 vector_store = "qdrant_local"
 ocr = "aliyun_ocr"
 search = "due_diligence_federated_search"
-mcp = "disabled_mcp"
 structured_output = "outlines_structured_output"
-database = "disabled_database"
 llm = "openrouter_auto_reasoning"
 scraping = "opencli_crawl_scrape"
 ```

@@ -350,6 +350,50 @@ def test_create_project_rejects_duplicate_project_id(client: TestClient) -> None
     assert response.json()["detail"] == "Project already exists: project_2026_ai_team"
 
 
+def test_update_project_persists_name_and_status(client: TestClient) -> None:
+    response = client.patch(
+        "/projects/project_2026_ai_team",
+        json={"name": "2026 AI 团队招聘更新版", "status": "paused"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "2026 AI 团队招聘更新版"
+    assert response.json()["status"] == "paused"
+    reloaded = client.get("/projects/project_2026_ai_team")
+    assert reloaded.json()["name"] == "2026 AI 团队招聘更新版"
+    assert reloaded.json()["status"] == "paused"
+
+
+def test_update_project_rejects_unknown_project(client: TestClient) -> None:
+    response = client.patch("/projects/missing", json={"name": "不存在", "status": "active"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project not found: missing"
+
+
+def test_delete_project_removes_project_owned_records(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    response = client.delete("/projects/project_2026_ai_team")
+
+    assert response.status_code == 204
+    assert client.get("/projects/project_2026_ai_team").status_code == 404
+    assert client.get("/projects/project_2026_ai_team/jobs").status_code == 404
+    with session_factory() as session:
+        assert session.get(Project, "project_2026_ai_team") is None
+        assert session.scalar(select(func.count(Job.id))) == 0
+        assert session.scalar(select(func.count(JobCandidate.id))) == 0
+        assert session.scalar(select(func.count(Candidate.id))) == 3
+
+
+def test_delete_project_rejects_unknown_project(client: TestClient) -> None:
+    response = client.delete("/projects/missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project not found: missing"
+
+
 def test_upload_project_material_saves_file_for_bp_generation(
     client: TestClient,
     tmp_path,

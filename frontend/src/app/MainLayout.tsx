@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { navigationItemsForProject } from "./navigation";
 import { getStoredAuthUser, loginWithCompanyEmail, signOut, type AuthUser } from "../features/auth/api";
-import { listProjects, type ProjectRecord } from "../features/projects/api";
-import { rememberActiveProjectId, useActiveProjectId } from "../pages/projectWorkspace";
+import { useActiveProjectId } from "../pages/projectWorkspace";
 
 function activeSection(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "dashboard";
@@ -26,18 +25,12 @@ function activeSection(pathname: string) {
   return "dashboard";
 }
 
-function sectionPath(projectId: string, section: string) {
-  return navigationItemsForProject(projectId).find((item) => item.section === section)?.path ?? `/projects/${encodeURIComponent(projectId)}`;
-}
-
 export function MainLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const activeProjectId = useActiveProjectId();
   const currentSection = activeSection(location.pathname);
   const navigationItems = navigationItemsForProject(activeProjectId);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
-  const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
   const [loginEmail, setLoginEmail] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
@@ -56,22 +49,6 @@ export function MainLayout() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    listProjects()
-      .then((items) => {
-        if (!cancelled) setProjects(items);
-      })
-      .catch(() => {
-        if (!cancelled) setProjects([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const activeProjectName = projects.find((project) => project.projectId === activeProjectId)?.name ?? activeProjectId;
 
   async function handleLogin() {
     if (!loginEmail.trim()) {
@@ -141,38 +118,7 @@ export function MainLayout() {
 
       <div className="lg:pl-[232px]">
         <header className="sticky top-0 z-20 min-h-16 border-b border-[#E5E7EB] bg-white/85 backdrop-blur-md">
-          <div className="flex min-h-16 max-w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-            <div className="hidden min-w-0 text-[13px] leading-5 text-[#6B7280] md:block">
-              招聘项目 <span className="mx-2 text-[#D1D5DB]">/</span> {activeProjectName}
-            </div>
-            <label className="hidden min-w-[220px] text-[12px] font-medium text-[#6B7280] md:block">
-              <span className="sr-only">切换项目</span>
-              <select
-                value={activeProjectId}
-                onChange={(event) => {
-                  const nextProjectId = event.currentTarget.value;
-                  rememberActiveProjectId(nextProjectId);
-                  navigate(sectionPath(nextProjectId, currentSection));
-                }}
-                className="h-[38px] w-full rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] text-[#111827] outline-none transition focus:border-[#BFDBFE] focus:bg-white focus:ring-2 focus:ring-[#EFF6FF]"
-              >
-                {projects.some((project) => project.projectId === activeProjectId) ? null : (
-                  <option value={activeProjectId}>{activeProjectName}</option>
-                )}
-                {projects.map((project) => (
-                  <option key={project.projectId} value={project.projectId}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="relative hidden w-[360px] max-w-[38vw] md:block">
-              <span className="sr-only">搜索候选人、岗位、项目</span>
-              <input
-                className="h-[38px] w-full rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#BFDBFE] focus:bg-white focus:ring-2 focus:ring-[#EFF6FF]"
-                placeholder="搜索候选人、岗位、项目"
-              />
-            </label>
+          <div className="flex min-h-16 max-w-full flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-6">
             <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
               <span
                 className={[

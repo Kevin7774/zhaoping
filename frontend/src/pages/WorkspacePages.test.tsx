@@ -107,9 +107,28 @@ const integrationsPayload = {
   capabilities: [
     { id: "search_api", service_type: "search", label: "Search API", status: "active", connected: true, code_path: "app/providers/search.py" },
     { id: "llm_api", service_type: "llm", label: "LLM API", status: "active", connected: true, code_path: "app/providers/llm.py" },
-    { id: "email_delivery_api", service_type: "email_delivery", label: "Email API", status: "missing_key", connected: false },
+    { id: "vector_api", service_type: "vector_store", label: "Vector API", status: "active", connected: true, code_path: "app/providers/vector_store.py" },
   ],
-  services: [],
+  services: [
+    {
+      name: "brave_web_search",
+      name_zh: "Brave 开放网页搜索",
+      type: "search",
+      provider: "brave_web",
+      status: "available",
+      is_default: false,
+      code_path: "app/providers/search.py",
+    },
+    {
+      name: "openrouter_auto_reasoning",
+      name_zh: "OpenRouter 自动推理",
+      type: "llm",
+      provider: "openrouter_chat",
+      status: "active",
+      is_default: true,
+      code_path: "app/providers/llm.py",
+    },
+  ],
 };
 
 const reportPayload = {
@@ -140,7 +159,7 @@ describe("workspace sidebar pages", () => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/projects") return jsonResponse([projectPayload]);
+      if (url === "/api/projects") return jsonResponse([projectPayload, hannoProjectPayload]);
       if (url === "/api/projects/project_2026_ai_team") return jsonResponse(projectPayload);
       if (url === "/api/projects/project_2026_ai_team/jobs") return jsonResponse(jobsPayload);
       if (url.startsWith("/api/projects/project_2026_ai_team/candidates")) {
@@ -210,7 +229,7 @@ describe("workspace sidebar pages", () => {
   });
 
   it.each([
-    ["工作台", <DashboardPage />, "项目列表"],
+    ["工作台", <DashboardPage />, "项目一览"],
     ["岗位分析", <JobsPage />, "岗位列表"],
     ["找候选人", <TalentMapPage />, "来源分布"],
     ["候选人评估", <ScenariosPage />, "候选人评估队列"],
@@ -224,6 +243,111 @@ describe("workspace sidebar pages", () => {
 
     expect(await screen.findByRole("heading", { name: title })).toBeTruthy();
     expect(await screen.findByText(marker)).toBeTruthy();
+  });
+
+  it("renders a project-management dashboard without development monitor noise", async () => {
+    renderPage(<DashboardPage />);
+
+    expect(await screen.findByRole("heading", { name: "工作台" })).toBeTruthy();
+    expect(await screen.findByText("项目数量")).toBeTruthy();
+    expect(await screen.findByText("2")).toBeTruthy();
+    expect(await screen.findByText("项目管理")).toBeTruthy();
+    expect(await screen.findByText("项目一览")).toBeTruthy();
+    expect(screen.queryByText("测试监控")).toBeNull();
+    expect(screen.queryByText("一键启动监控")).toBeNull();
+    expect(screen.queryByText("开放岗位")).toBeNull();
+  });
+
+  it("creates, updates, enters, and deletes projects through real project endpoints", async () => {
+    const projectList = [projectPayload, hannoProjectPayload];
+    const createdProject = {
+      id: "project_new_market",
+      name: "新市场项目",
+      status: "active",
+      createdAt: "2026-06-11T00:00:00Z",
+      openJobs: 0,
+      totalCandidates: 0,
+      awaitingHuman: 0,
+      averageMatchScore: 0,
+    };
+    const updatedProject = { ...projectPayload, name: "真实后端项目更新版", status: "paused" };
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/projects" && (!init || init.method === "GET")) return jsonResponse(projectList);
+      if (url === "/api/projects" && init?.method === "POST") {
+        projectList.unshift(createdProject);
+        return jsonResponse(createdProject, 201);
+      }
+      if (url === "/api/projects/project_2026_ai_team" && init?.method === "PATCH") {
+        projectList.splice(1, 1, updatedProject);
+        return jsonResponse(updatedProject);
+      }
+      if (url === "/api/projects/project_2026_ai_team" && init?.method === "DELETE") {
+        const index = projectList.findIndex((project) => project.id === "project_2026_ai_team");
+        if (index >= 0) projectList.splice(index, 1);
+        return new Response(null, { status: 204 });
+      }
+      return jsonResponse({ detail: `Unhandled ${url}` }, 404);
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderPage(<DashboardPage />);
+
+    expect(await screen.findByText("真实后端项目")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("项目 ID"), { target: { value: "project_new_market" } });
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "新市场项目" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ id: "project_new_market", name: "新市场项目", status: "active" }),
+        }),
+      );
+    });
+    expect(await screen.findByText("新市场项目")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 真实后端项目" }));
+    fireEvent.change(screen.getByLabelText("编辑项目名称"), { target: { value: "真实后端项目更新版" } });
+    fireEvent.change(screen.getByLabelText("编辑状态"), { target: { value: "paused" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ name: "真实后端项目更新版", status: "paused" }),
+        }),
+      );
+    });
+    expect(await screen.findByText("真实后端项目更新版")).toBeTruthy();
+
+    const enterLink = screen.getByRole("link", { name: "进入项目 真实后端项目更新版" });
+    expect(enterLink.getAttribute("href")).toBe("/projects/project_2026_ai_team");
+
+    window.localStorage.setItem(activeProjectStorageKey, "project_2026_ai_team");
+    fireEvent.click(screen.getByRole("button", { name: "删除 真实后端项目更新版" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("真实后端项目更新版")).toBeNull());
+    expect(window.localStorage.getItem(activeProjectStorageKey)).toBeNull();
+  });
+
+  it("shows concrete backend services on the integrations page", async () => {
+    renderPage(<IntegrationsPage />);
+
+    expect(await screen.findByText("服务明细")).toBeTruthy();
+    expect(await screen.findByText("brave_web_search")).toBeTruthy();
+    expect(await screen.findByText("OpenRouter 自动推理")).toBeTruthy();
+    expect(screen.queryByText("email_delivery_api")).toBeNull();
   });
 
   it("uploads a resume from the candidates page and refreshes backend candidates", async () => {

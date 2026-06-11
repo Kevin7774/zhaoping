@@ -87,7 +87,7 @@ def test_unstable_search_providers_are_removed_from_active_surfaces() -> None:
 
 def test_search_source_layers_cover_all_remaining_routable_search_providers() -> None:
     config = load_app_config()
-    internal_services = {"disabled_search", "talent_source_catalog", "due_diligence_federated_search"}
+    internal_services = {"talent_source_catalog", "due_diligence_federated_search"}
     routable_search_services = {
         name
         for name, service in config.services.items()
@@ -100,6 +100,49 @@ def test_search_source_layers_cover_all_remaining_routable_search_providers() ->
     }
 
     assert layer_services == routable_search_services
+
+
+def test_removed_disabled_and_missing_key_services_do_not_surface() -> None:
+    config = load_app_config()
+    status = get_integration_status(config)
+    services = {service["name"]: service for service in status["services"]}
+    capabilities = {capability["id"]: capability for capability in status["capabilities"]}
+
+    removed_services = {
+        "disabled_search",
+        "disabled_mcp",
+        "disabled_llm",
+        "disabled_database",
+        "resend_email_delivery",
+        "sendgrid_email_delivery",
+        "postmark_email_delivery",
+        "hunter_email_discovery",
+        "zerobounce_email_verification",
+        "neverbounce_email_verification",
+    }
+    removed_capabilities = {
+        "code_api",
+        "email_delivery_api",
+        "email_discovery_api",
+        "email_verification_api",
+        "mcp_api",
+        "database_api",
+    }
+
+    assert removed_services.isdisjoint(config.services)
+    assert removed_services.isdisjoint(services)
+    assert removed_capabilities.isdisjoint(capabilities)
+    assert all(service.provider != "disabled" for service in config.services.values())
+    assert all(service["status"] not in {"disabled", "missing_key"} for service in services.values())
+    assert all(
+        capability["status"] not in {"disabled", "missing_key", "not_configured"}
+        for capability in capabilities.values()
+    )
+    assert "email_delivery" not in config.defaults
+    assert "email_discovery" not in config.defaults
+    assert "email_verification" not in config.defaults
+    assert "mcp" not in config.defaults
+    assert "database" not in config.defaults
 
 
 def test_all_role_capabilities_exist() -> None:
@@ -398,22 +441,12 @@ def test_no_key_or_unavailable_integrations_are_not_registered() -> None:
     }
 
     assert retired_services.isdisjoint(config.services)
-    # Email capabilities are first-class registered services; without keys they
-    # surface as missing_key instead of pretending the capability doesn't exist.
-    assert config.default_service_name("email_delivery") == "resend_email_delivery"
-    assert config.default_service_name("email_discovery") == "hunter_email_discovery"
-    assert config.default_service_name("email_verification") == "zerobounce_email_verification"
     assert config.default_service_name("scraping") == "opencli_crawl_scrape"
 
     status = get_integration_status(config)
     services = {service["name"]: service for service in status["services"]}
     assert retired_services.isdisjoint(services)
-    # Only the explicitly onboarded email capabilities may sit in missing_key
-    # while their credentials are pending; everything else must be keyed or retired.
-    missing_key_types = {
-        service["type"] for service in services.values() if service["status"] == "missing_key"
-    }
-    assert missing_key_types <= {"email_delivery", "email_discovery", "email_verification"}
+    assert all(service["status"] != "missing_key" for service in services.values())
 
 
 def test_search_source_layers_reference_real_routable_providers() -> None:
@@ -463,7 +496,7 @@ def test_router_registries_and_structured_output_provider() -> None:
     assert "evidence_record_schema" in router.skill_registry.all()
     assert "search_data_sources" in router.skill_registry.all()
     assert "home_robot_recruiting_scenarios" in router.skill_registry.all()
-    assert "disabled_mcp" in router.mcp_registry.services()
+    assert router.mcp_registry.services() == {}
     assert router.structured_output("outlines_structured_output").model_service == "openrouter_auto_reasoning"
     assert router.llm().model == load_app_config().service("openrouter_auto_reasoning").model_extra["model"]
 
@@ -564,7 +597,7 @@ def test_integration_status_exposes_self_rsi_evaluation_api_without_secrets() ->
     assert "api_key" not in json.dumps(capability, ensure_ascii=False).lower()
 
 
-def test_opencli_browser_bridge_gap_is_reported_as_manual_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_integration_status_defers_opencli_browser_bridge_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.core.integration_status as integration_status
 
     def fake_which(command: str) -> str | None:
@@ -578,33 +611,24 @@ def test_opencli_browser_bridge_gap_is_reported_as_manual_setup(monkeypatch: pyt
         timeout: int,
         check: bool,
     ) -> subprocess.CompletedProcess[str]:
-        assert args == ["opencli", "doctor"]
-        assert capture_output is True
-        assert text is True
-        assert check is False
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout="[MISSING] Extension: not connected\n[FAIL] Connectivity: failed (Browser Bridge extension not connected)",
-            stderr="",
-        )
+        raise AssertionError(f"/integrations/status must not execute OpenCLI doctor: {args}")
 
     monkeypatch.setattr(integration_status.shutil, "which", fake_which)
-    monkeypatch.setattr(integration_status.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     status = get_integration_status(load_app_config())
     services = {service["name"]: service for service in status["services"]}
     opencli_scrape = services["opencli_crawl_scrape"]
     opencli_platform = services["opencli_platform_search"]
 
-    assert opencli_scrape["status"] == "manual_setup"
-    assert opencli_platform["status"] == "manual_setup"
+    assert opencli_scrape["status"] == "active"
+    assert opencli_platform["status"] == "available"
     assert {
         "type": "browser_bridge",
         "name": "OpenCLI Browser Bridge",
-        "present": False,
+        "present": True,
         "command": "opencli",
-        "reason": "Browser Bridge extension not connected",
+        "reason": "not checked by integration status; run search probe or OpenCLI search to verify",
     } in opencli_scrape["runtime_requirements"]
 
 
@@ -726,6 +750,8 @@ def test_active_frontend_api_client_wraps_project_workspace_endpoints() -> None:
     expected_functions = {
         "getProject": "/projects/",
         "listProjects": "/projects",
+        "updateProject": "/projects/",
+        "deleteProject": "/projects/",
         "uploadProjectMaterial": "/materials/upload",
         "previewProjectFromBp": "/preview-from-bp",
         "initializeProjectFromBp": "/initialize-from-bp",
@@ -1659,7 +1685,8 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     status = get_integration_status(load_app_config())
     capabilities = {capability["id"]: capability for capability in status["capabilities"]}
 
-    assert {"search_api", "code_api", "vector_api", "llm_api"}.issubset(capabilities)
+    assert {"search_api", "vector_api", "llm_api"}.issubset(capabilities)
+    assert "code_api" not in capabilities
     assert capabilities["search_api"]["default_service"] == "due_diligence_federated_search"
     assert capabilities["search_api"]["connected"] is True
     assert capabilities["search_api"]["connected_name_zh"] == "尽调级联邦情报搜索"
@@ -1746,10 +1773,6 @@ def test_integration_status_exposes_capabilities_without_secret_values(monkeypat
     assert search_services["usaspending_awards"]["name_zh"] == "USAspending 政府采购与拨款"
     assert search_services["grants_gov_opportunities"]["status"] == "available"
     assert search_services["grants_gov_opportunities"]["name_zh"] == "Grants.gov 资助机会"
-    assert capabilities["code_api"]["status"] == "not_configured"
-    assert capabilities["code_api"]["connected"] is False
-    assert capabilities["code_api"]["connected_name_zh"] == "未接入"
-    assert capabilities["code_api"]["code_path"] is None
     assert capabilities["vector_api"]["status"] == "active"
     assert capabilities["vector_api"]["connected_name_zh"] == "本地 Qdrant 向量库"
     assert capabilities["vector_api"]["code_path"] == "app/providers/vector_store.py"
@@ -5034,11 +5057,6 @@ def test_openrouter_chat_provider_maps_messages_and_models(monkeypatch: pytest.M
 def test_recruiting_growth_services_are_configured() -> None:
     config = load_app_config()
 
-    # Email capabilities are first-class registered services; without keys they
-    # surface as missing_key instead of pretending the capability doesn't exist.
-    assert config.default_service_name("email_delivery") == "resend_email_delivery"
-    assert config.default_service_name("email_discovery") == "hunter_email_discovery"
-    assert config.default_service_name("email_verification") == "zerobounce_email_verification"
     assert config.default_service_name("scraping") == "opencli_crawl_scrape"
 
     retired_services = {
@@ -5107,11 +5125,11 @@ def test_recruiting_growth_services_show_status_without_secret_values(monkeypatc
         "browserbase_session",
     }
     assert retired_services.isdisjoint(services)
-    # Hunter/ZeroBounce keys are set by this test, so discovery/verification
-    # connect; delivery still lacks RESEND_API_KEY/OUTREACH_FROM_EMAIL.
-    assert capabilities["email_discovery_api"]["status"] in {"active", "available"}
-    assert capabilities["email_verification_api"]["status"] in {"active", "available"}
-    assert capabilities["email_delivery_api"]["status"] == "missing_key"
+    # Even if retired provider keys are present in the environment, unregistered
+    # services and capabilities must not surface in integration status.
+    assert "email_discovery_api" not in capabilities
+    assert "email_verification_api" not in capabilities
+    assert "email_delivery_api" not in capabilities
     assert capabilities["scraping_api"]["connected_name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["name_zh"] == "OpenCLI 本地抓取"
     assert services["opencli_crawl_scrape"]["code_path"] == "app/providers/scraping.py"

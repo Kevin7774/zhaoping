@@ -232,7 +232,7 @@ export const CAPABILITY_REGISTRY = [
     id: 'project_workspace',
     title: '多项目工作台',
     workspace: 'workflow',
-    description: '列出项目、创建隔离项目，并从 BP、项目提示词或两者结合预览/写入岗位矩阵。',
+    description: '列出、创建、更新、删除项目，并从 BP、项目提示词或两者结合预览/写入岗位矩阵。',
     inputs: [
       { name: 'projectId', label: 'projectId', type: 'text', required: false },
       { name: 'projectName', label: '项目名称', type: 'text', required: false },
@@ -246,6 +246,8 @@ export const CAPABILITY_REGISTRY = [
       { method: 'GET', path: '/projects', client: 'listProjects' },
       { method: 'POST', path: '/projects', client: 'createProject' },
       { method: 'GET', path: '/projects/{project_id}', client: 'getProject' },
+      { method: 'PATCH', path: '/projects/{project_id}', client: 'updateProject' },
+      { method: 'DELETE', path: '/projects/{project_id}', client: 'deleteProject' },
       { method: 'POST', path: '/projects/{project_id}/materials/upload', client: 'uploadProjectMaterial' },
       { method: 'POST', path: '/projects/{project_id}/preview-from-bp', client: 'previewProjectFromBp' },
       { method: 'POST', path: '/projects/{project_id}/initialize-from-bp', client: 'initializeProjectFromBp' },

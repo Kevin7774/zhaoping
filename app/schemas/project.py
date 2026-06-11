@@ -20,6 +20,10 @@ class ProjectCreate(ProjectRequest):
     id: str = Field(min_length=1, max_length=64)
 
 
+class ProjectUpdate(ProjectRequest):
+    pass
+
+
 class ProjectResponse(CamelModel):
     id: str
     name: str

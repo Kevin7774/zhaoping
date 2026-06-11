@@ -615,20 +615,12 @@ export function ProjectDetailPage() {
     () => capabilityGate(integrations, "search", "Search API", integrationsError),
     [integrations, integrationsError],
   );
-  const emailDeliveryGate = useMemo(
-    () => capabilityGate(integrations, "email_delivery", "邮件发送 API", integrationsError),
-    [integrations, integrationsError],
-  );
   const embeddingGate = useMemo(
     () => capabilityGate(integrations, "embedding", "Embedding API", integrationsError),
     [integrations, integrationsError],
   );
   const vectorGate = useMemo(
     () => capabilityGate(integrations, "vector_store", "Vector API", integrationsError),
-    [integrations, integrationsError],
-  );
-  const databaseGate = useMemo(
-    () => capabilityGate(integrations, "database", "数据库 API", integrationsError),
     [integrations, integrationsError],
   );
   const segmentCreateGate = useMemo(
@@ -1025,7 +1017,7 @@ export function ProjectDetailPage() {
       const sendResult = await sendOutreachDraft({
         draftId: updated.draftId,
         decision: "approve",
-        simulate: !emailDeliveryGate.enabled,
+        simulate: true,
       });
       setOutreachHistory((current) => [sendResult, ...current]);
       setDraftConfirmOpen(false);
@@ -1481,8 +1473,6 @@ export function ProjectDetailPage() {
                 <span>LLM：{capabilityStatusLabel(llmGate.status)}</span>
                 <span>Embedding：{capabilityStatusLabel(embeddingGate.status)}</span>
                 <span>Vector：{capabilityStatusLabel(vectorGate.status)}</span>
-                <span>Database：{capabilityStatusLabel(databaseGate.status)}</span>
-                <span>Email Delivery：{capabilityStatusLabel(emailDeliveryGate.status)}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {searchProviderPreflight.slice(0, 6).map((item) => (
@@ -1899,10 +1889,8 @@ export function ProjectDetailPage() {
                 <p className="text-[12px] leading-[18px] text-[#9CA3AF]">
                   草稿由 POST /outreach/draft 生成，编辑通过 PATCH /outreach/drafts/&lt;draftId&gt; 保存，确认后写入触达历史。
                 </p>
-                <p className={`text-[12px] leading-[18px] ${emailDeliveryGate.enabled ? "text-[#047857]" : "text-[#F59E0B]"}`}>
-                  {emailDeliveryGate.enabled
-                    ? "邮件发送 API 已接入，确认后会调用后端真实发送并写入触达历史。"
-                    : "邮件发送 API 未就绪，确认后仅记录模拟触达，不显示真实送达状态。"}
+                <p className="text-[12px] leading-[18px] text-[#6B7280]">
+                  当前前端只确认草稿并写入模拟触达历史，不调用外部邮件发送 provider。
                 </p>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] text-[#6B7280]">收件人</span>

@@ -82,12 +82,6 @@ function integrationsPayload(overrides: Record<string, string> = {}) {
         connected: statusFor("vector_api") === "active",
       },
       {
-        id: "database_api",
-        service_type: "database",
-        status: statusFor("database_api"),
-        connected: statusFor("database_api") === "active",
-      },
-      {
         id: "segments.query",
         service_type: "segments.query",
         status: statusFor("segments.query"),
@@ -104,12 +98,6 @@ function integrationsPayload(overrides: Record<string, string> = {}) {
         service_type: "segments.read",
         status: statusFor("segments.read"),
         connected: statusFor("segments.read") === "active",
-      },
-      {
-        id: "email_delivery_api",
-        service_type: "email_delivery",
-        status: statusFor("email_delivery_api"),
-        connected: statusFor("email_delivery_api") === "active",
       },
     ],
     services: [],
@@ -884,7 +872,7 @@ describe("ProjectDetailPage backend hardening", () => {
     );
   });
 
-  it("uses backend generated email drafts and sends real email when delivery is connected", async () => {
+  it("uses backend generated email drafts and records simulated outreach", async () => {
     mockBackend();
 
     renderProjectPage();
@@ -904,9 +892,9 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(JSON.parse(String(sendCall?.[1]?.body))).toMatchObject({
       draftId: "draft_backend_1",
       decision: "approve",
-      simulate: false,
+      simulate: true,
     });
-    expect(await screen.findByText("真实邮件已发送，并写入触达历史。")).toBeTruthy();
+    expect(await screen.findByText("草稿已确认，未发送；已记录模拟触达。")).toBeTruthy();
   });
 
   it("queries and saves target segments through backend segment endpoints", async () => {
@@ -925,8 +913,8 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(await screen.findByText("已保存目标人群 segment_1，可用于后续触达。")).toBeTruthy();
   });
 
-  it("allows Segment save when segments.create is active even if database_api is disabled", async () => {
-    mockBackend({ integrations: { database_api: "disabled", "segments.create": "active" } });
+  it("allows Segment save when segments.create is active without a database capability placeholder", async () => {
+    mockBackend({ integrations: { "segments.create": "active" } });
 
     renderProjectPage();
 

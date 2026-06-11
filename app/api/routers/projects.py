@@ -30,6 +30,7 @@ from app.schemas.project import (
     ProjectMaterialUploadResponse,
     ProjectResponse,
     ProjectRoleRejection,
+    ProjectUpdate,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -71,6 +72,28 @@ def create_project(request: ProjectCreate, session: Session = Depends(get_projec
     session.commit()
     session.refresh(project)
     return _project_response(project, _project_stats(session, project.id))
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: str,
+    request: ProjectUpdate,
+    session: Session = Depends(get_project_session),
+) -> ProjectResponse:
+    project = _require_project(session, project_id)
+    project.name = request.name
+    project.status = request.status
+    session.commit()
+    session.refresh(project)
+    return _project_response(project, _project_stats(session, project.id))
+
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project(project_id: str, session: Session = Depends(get_project_session)) -> Response:
+    project = _require_project(session, project_id)
+    session.delete(project)
+    session.commit()
+    return Response(status_code=204)
 
 
 @router.post(

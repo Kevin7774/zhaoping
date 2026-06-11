@@ -212,6 +212,11 @@ export type ProjectCreateRequest = {
   status?: string;
 };
 
+export type ProjectUpdateRequest = {
+  name: string;
+  status?: string;
+};
+
 export type ProjectBpRequest = {
   projectName: string;
   generationMode?: ProjectGenerationMode;
@@ -322,6 +327,16 @@ export function listProjects(): Promise<ProjectRecord[]> {
 
 export function createProject(request: ProjectCreateRequest): Promise<ProjectRecord> {
   return apiClient.post<ProjectBackendResponse>("/projects", request).then(mapProject);
+}
+
+export function updateProject(projectId: string, request: ProjectUpdateRequest): Promise<ProjectRecord> {
+  return apiClient
+    .patch<ProjectBackendResponse>(`/projects/${encodeURIComponent(projectId)}`, request)
+    .then(mapProject);
+}
+
+export function deleteProject(projectId: string): Promise<void> {
+  return apiClient.delete<void>(`/projects/${encodeURIComponent(projectId)}`);
 }
 
 export function getProjectJobs(projectId: string, options: ListQueryOptions = {}): Promise<JobProfile[]> {

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import importlib.util
 import shutil
-import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, wait
 from time import monotonic
@@ -21,13 +20,6 @@ CAPABILITY_SPECS: tuple[dict[str, str], ...] = (
         "description": "Search, source planning, and external/internal retrieval capability.",
     },
     {
-        "id": "code_api",
-        "service_type": "code",
-        "label": "Code API",
-        "name_zh": "代码 API",
-        "description": "Code analysis or generation provider. No concrete service is configured yet.",
-    },
-    {
         "id": "embedding_api",
         "service_type": "embedding",
         "label": "Embedding API",
@@ -40,27 +32,6 @@ CAPABILITY_SPECS: tuple[dict[str, str], ...] = (
         "label": "Evaluation API",
         "name_zh": "评估 API",
         "description": "Self-RSI evaluation, test, feedback, and iteration capability.",
-    },
-    {
-        "id": "email_discovery_api",
-        "service_type": "email_discovery",
-        "label": "Email Discovery API",
-        "name_zh": "邮箱发现 API",
-        "description": "Work-email discovery capability for recruiting outreach.",
-    },
-    {
-        "id": "email_verification_api",
-        "service_type": "email_verification",
-        "label": "Email Verification API",
-        "name_zh": "邮箱验证 API",
-        "description": "Email deliverability verification capability before outreach.",
-    },
-    {
-        "id": "email_delivery_api",
-        "service_type": "email_delivery",
-        "label": "Email Delivery API",
-        "name_zh": "邮件发送 API",
-        "description": "Compliant email delivery with approval, unsubscribe, suppression, limits, and audit logs.",
     },
     {
         "id": "scraping_api",
@@ -96,20 +67,6 @@ CAPABILITY_SPECS: tuple[dict[str, str], ...] = (
         "label": "Structured Output API",
         "name_zh": "结构化输出 API",
         "description": "Schema-constrained generation facade.",
-    },
-    {
-        "id": "mcp_api",
-        "service_type": "mcp",
-        "label": "MCP API",
-        "name_zh": "MCP 工具 API",
-        "description": "Configured MCP tools and connectors.",
-    },
-    {
-        "id": "database_api",
-        "service_type": "database",
-        "label": "Database API",
-        "name_zh": "数据库 API",
-        "description": "Persistent metadata storage capability.",
     },
     {
         "id": "document_parser_api",
@@ -629,56 +586,18 @@ def _runtime_requirements(settings: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _opencli_browser_bridge_requirement(command: str) -> dict[str, Any]:
-    if not shutil.which(command):
-        return {
-            "type": "browser_bridge",
-            "name": "OpenCLI Browser Bridge",
-            "present": False,
-            "command": command,
-            "reason": f"{command} command not found",
-        }
-    try:
-        completed = subprocess.run(
-            [command, "doctor"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "type": "browser_bridge",
-            "name": "OpenCLI Browser Bridge",
-            "present": False,
-            "command": command,
-            "reason": "opencli doctor timed out",
-        }
-
-    output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
-    connected = completed.returncode == 0 and not _opencli_doctor_output_has_failure(output)
+    command_present = bool(shutil.which(command))
     return {
         "type": "browser_bridge",
         "name": "OpenCLI Browser Bridge",
-        "present": connected,
+        "present": command_present,
         "command": command,
-        "reason": "ready" if connected else _opencli_doctor_failure_reason(output, completed.returncode),
+        "reason": (
+            "not checked by integration status; run search probe or OpenCLI search to verify"
+            if command_present
+            else f"{command} command not found"
+        ),
     }
-
-
-def _opencli_doctor_output_has_failure(output: str) -> bool:
-    normalized = output.lower()
-    return any(marker in normalized for marker in ("[fail]", "[missing]", "not connected", "connectivity: failed"))
-
-
-def _opencli_doctor_failure_reason(output: str, returncode: int) -> str:
-    if "Browser Bridge extension not connected" in output:
-        return "Browser Bridge extension not connected"
-    for raw_line in output.splitlines():
-        line = raw_line.strip()
-        if "[FAIL]" in line or "[MISSING]" in line or "not connected" in line.lower():
-            return line
-    return f"opencli doctor exited {returncode}"
-
 
 def _unique_credentials(services: list[dict[str, Any]]) -> list[dict[str, Any]]:
     unique: dict[tuple[str, str], dict[str, Any]] = {}

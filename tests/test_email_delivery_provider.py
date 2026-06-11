@@ -36,13 +36,9 @@ def _provider(tmp_path) -> ResendCompliantEmailProvider:
     )
 
 
-def test_router_builds_resend_email_delivery_provider() -> None:
-    provider = ServiceRouter().email_delivery()
-
-    assert isinstance(provider, ResendCompliantEmailProvider)
-    assert provider.endpoint == "https://api.resend.com/emails"
-    assert provider.token_env == "RESEND_API_KEY"
-    assert provider.manual_approval_required is True
+def test_resend_email_delivery_is_not_registered_without_required_project_keys() -> None:
+    with pytest.raises(KeyError):
+        ServiceRouter().email_delivery()
 
 
 def test_resend_send_posts_payload_with_unsubscribe_and_audit(

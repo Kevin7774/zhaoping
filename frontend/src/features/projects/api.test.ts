@@ -5,6 +5,7 @@ import {
   cancelTask,
   confirmTask,
   createProject,
+  deleteProject,
   createOutreachDraft,
   createSegment,
   getIntegrationsStatus,
@@ -18,6 +19,7 @@ import {
   previewProjectFromBp,
   uploadProjectMaterial,
   uploadProjectResume,
+  updateProject,
   retryTask,
   runJobMatch,
   runCandidateEvaluation,
@@ -136,6 +138,49 @@ describe("projects api", () => {
         method: "POST",
         body: JSON.stringify({ id: "project_new_market", name: "新市场招聘项目", status: "active" }),
       }),
+    );
+  });
+
+  it("updates a project through the backend project endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "project_2026_ai_team",
+        name: "2026 AI 团队招聘更新版",
+        status: "paused",
+        createdAt: "2026-06-09T00:00:00Z",
+        openJobs: 3,
+        totalCandidates: 5,
+        awaitingHuman: 1,
+        averageMatchScore: 84,
+      }),
+    );
+
+    await expect(
+      updateProject("project_2026_ai_team", {
+        name: "2026 AI 团队招聘更新版",
+        status: "paused",
+      }),
+    ).resolves.toMatchObject({
+      projectId: "project_2026_ai_team",
+      name: "2026 AI 团队招聘更新版",
+      status: "paused",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_2026_ai_team",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ name: "2026 AI 团队招聘更新版", status: "paused" }),
+      }),
+    );
+  });
+
+  it("deletes a project through the backend project endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(deleteProject("project_2026_ai_team")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project_2026_ai_team",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
