@@ -21,6 +21,7 @@ import json
 import queue
 import re
 import threading
+import unicodedata
 from typing import Any, Callable
 
 from app.core.prompt_config import load_system_prompt
@@ -320,7 +321,9 @@ def _confidence(role: dict[str, Any]) -> float:
 
 
 def _normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", str(text)).strip().lower()
+    normalized = unicodedata.normalize("NFKC", str(text))
+    without_controls = "".join(" " if unicodedata.category(char).startswith("C") else char for char in normalized)
+    return re.sub(r"\s+", " ", without_controls).strip().lower()
 
 
 # --------------------------------------------------------------------------

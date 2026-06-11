@@ -32,6 +32,30 @@ def test_critic_accepts_role_with_full_chain() -> None:
     assert rejected == []
 
 
+def test_critic_matches_evidence_from_pdf_text_with_control_chars_and_compatibility_glyphs() -> None:
+    source = (
+        "岗位名称：AI\x01Native\x01FDE。\n"
+        "我们招的不是普通全栈，而是能和领域专家一起，用\x01AI-native\x01方法独立驱动完整\x01SDLC\x01的"
+        "\x01Agentic\x01 Builder。\n"
+        "候选人也可以是 Agentic\x01全栈⼯程师。"
+    )
+
+    accepted, rejected = critic_gate(
+        [
+            _role(
+                title="AI Native FDE / Agentic Builder",
+                responsibilities=["用 AI-native 方法独立驱动完整 SDLC"],
+                must_have_skills=["AI Native", "全栈工程师"],
+                bp_evidence=["AI Native FDE"],
+            )
+        ],
+        source_text=source,
+    )
+
+    assert len(accepted) == 1
+    assert rejected == []
+
+
 def test_critic_rejects_role_without_bp_evidence() -> None:
     accepted, rejected = critic_gate([_role(bp_evidence=[])], source_text=SOURCE)
     assert accepted == []
