@@ -205,11 +205,6 @@ def main() -> None:
 
     search_query = "embodied intelligence robotics engineer hiring signals"
     evidence["search"] = {
-        "plan": brief(request("POST", "/search/plan", {"query": search_query, "limit": 2})),
-        "run": brief(request("POST", "/search/run", {"query": search_query, "limit": 2}, timeout=120)),
-        "evidence": brief(request("POST", "/search/evidence", {"query": search_query, "limit": 2}, timeout=120)),
-        "brief": brief(request("POST", "/search/brief", {"query": search_query, "limit": 2}, timeout=180)),
-        "archive": brief(request("POST", "/search/archive", {"query": search_query, "limit": 2}, timeout=180)),
         "archiveRecent": brief(request("GET", "/search/archive/recent")),
         "archiveDiff": brief(request("GET", "/search/archive/diff")),
         "watchlistRun": brief(
@@ -217,7 +212,7 @@ def main() -> None:
         ),
     }
 
-    # --- task artifacts + probe feedback ---
+    # --- task artifacts ---
     workflow = {
         "id": f"phase1_artifacts_{RUN_ID.replace('-', '_')}",
         "inputs": {"draft": {"type": "string"}},
@@ -240,9 +235,6 @@ def main() -> None:
         evidence["taskArtifacts"] = brief(artifacts_result, "items", "total")
         if isinstance(artifacts_result.get("body"), dict):
             evidence["taskArtifacts"]["itemCount"] = len(artifacts_result["body"].get("items") or [])
-        evidence["probeFeedbackUnknownProbe"] = brief(
-            request("POST", f"/tasks/{task_id}/probe-feedback", {"probe_id": "nonexistent_probe", "answered": True})
-        )
 
     # --- segment unsupported-filter silent-ignore evidence ---
     base_criteria = {"jobProfileId": "all", "minScore": 0, "city": "", "keyword": "", "hasEmail": "all"}

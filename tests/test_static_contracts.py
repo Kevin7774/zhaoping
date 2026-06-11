@@ -804,15 +804,9 @@ def test_run_request_scenario_is_dynamic_in_openapi() -> None:
     assert scenario_schema["type"] == "string"
     assert "enum" not in scenario_schema
     assert "frontend_state" in run_properties
-    assert "/search/plan" in schema["paths"]
-    assert "/search/run" in schema["paths"]
-    assert "/search/evidence" in schema["paths"]
-    assert "/search/brief" in schema["paths"]
-    assert "/search/archive" in schema["paths"]
     assert "/search/archive/recent" in schema["paths"]
     assert "/search/archive/diff" in schema["paths"]
     assert "/search/watchlist/run" in schema["paths"]
-    assert "/tasks/{task_id}/probe-feedback" in schema["paths"]
     assert "/tasks/{task_id}/artifacts" in schema["paths"]
     assert "/tasks/{task_id}/stream" in schema["paths"]
     assert "/tasks/{task_id}/cancel" in schema["paths"]
@@ -1113,35 +1107,6 @@ def test_self_rsi_full_mode_api_uses_router_capabilities(monkeypatch: pytest.Mon
     assert payload["router_passed"] is True
 
 
-def test_search_api_exposes_due_diligence_plan_and_safe_results() -> None:
-    client = TestClient(app)
-
-    plan_response = client.post(
-        "/search/plan",
-        json={"query": "机器人 公司 融资 年报 研发人员", "limit": 8},
-    )
-    run_response = client.post(
-        "/search/run",
-        json={"query": "机器人 公司 融资 年报 研发人员", "limit": 4, "service": " "},
-    )
-    empty_response = client.post("/search/plan", json={"query": "   "})
-
-    assert plan_response.status_code == 200
-    plan = plan_response.json()
-    assert plan["mode"] == "financial_due_diligence_intelligence"
-    assert any(source["source_key"] == "regulatory_filings_global" for source in plan["recommended_sources"])
-    assert any("不绕过登录" in guardrail for guardrail in plan["guardrails"])
-
-    assert run_response.status_code == 200
-    payload = run_response.json()
-    assert payload["limit"] == 4
-    assert payload["results"]
-    assert payload["results"][0]["source_type"] == "source_catalog"
-    assert payload["results"][0]["retrieval_status"] == "planned"
-
-    assert empty_response.status_code == 422
-
-
 def test_agent_reach_social_provider_runs_platform_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
     original_which = shutil.which
@@ -1189,105 +1154,6 @@ def test_agent_reach_social_provider_runs_platform_commands(monkeypatch: pytest.
     assert plan["mode"] == "agent_reach_social_search"
     assert plan["supported_platforms"]
     assert any("不绕过" in guardrail for guardrail in plan["guardrails"])
-
-
-def test_search_evidence_api_returns_traceable_review_records() -> None:
-    client = TestClient(app)
-
-    response = client.post(
-        "/search/evidence",
-        json={
-            "query": "机器人 公司 融资 年报 研发人员",
-            "claim": "目标公司研发投入和融资热度正在上升",
-            "limit": 6,
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["claim"] == "目标公司研发投入和融资热度正在上升"
-    assert payload["records"]
-    assert payload["review"]["record_count"] == len(payload["records"])
-    assert payload["review"]["cross_check_status"] in {
-        "ready_for_human_review",
-        "needs_authoritative_source",
-        "single_source_only",
-    }
-    assert any(
-        record["source_tier"] == "primary_or_authoritative"
-        for record in payload["records"]
-    )
-    first_record = payload["records"][0]
-    assert first_record["record_id"].startswith("ev_")
-    assert first_record["validation_status"] in {
-        "planned_authoritative_source",
-        "planned_unverified",
-        "requires_interview_confirmation",
-        "single_source",
-    }
-    assert first_record["confidence"] > 0
-    assert "保留来源" in first_record["compliance_notes"][0]
-    assert payload["review"]["next_actions"]
-
-
-def test_search_brief_api_returns_due_diligence_report_sections() -> None:
-    client = TestClient(app)
-
-    response = client.post(
-        "/search/brief",
-        json={
-            "query": "机器人 公司 融资 年报 研发人员",
-            "claim": "目标公司研发投入和融资热度正在上升",
-            "limit": 6,
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["brief_type"] == "financial_due_diligence_intelligence_brief"
-    assert payload["executive_summary"]["status"] == "ready_for_human_review"
-    assert payload["priority_evidence"]
-    assert payload["priority_evidence"][0]["record_id"].startswith("ev_")
-    assert payload["risk_register"]
-    assert payload["intelligence_gaps"]
-    assert payload["next_search_actions"]
-    assert any(action["action"] == "run_query_template" for action in payload["next_search_actions"])
-    assert any("不是投资建议" in guardrail for guardrail in payload["report_guardrails"])
-
-
-def test_search_archive_persists_brief_to_jsonl(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    archive_path = tmp_path / "intelligence_archive.jsonl"
-    monkeypatch.setenv("INTELLIGENCE_ARCHIVE_PATH", str(archive_path))
-    client = TestClient(app)
-
-    archive_response = client.post(
-        "/search/archive",
-        json={
-            "query": "机器人 公司 融资 年报 研发人员",
-            "claim": "目标公司研发投入和融资热度正在上升",
-            "limit": 5,
-            "artifact_type": "brief",
-        },
-    )
-    recent_response = client.get("/search/archive/recent", params={"limit": 5})
-
-    assert archive_response.status_code == 200
-    archive_payload = archive_response.json()
-    assert archive_payload["archive_id"].startswith("intel_")
-    assert archive_payload["artifact_type"] == "brief"
-    assert archive_payload["archive_path"] == str(archive_path)
-    assert archive_path.exists()
-
-    assert recent_response.status_code == 200
-    recent_payload = recent_response.json()
-    assert recent_payload["records"]
-    latest = recent_payload["records"][0]
-    assert latest["archive_id"] == archive_payload["archive_id"]
-    assert latest["artifact_type"] == "brief"
-    assert latest["artifact"]["brief_type"] == "financial_due_diligence_intelligence_brief"
 
 
 def test_search_archive_diff_detects_source_and_risk_changes(
@@ -2102,24 +1968,6 @@ def test_evaluate_candidate_distinguishes_real_robot_from_sim_only() -> None:
         "candidate_quantified_requires_validation",
         "insufficient_data",
     }
-
-
-def test_probe_feedback_api_updates_task_result() -> None:
-    task = task_store.create("C", "候选人材料", team_constraint="真机泛化", aperture_weight=0.7)
-    task_store.update(task.task_id, status="done", result={"decision_sandbox": {"feedback_loop": {}}})
-    client = TestClient(app)
-
-    response = client.post(
-        f"/tasks/{task.task_id}/probe-feedback",
-        json={"probe_id": "probe_1", "answered": True, "note": "能说清楚延迟指标"},
-    )
-    snapshot = task_store.snapshot(task.task_id)
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "recorded"
-    assert payload["latest_update"]["answered_count"] == 1
-    assert snapshot["result"]["decision_sandbox"]["feedback_loop"]["feedback"][0]["probe_id"] == "probe_1"
 
 
 def test_generate_weekly_report_routes_to_data_flywheel() -> None:

@@ -267,35 +267,6 @@ def run_resume_import_task(
         return task_store.snapshot(task_id)
 
 
-def start_resume_import_task(
-    *,
-    project_id: str,
-    job_id: str,
-    file_path: str,
-    task_store: Any,
-    session_factory: sessionmaker[Session] | None = None,
-    router: ServiceRouter | None = None,
-) -> dict[str, Any]:
-    task = create_resume_import_task(
-        project_id=project_id,
-        job_id=job_id,
-        file_path=file_path,
-        task_store=task_store,
-    )
-    snapshot = run_resume_import_task(
-        task["task_id"],
-        project_id=project_id,
-        job_id=job_id,
-        file_path=file_path,
-        task_store=task_store,
-        session_factory=session_factory,
-        router=router,
-    )
-    if snapshot is None:
-        raise RuntimeError(f"Resume import task disappeared: {task['task_id']}")
-    return snapshot
-
-
 def create_resume_import_task(
     *,
     project_id: str,

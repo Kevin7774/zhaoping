@@ -30,7 +30,7 @@
 | 任务运行时 | `tasks` / `agent_events` 持久化，SSE 事件流、polling fallback、取消、重试、人工确认、artifact 读取。 | `app/db/task_models.py`、`GET /tasks/{task_id}/stream` |
 | JSON Workflow | 支持 `search`、`llm_prompt`、`structured_extract`、`save_artifact`、`human_gate`；长 search 输出写入 artifact。 | `app/core/workflow_dsl.py`、`app/core/workflow_runner.py` |
 | 搜索情报 | `plan -> run -> evidence -> brief -> archive`，支持 watchlist、recent/diff、Evidence Ledger。 | `app/providers/search.py`、`app/core/intelligence_archive.py` |
-| 候选人数据 | 简历解析、项目岗位简历上传、本地简历导入、向量入库、项目库/向量库匹配、候选人线索入库。 | `app/api/routers/resumes.py`、`app/rag/ingest_worker.py` |
+| 候选人数据 | 简历解析、项目岗位简历上传、向量入库、项目库/向量库匹配、候选人线索入库。 | `app/api/routers/resumes.py`、`app/rag/ingest_worker.py` |
 | 分群与触达 | Segment 查询/保存/读取；邮件草稿、人工编辑、模拟触达历史。 | `app/api/routers/segments.py`、`app/api/routers/outreach.py` |
 | 评估闭环 | Self-RSI local/full 评估，输出能力 trace、反馈缺口、测试结果和迭代计划。 | `app/providers/evaluation.py` |
 | 集成状态 | 动态读取 `config/services.toml`，返回 provider 状态、中文名、代码路径和服务明细；当前注册表不保留 disabled / missing_key 占位项。 | `GET /integrations/status` |
@@ -116,11 +116,11 @@ opencli weixin search ...
 | 系统状态与集成 | `GET /health`、`GET /integrations/status`、`POST /integrations/env` | system | 健康检查、provider 状态、安全保存 allowlist 环境变量。 |
 | 项目工作台 | `GET/POST /projects`、`GET/PATCH/DELETE /projects/{project_id}`、`GET /projects/{project_id}/jobs`、`GET /projects/{project_id}/candidates`、`GET /projects/{project_id}/candidates/unique` | productized | 项目、岗位、候选人和统计。 |
 | BP 岗位生成 | `POST /projects/{project_id}/materials/upload`、`POST /projects/{project_id}/preview-from-bp`、`POST /projects/{project_id}/initialize-from-bp` | productized | 上传材料、预览岗位矩阵、写入岗位。 |
-| 候选人入库与匹配 | `POST /resumes/ingest`、`POST /resumes/local-import`、`POST /projects/{project_id}/jobs/{job_id}/upload-resumes`、`POST /jobs/match` | productized | 简历解析、向量入库、岗位匹配。 |
+| 候选人入库与匹配 | `POST /projects/{project_id}/jobs/{job_id}/upload-resumes`、`POST /jobs/match` | productized | 简历解析、向量入库、岗位匹配。 |
 | 候选人搜索计划 | `GET /projects/{project_id}/candidate-search-schedules`、`PUT /projects/{project_id}/jobs/{job_id}/candidate-search-schedule` | productized | 保存岗位级自动搜候选人计划，调度器触发场景 B。 |
-| 搜索情报 | `POST /search/plan`、`POST /search/run`、`POST /search/evidence`、`POST /search/brief`、`POST /search/archive`、`GET /search/archive/recent`、`GET /search/archive/diff`、`POST /search/watchlist/run` | productized | 计划、执行、证据、简报、归档和 watchlist。 |
+| 搜索情报 watchlist | `POST /search/watchlist/run`、`GET /search/archive/recent`、`GET /search/archive/diff` | productized | watchlist 运行、归档读取与 diff。 |
 | 场景任务 | `GET /scenarios/meta`、`POST /scenarios/run` | productized | 启动 A/B/C/D 招聘场景任务。 |
-| 任务运行时 | `GET /tasks/{task_id}`、`GET /tasks/{task_id}/stream`、`POST /tasks/{task_id}/confirm`、`POST /tasks/{task_id}/cancel`、`POST /tasks/{task_id}/retry`、`GET /tasks/{task_id}/artifacts`、`POST /tasks/{task_id}/probe-feedback` | system | 快照、SSE、确认、取消、重试、artifact 和追问反馈。 |
+| 任务运行时 | `GET /tasks/{task_id}`、`GET /tasks/{task_id}/stream`、`POST /tasks/{task_id}/confirm`、`POST /tasks/{task_id}/cancel`、`POST /tasks/{task_id}/retry`、`GET /tasks/{task_id}/artifacts` | system | 快照、SSE、确认、取消、重试和 artifact。 |
 | 原子工作流 | `GET /workflow/meta`、`POST /workflow/sessions`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/run`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/retry`、`POST /workflow/sessions/{task_id}/nodes/{node_id}/skip` | system | 节点级控制 A/B/C/D。 |
 | JSON Workflow | `POST /workflows/validate`、`POST /workflows/run` | productized/system | 校验并运行自定义 search、LLM、结构化抽取、artifact 和 human gate 流程。 |
 | RSI 评估 | `POST /rsi/evaluate` | productized | 运行 local/full 评估。 |
@@ -136,7 +136,7 @@ opencli weixin search ...
 | --- | --- |
 | `app/api/main.py` | FastAPI 入口，挂载前端静态资源和 API 路由。 |
 | `app/api/routers/projects.py` | 项目、BP、岗位、候选人、合规确认和自动搜索计划。 |
-| `app/api/routers/resumes.py` | 简历上传、本地简历导入和项目岗位简历任务。 |
+| `app/api/routers/resumes.py` | 简历上传和项目岗位简历任务。 |
 | `app/api/routers/outreach.py` | 邮件触达闭环。 |
 | `app/api/routers/segments.py` | 候选人 segment。 |
 | `app/api/routers/reports.py` | 周报持久化。 |
@@ -276,28 +276,12 @@ setsid -f ./scripts/watch_public_cloudflare.sh >/dev/null 2>&1
 
 ## 常用调用
 
-简历入库：
-
-```bash
-curl -X POST http://localhost:8000/resumes/ingest \
-  -H 'Content-Type: application/json' \
-  -d '{"file_path":"test_readme.md","candidate_id":"cand_ai_native_002"}'
-```
-
 岗位匹配：
 
 ```bash
 curl -X POST http://localhost:8000/jobs/match \
   -H 'Content-Type: application/json' \
   -d '{"query":"Diffusion Policy 和遥操作数据清洗经验","top_k":5}'
-```
-
-搜索 brief：
-
-```bash
-curl -X POST http://localhost:8000/search/brief \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"robotics foundation model hiring signal","limit":5}'
 ```
 
 场景任务：

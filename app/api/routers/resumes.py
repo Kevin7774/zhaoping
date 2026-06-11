@@ -5,7 +5,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from pydantic import Field
 from sqlalchemy.orm import Session
 
 import app.core.orchestrator as orchestrator
@@ -18,33 +17,10 @@ from app.schemas.common import CamelModel
 router = APIRouter(tags=["resumes"])
 
 
-class LocalResumeImportRequest(CamelModel):
-    project_id: str = Field(min_length=1, max_length=64)
-    job_id: str = Field(min_length=1, max_length=64)
-    file_path: str = Field(min_length=1)
-
-
 class LocalResumeImportResponse(CamelModel):
     task_id: str
     scenario: str
     status: str
-
-
-@router.post("/resumes/local-import", response_model=LocalResumeImportResponse)
-def local_resume_import(request: LocalResumeImportRequest) -> LocalResumeImportResponse:
-    if not Path(request.file_path).is_file():
-        raise HTTPException(status_code=404, detail=f"File not found: {request.file_path}")
-    snapshot = resume_ingestion.start_resume_import_task(
-        project_id=request.project_id,
-        job_id=request.job_id,
-        file_path=request.file_path,
-        task_store=orchestrator.task_store,
-    )
-    return LocalResumeImportResponse(
-        task_id=snapshot["task_id"],
-        scenario=snapshot["scenario_id"],
-        status=snapshot["status"],
-    )
 
 
 @router.post("/projects/{project_id}/jobs/{job_id}/upload-resumes", response_model=LocalResumeImportResponse)

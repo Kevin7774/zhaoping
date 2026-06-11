@@ -274,40 +274,6 @@ def test_import_resume_to_project_reuses_candidate_lead_ingestion(
         assert link.pipeline_status == "sourced"
 
 
-def test_local_resume_import_api_creates_task_and_project_candidate(
-    client: TestClient,
-    session_factory: sessionmaker[Session],
-    isolated_task_store,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    from app.core import resume_ingestion
-
-    path = resume_file(tmp_path)
-    monkeypatch.setattr(resume_ingestion, "get_router", lambda: FakeRouter(llm_resume_output()))
-    monkeypatch.setattr(resume_ingestion, "project_session_factory", lambda: session_factory)
-
-    response = client.post(
-        "/resumes/local-import",
-        json={
-            "projectId": "project_2026_ai_team",
-            "jobId": "job_vla_algorithm",
-            "filePath": str(path),
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["scenario"] == "RESUME_IMPORT"
-    assert payload["status"] == "done"
-    snapshot = client.get(f"/tasks/{payload['taskId']}").json()
-    assert snapshot["result"]["inserted_candidates"] == 1
-
-    candidates = client.get("/projects/project_2026_ai_team/candidates")
-    assert candidates.headers["x-total-count"] == "1"
-    assert candidates.json()[0]["email"] == "lin.chen@example.com"
-
-
 def test_project_resume_upload_saves_file_creates_task_and_project_candidate(
     client: TestClient,
     session_factory: sessionmaker[Session],

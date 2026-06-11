@@ -43,7 +43,6 @@ from app.core.router import get_router
 from app.core.workflow_dsl import WorkflowDefinition, WorkflowValidationException
 from app.core.workflow_executor import WorkflowFatalException
 from app.core.workflow_runner import WorkflowTaskRunner, workflow_artifact_base_dir
-from app.rag.ingest_worker import process_and_vectorize_resume
 from app.schemas.workflows import (
     WorkflowRunRequest,
     WorkflowRunResponse,
@@ -102,34 +101,14 @@ async def strip_api_prefix(request: Request, call_next):
     return await call_next(request)
 
 
-class IngestRequest(BaseModel):
-    file_path: str
-    candidate_id: str
-    write_database: bool = False
-
-
 class MatchRequest(BaseModel):
     query: str
     top_k: int = 5
 
 
-class SearchRequest(BaseModel):
-    query: str
-    limit: int = 10
-    service: Optional[str] = None
-
-
-class SearchEvidenceRequest(SearchRequest):
-    claim: Optional[str] = None
-
-
 class SearchProbeRequest(BaseModel):
     services: Optional[list[str]] = None
     timeout_seconds: float = 12.0
-
-
-class SearchArchiveRequest(SearchEvidenceRequest):
-    artifact_type: Literal["evidence", "brief"] = "brief"
 
 
 class WatchlistItem(BaseModel):
@@ -189,12 +168,6 @@ class ConfirmRequest(BaseModel):
             if edits is not None:
                 normalized["edits"] = edits if isinstance(edits, str) else json.dumps(edits, ensure_ascii=False)
         return normalized
-
-
-class ProbeFeedbackRequest(BaseModel):
-    probe_id: str
-    answered: bool
-    note: Optional[str] = None
 
 
 class RSIEvaluateRequest(BaseModel):
@@ -289,88 +262,7 @@ def rsi_evaluate(request: RSIEvaluateRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@app.post("/search/plan")
-def search_plan(request: SearchRequest) -> dict:
-    query = _normalized_query(request.query)
-    limit = _normalized_limit(request.limit)
-    provider = _resolve_search_provider(request.service)
-    if not hasattr(provider, "plan"):
-        raise HTTPException(status_code=422, detail="Selected search service does not support planning")
-    try:
-        return provider.plan(query, limit=limit)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/search/run")
-def search_run(request: SearchRequest) -> dict:
-    query = _normalized_query(request.query)
-    limit = _normalized_limit(request.limit)
-    provider = _resolve_search_provider(request.service)
-    try:
-        results = provider.search(query, limit=limit)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {
-        "query": query,
-        "service": request.service,
-        "limit": limit,
-        "results": results,
-    }
-
-
-@app.post("/search/evidence")
-def search_evidence(request: SearchEvidenceRequest) -> dict:
-    query = _normalized_query(request.query)
-    limit = _normalized_limit(request.limit)
-    provider = _resolve_search_provider(request.service)
-    if not hasattr(provider, "evidence"):
-        raise HTTPException(status_code=422, detail="Selected search service does not support evidence records")
-    try:
-        return provider.evidence(query, limit=limit, claim=request.claim.strip() if request.claim else None)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/search/brief")
-def search_brief(request: SearchEvidenceRequest) -> dict:
-    query = _normalized_query(request.query)
-    limit = _normalized_limit(request.limit)
-    provider = _resolve_search_provider(request.service)
-    if not hasattr(provider, "brief"):
-        raise HTTPException(status_code=422, detail="Selected search service does not support intelligence briefs")
-    try:
-        return provider.brief(query, limit=limit, claim=request.claim.strip() if request.claim else None)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/search/archive")
-def search_archive(request: SearchArchiveRequest) -> dict:
-    query = _normalized_query(request.query)
-    limit = _normalized_limit(request.limit)
-    provider = _resolve_search_provider(request.service)
-    claim = request.claim.strip() if request.claim else None
-    try:
-        if request.artifact_type == "evidence":
-            if not hasattr(provider, "evidence"):
-                raise HTTPException(status_code=422, detail="Selected search service does not support evidence records")
-            artifact = provider.evidence(query, limit=limit, claim=claim)
-        else:
-            if not hasattr(provider, "brief"):
-                raise HTTPException(status_code=422, detail="Selected search service does not support intelligence briefs")
-            artifact = provider.brief(query, limit=limit, claim=claim)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    archive_result = IntelligenceArchive().append(request.artifact_type, artifact)
-    return {
-        **archive_result,
-        "query": query,
-        "claim": claim,
-    }
-
-
+# Watchlist 结果读取路径：recent/diff 与 /search/watchlist/run 配套使用。
 @app.get("/search/archive/recent")
 def search_archive_recent(limit: int = 20) -> dict:
     normalized_limit = _normalized_limit(limit)
@@ -707,43 +599,6 @@ def confirm_task(task_id: str, request: ConfirmRequest) -> dict:
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
     return snapshot
-
-
-@app.post("/tasks/{task_id}/probe-feedback")
-def probe_feedback(task_id: str, request: ProbeFeedbackRequest) -> dict:
-    task = task_store.get(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
-    if not request.probe_id.strip():
-        raise HTTPException(status_code=422, detail="probe_id must not be empty")
-    result = task_store.record_probe_feedback(
-        task_id,
-        {
-            "probe_id": request.probe_id.strip(),
-            "answered": request.answered,
-            "note": request.note.strip() if request.note else None,
-        },
-    )
-    if result is None:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
-    if result["status"] == "not_ready":
-        raise HTTPException(status_code=409, detail="Task result is not ready for probe feedback")
-    return result
-
-
-@app.post("/resumes/ingest")
-def ingest_resume(request: IngestRequest) -> dict:
-    if not Path(request.file_path).exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {request.file_path}")
-    markdown = process_and_vectorize_resume(
-        file_path=request.file_path,
-        candidate_id=request.candidate_id,
-        write_database=request.write_database,
-    )
-    return {
-        "candidate_id": request.candidate_id,
-        "markdown_preview": markdown[:500],
-    }
 
 
 @app.post("/jobs/match")

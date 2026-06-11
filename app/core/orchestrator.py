@@ -3884,57 +3884,6 @@ class DBTaskStore:
             row = session.get(TaskModel, task_id)
             return bool(row and row.status == "cancelled")
 
-    def record_probe_feedback(self, task_id: str, feedback: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        event: dict[str, Any] | None = None
-        response: Optional[Dict[str, Any]] = None
-        with self._session_factory() as session:
-            with session.begin():
-                row = session.get(TaskModel, task_id)
-                if not row:
-                    return None
-                if not isinstance(row.result, dict):
-                    return {"status": "not_ready", "feedback": []}
-                result = dict(row.result)
-                sandbox = dict(result.setdefault("decision_sandbox", {}))
-                feedback_loop = dict(sandbox.setdefault("feedback_loop", {}))
-                items = list(feedback_loop.setdefault("feedback", []))
-                entry = {
-                    "probe_id": str(feedback.get("probe_id", "")),
-                    "answered": bool(feedback.get("answered")),
-                    "note": feedback.get("note"),
-                    "created_at": _now(),
-                }
-                items.append(entry)
-                answered_count = sum(1 for item in items if item.get("answered"))
-                failed_count = len(items) - answered_count
-                feedback_loop["feedback"] = items
-                feedback_loop["status"] = "feedback_received"
-                feedback_loop["latest_update"] = {
-                    "answered_count": answered_count,
-                    "failed_count": failed_count,
-                    "profile_adjustment": "increase_transfer_confidence" if answered_count >= failed_count else "tighten_hidden_limits",
-                }
-                sandbox["feedback_loop"] = feedback_loop
-                result["decision_sandbox"] = sandbox
-                result["人机反馈闭环"] = feedback_loop["latest_update"]
-                row.result = _sanitize_event_value(result)
-                row.updated_at = _dt_now()
-                response = {"status": "recorded", "feedback": items, "latest_update": feedback_loop["latest_update"]}
-                event = self._insert_event(
-                    session,
-                    task_id,
-                    AgentEventCreate(
-                        type="human_gate",
-                        agent_id="human_expert",
-                        message=f"追问反馈已回流：{entry['probe_id']} answered={entry['answered']}",
-                        data={"feedback": entry, "latest_update": feedback_loop["latest_update"]},
-                        status=row.status,
-                    ),
-                )
-        if event:
-            self._bus.publish(task_id, event)
-        return response
-
     def _insert_event(self, session, task_id: str, event: AgentEventCreate) -> dict[str, Any]:
         payload = event.model_dump()
         event_row = AgentEventModel(
