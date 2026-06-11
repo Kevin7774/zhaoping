@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+import app.core.orchestrator as orchestrator
 from app.core.bp_pipeline import BpNoAcceptedRolesError, BpStageOutputError, run_bp_pipeline
 from app.core.router import get_router
+from app.schemas.tasks import AgentEventCreate
 from app.db.session import get_project_session, project_session_factory
 from app.models import Candidate, CandidateSearchSchedule, Job, JobCandidate, Project
 from app.schemas.candidate_search_schedule import (
@@ -23,8 +25,10 @@ from app.schemas.candidate_search_schedule import (
 from app.schemas.candidate import CandidateComplianceReviewRequest, CandidateResponse, UniqueCandidateResponse
 from app.schemas.job import JobResponse
 from app.schemas.project import (
+    ProjectBpApplyRequest,
     ProjectBpInitializeRequest,
     ProjectBpInitializeResponse,
+    ProjectBpJobsTaskResponse,
     ProjectCreate,
     ProjectGenerationMode,
     ProjectMaterialUploadResponse,
@@ -119,6 +123,11 @@ def initialize_project_from_bp(
     request: ProjectBpInitializeRequest,
 ) -> ProjectBpInitializeResponse:
     matrix, jobs = _build_jobs_from_bp_pipeline(project_id, request)
+    _write_bp_jobs(project_id, request.project_name, jobs)
+    return _bp_initialize_response(project_id, request, matrix, jobs)
+
+
+def _write_bp_jobs(project_id: str, project_name: str, jobs: list[Job]) -> None:
     factory = project_session_factory()
     with factory() as session:
         existing_job_ids = set(session.scalars(select(Job.id).where(Job.project_id == project_id)).all())
@@ -127,16 +136,118 @@ def initialize_project_from_bp(
         session.execute(delete(Job).where(Job.project_id == project_id))
         project = session.get(Project, project_id)
         if project is None:
-            project = Project(id=project_id, name=request.project_name, status="active")
+            project = Project(id=project_id, name=project_name, status="active")
             session.add(project)
         else:
-            project.name = request.project_name
+            project.name = project_name
             project.status = "active"
         session.flush()
         session.add_all(jobs)
         session.commit()
 
-    return _bp_initialize_response(project_id, request, matrix, jobs)
+
+BP_JOBS_TASK_SCENARIO = "bp_jobs_generate"
+
+
+def _bp_stage_progress(task_id: str):
+    store = orchestrator.task_store
+
+    def on_progress(index: int, total: int, label: str, status: str) -> None:
+        if store.is_cancelled(task_id):
+            raise orchestrator.TaskCancelled(task_id)
+        store.append_event(
+            task_id,
+            AgentEventCreate(
+                type="step_start" if status == "start" else "summary",
+                agent_id="bp_pipeline",
+                step_index=index,
+                step_label=label,
+                message=f"阶段 {index + 1}/{total}：{label}{'开始' if status == 'start' else '完成'}",
+                data={"stage": label, "stage_index": index, "stage_total": total, "stage_status": status},
+                status="processing",
+            ),
+        )
+
+    return on_progress
+
+
+def _run_bp_jobs_task(task_id: str, project_id: str, request: ProjectBpInitializeRequest) -> None:
+    store = orchestrator.task_store
+    try:
+        matrix, jobs = _build_jobs_from_bp_pipeline(
+            project_id, request, on_progress=_bp_stage_progress(task_id)
+        )
+        preview = _bp_initialize_response(project_id, request, matrix, jobs)
+        result = {
+            "preview": preview.model_dump(by_alias=True, exclude_none=True, mode="json"),
+            "matrix": matrix,
+            "request": request.model_dump(mode="json"),
+        }
+        store.complete_step(
+            task_id,
+            orchestrator.Step(agent_id="bp_pipeline", label="岗位矩阵生成", message="", kind="finalize"),
+            0,
+            result,
+            "BP 岗位矩阵生成完成，可预览并确认写入。",
+            final=True,
+        )
+        store.mark_done(task_id)
+    except orchestrator.TaskCancelled:
+        return
+    except HTTPException as exc:
+        store.set_error(task_id, "bp_pipeline", str(exc.detail))
+    except Exception as exc:  # noqa: BLE001 - surface generation failures to the task UI.
+        store.set_error(task_id, "bp_pipeline", f"BP 岗位生成失败：{exc}")
+
+
+@router.post("/{project_id}/bp-jobs/tasks", response_model=ProjectBpJobsTaskResponse)
+def start_bp_jobs_task(
+    project_id: str,
+    request: ProjectBpInitializeRequest,
+    background_tasks: BackgroundTasks,
+) -> ProjectBpJobsTaskResponse:
+    # 输入问题（材料缺失/为空等）在创建任务前同步报 4xx，避免产生注定失败的任务。
+    bp_text = _bp_text_from_request(request)
+    _validate_generation_inputs(
+        request.generation_mode,
+        bp_text,
+        _clean_text(request.project_prompt),
+        _clean_text(request.industry_research_prompt),
+    )
+    task = orchestrator.task_store.create(
+        BP_JOBS_TASK_SCENARIO,
+        f"BP 岗位生成：{request.project_name}",
+        frontend_state={"source": "bp_jobs", "project_id": project_id},
+    )
+    background_tasks.add_task(_run_bp_jobs_task, task.task_id, project_id, request)
+    return ProjectBpJobsTaskResponse(task_id=task.task_id, scenario=BP_JOBS_TASK_SCENARIO, status="processing")
+
+
+@router.post(
+    "/{project_id}/bp-jobs/apply",
+    response_model=ProjectBpInitializeResponse,
+    response_model_exclude_none=True,
+)
+def apply_bp_jobs_task(project_id: str, request: ProjectBpApplyRequest) -> ProjectBpInitializeResponse:
+    snapshot = orchestrator.task_store.snapshot(request.task_id)
+    if snapshot is None or snapshot.get("scenario_id") != BP_JOBS_TASK_SCENARIO:
+        raise HTTPException(status_code=404, detail=f"BP 生成任务不存在：{request.task_id}")
+    if (snapshot.get("frontend_state") or {}).get("project_id") != project_id:
+        raise HTTPException(status_code=409, detail="任务不属于该项目")
+    if snapshot.get("status") != "done":
+        raise HTTPException(status_code=409, detail=f"任务尚未完成（当前状态：{snapshot.get('status')}），无法写入岗位")
+    result = snapshot.get("result") or {}
+    matrix = result.get("matrix") if isinstance(result, dict) else None
+    stored_request = result.get("request") if isinstance(result, dict) else None
+    if not isinstance(matrix, dict) or not isinstance(stored_request, dict):
+        raise HTTPException(status_code=502, detail="任务结果缺少岗位矩阵，无法写入")
+    bp_request = ProjectBpInitializeRequest.model_validate(stored_request)
+    roles = matrix.get("roles")
+    if not isinstance(roles, list) or not roles:
+        raise HTTPException(status_code=502, detail="BP pipeline returned no roles")
+    jobs = [_job_from_role(project_id, role, index) for index, role in enumerate(roles)]
+    _write_bp_jobs(project_id, bp_request.project_name, jobs)
+    return _bp_initialize_response(project_id, bp_request, matrix, jobs)
 
 
 @router.post(
@@ -472,6 +583,7 @@ def _no_accepted_roles_detail(exc: BpNoAcceptedRolesError) -> str:
 def _build_jobs_from_bp_pipeline(
     project_id: str,
     request: ProjectBpInitializeRequest,
+    on_progress: Any = None,
 ) -> tuple[dict[str, Any], list[Job]]:
     bp_text = _bp_text_from_request(request)
     project_prompt = _clean_text(request.project_prompt)
@@ -492,8 +604,11 @@ def _build_jobs_from_bp_pipeline(
             call_timeout_seconds=BP_PIPELINE_CALL_TIMEOUT_SECONDS,
             max_attempts=BP_PIPELINE_MAX_ATTEMPTS,
             roles_max_tokens=BP_PIPELINE_ROLE_MAX_TOKENS,
+            on_progress=on_progress,
         )
     except HTTPException:
+        raise
+    except orchestrator.TaskCancelled:
         raise
     except BpNoAcceptedRolesError as exc:
         raise HTTPException(status_code=422, detail=_no_accepted_roles_detail(exc)) from exc

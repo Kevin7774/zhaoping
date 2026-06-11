@@ -380,6 +380,33 @@ export async function initializeProjectFromBp(
   return mapBpInitializeResponse(response);
 }
 
+export type BpJobsTaskStartResponse = {
+  taskId: string;
+  scenario: string;
+  status: string;
+};
+
+export function startBpJobsTask(projectId: string, request: ProjectBpRequest): Promise<BpJobsTaskStartResponse> {
+  return apiClient.post<BpJobsTaskStartResponse>(
+    `/projects/${encodeURIComponent(projectId)}/bp-jobs/tasks`,
+    request,
+  );
+}
+
+export async function applyBpJobsTask(projectId: string, taskId: string): Promise<ProjectBpInitializeResponse> {
+  const response = await apiClient.post<
+    Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] }
+  >(`/projects/${encodeURIComponent(projectId)}/bp-jobs/apply`, { taskId });
+  return mapBpInitializeResponse(response);
+}
+
+// 任务 result.preview 与 HTTP 响应同构（camelCase wire shape），复用同一个 mapper。
+export function mapBpJobsTaskPreview(payload: unknown): ProjectBpInitializeResponse {
+  return mapBpInitializeResponse(
+    payload as Omit<ProjectBpInitializeResponse, "jobs"> & { jobs: JobBackendResponse[] },
+  );
+}
+
 export function getProjectCandidates(projectId: string, options: ListQueryOptions = {}): Promise<Candidate[]> {
   return getProjectCandidatesPage(projectId, options).then((page) => page.candidates);
 }

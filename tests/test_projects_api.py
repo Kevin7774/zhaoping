@@ -1159,3 +1159,107 @@ def _seed_project(session: Session) -> None:
     session.flush()
     session.add_all(matches)
     session.commit()
+
+
+# --------------------------------------------------------------------------
+# BP 岗位生成任务流（异步任务 + 阶段进度 + 秒级写入）
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def isolated_task_store(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    import app.core.orchestrator as orchestrator_module
+
+    monkeypatch.setenv("TASK_DATABASE_URL", f"sqlite:///{tmp_path / 'tasks.sqlite3'}")
+    store = orchestrator_module.DBTaskStore()
+    monkeypatch.setattr(orchestrator_module, "task_store", store)
+    return store
+
+
+def test_bp_jobs_task_flow_generates_preview_then_applies_without_rerun(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp_ai_hardware.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = MessagesProjectInitLLM(role_count=3)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    start_response = client.post(
+        "/projects/project_bp_task_flow/bp-jobs/tasks",
+        json={"projectName": "BP 任务流项目", "bpFilePath": str(bp_path), "minimumRoleCount": 3},
+    )
+
+    assert start_response.status_code == 200
+    task_id = start_response.json()["taskId"]
+    assert start_response.json()["scenario"] == "bp_jobs_generate"
+
+    # TestClient 同步执行 BackgroundTasks：返回时任务已完成。
+    snapshot = isolated_task_store.snapshot(task_id)
+    assert snapshot is not None
+    assert snapshot["status"] == "done"
+    preview = (snapshot["result"] or {}).get("preview")
+    assert preview["jobCount"] == 3
+    stage_events = [
+        event for event in snapshot["audit_events"]
+        if (event.get("data") or {}).get("stage_status") in {"start", "done"}
+    ]
+    stage_labels = {(event.get("data") or {}).get("stage") for event in stage_events}
+    assert {"主张提取", "能力图谱", "缺口分析", "岗位设计", "证据审核"} <= stage_labels
+    pipeline_calls_after_generation = len(llm.messages_calls)
+
+    # 预览阶段不落库。
+    with session_factory() as session:
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_bp_task_flow")) == 0
+
+    apply_response = client.post(
+        "/projects/project_bp_task_flow/bp-jobs/apply",
+        json={"taskId": task_id},
+    )
+
+    assert apply_response.status_code == 200
+    assert apply_response.json()["jobCount"] == 3
+    # 写入直接复用任务里的矩阵，不再重跑 pipeline。
+    assert len(llm.messages_calls) == pipeline_calls_after_generation
+    with session_factory() as session:
+        assert session.get(Project, "project_bp_task_flow") is not None
+        assert session.scalar(select(func.count(Job.id)).where(Job.project_id == "project_bp_task_flow")) == 3
+
+
+def test_bp_jobs_apply_rejects_unknown_task_and_wrong_project(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    isolated_task_store,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    bp_path = tmp_path / "bp.md"
+    bp_path.write_text("汉诺云智边缘计算与 AI 综合解决方案，需要智能硬件交付团队。", encoding="utf-8")
+    llm = MessagesProjectInitLLM(role_count=3)
+    monkeypatch.setattr(projects_router, "get_router", lambda: FakeProjectInitRouter(llm), raising=False)
+    monkeypatch.setattr(projects_router, "project_session_factory", lambda: session_factory, raising=False)
+
+    missing = client.post("/projects/p1/bp-jobs/apply", json={"taskId": "task_missing"})
+    assert missing.status_code == 404
+
+    task_id = client.post(
+        "/projects/p1/bp-jobs/tasks",
+        json={"projectName": "P1", "bpFilePath": str(bp_path)},
+    ).json()["taskId"]
+    wrong_project = client.post("/projects/p2/bp-jobs/apply", json={"taskId": task_id})
+    assert wrong_project.status_code == 409
+
+
+def test_bp_jobs_task_rejects_invalid_inputs_before_creating_task(
+    client: TestClient,
+    isolated_task_store,
+) -> None:
+    response = client.post(
+        "/projects/p1/bp-jobs/tasks",
+        json={"projectName": "P1", "generationMode": "bp_file"},
+    )
+    assert response.status_code == 422

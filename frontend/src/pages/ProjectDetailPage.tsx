@@ -4,7 +4,7 @@ import { CandidateTable } from "../features/candidates/components/CandidateTable
 import type { Candidate } from "../features/candidates/types";
 import type { JobProfile, StepStatus } from "../features/jobs/types";
 import {
-  initializeProjectFromBp,
+  applyBpJobsTask,
   createOutreachDraft,
   confirmCandidateCompliance,
   createSegment,
@@ -18,7 +18,7 @@ import {
   getProjectCandidatesPage,
   getProjectJobs,
   getTask,
-  previewProjectFromBp,
+  mapBpJobsTaskPreview,
   probeSearchProviders,
   querySegmentCandidates,
   retryTask,
@@ -28,6 +28,7 @@ import {
   runWeeklyReport,
   saveWeeklyReport,
   sendOutreachDraft,
+  startBpJobsTask,
   updateCandidateSearchSchedule,
   uploadProjectMaterial,
   type CandidateSearchSchedule,
@@ -76,6 +77,7 @@ type LoadingState = "idle" | "loading" | "ready" | "error";
 
 const CANDIDATE_PAGE_SIZE = 50;
 const DEFAULT_BP_FILE_PATH = "";
+const BP_GENERATION_STAGES = ["主张提取", "能力图谱", "缺口分析", "岗位设计", "证据审核"];
 
 const generationModeLabel: Record<ProjectGenerationMode, string> = {
   bp_file: "仅 BP",
@@ -372,6 +374,9 @@ export function ProjectDetailPage() {
   const [bpBusy, setBpBusy] = useState<"preview" | "confirm" | null>(null);
   const [bpMaterialUploading, setBpMaterialUploading] = useState(false);
   const [bpError, setBpError] = useState<string | null>(null);
+  const [bpGenerationTaskId, setBpGenerationTaskId] = useState<string | null>(null);
+  const [bpGenerationStartedAt, setBpGenerationStartedAt] = useState<number | null>(null);
+  const [bpElapsedSeconds, setBpElapsedSeconds] = useState(0);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeTaskAction, setActiveTaskAction] = useState<RunProjectScenarioAction | "weekly_report" | null>(null);
@@ -402,6 +407,55 @@ export function ProjectDetailPage() {
     usedFallbackPolling,
   } = useTaskStream(activeTaskId);
   const taskStatus = taskSnapshot?.status ?? (activeTaskId ? connectionState : "idle");
+
+  const { events: bpStreamEvents, taskSnapshot: bpTaskSnapshot } = useTaskStream(bpGenerationTaskId);
+
+  // 五阶段进度：pending -> active -> done，由任务事件流驱动。
+  const bpStageProgress = useMemo(() => {
+    const progress = BP_GENERATION_STAGES.map((label) => ({ label, status: "pending" as "pending" | "active" | "done" }));
+    for (const event of bpStreamEvents) {
+      const data = (event.data ?? {}) as { stage?: string; stage_status?: string };
+      if (!data.stage || !data.stage_status) continue;
+      const entry = progress.find((item) => item.label === data.stage);
+      if (!entry) continue;
+      if (data.stage_status === "done") entry.status = "done";
+      else if (data.stage_status === "start" && entry.status !== "done") entry.status = "active";
+    }
+    return progress;
+  }, [bpStreamEvents]);
+
+  // 生成任务到达终态：done -> 渲染预览；error/cancelled -> 报错并复位。
+  useEffect(() => {
+    if (!bpGenerationTaskId || !bpTaskSnapshot || bpTaskSnapshot.task_id !== bpGenerationTaskId) return;
+    if (bpTaskSnapshot.status === "done") {
+      const result = bpTaskSnapshot.result as { preview?: unknown } | null;
+      if (result?.preview) {
+        const preview = mapBpJobsTaskPreview(result.preview);
+        setBpPreview(preview);
+        setToast(`已生成 ${preview.jobCount} 个岗位的矩阵预览，确认后才会覆盖当前岗位。`);
+      } else {
+        setBpError("生成任务已完成，但缺少预览结果，请重试。");
+      }
+      setBpBusy(null);
+    } else if (bpTaskSnapshot.status === "error") {
+      setBpError(bpTaskSnapshot.error || "岗位矩阵生成失败");
+      setBpBusy(null);
+      setBpGenerationTaskId(null);
+    } else if (bpTaskSnapshot.status === "cancelled") {
+      setBpError("岗位矩阵生成任务已取消。");
+      setBpBusy(null);
+      setBpGenerationTaskId(null);
+    }
+  }, [bpGenerationTaskId, bpTaskSnapshot]);
+
+  // 生成期间的耗时计秒。
+  useEffect(() => {
+    if (bpBusy !== "preview" || !bpGenerationStartedAt) return;
+    const timer = window.setInterval(() => {
+      setBpElapsedSeconds(Math.floor((Date.now() - bpGenerationStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [bpBusy, bpGenerationStartedAt]);
 
   useEffect(() => {
     rememberActiveProjectId(projectId);
@@ -709,14 +763,25 @@ export function ProjectDetailPage() {
     }
     setBpBusy("preview");
     setBpError(null);
+    setBpPreview(null);
+    setBpElapsedSeconds(0);
     try {
-      const preview = await previewProjectFromBp(projectId, bpRequest());
-      setBpPreview(preview);
-      setToast(`已预览 ${preview.jobCount} 个岗位矩阵，确认后才会覆盖当前岗位。`);
+      const started = await startBpJobsTask(projectId, bpRequest());
+      setBpGenerationTaskId(started.taskId);
+      setBpGenerationStartedAt(Date.now());
+      setToast("岗位生成任务已启动，下方实时显示五阶段进度。");
     } catch (error) {
-      setBpError(error instanceof Error ? error.message : "岗位矩阵预览失败");
-    } finally {
+      setBpError(error instanceof Error ? error.message : "岗位矩阵生成任务启动失败");
       setBpBusy(null);
+    }
+  };
+
+  const handleCancelBpGeneration = async () => {
+    if (!bpGenerationTaskId) return;
+    try {
+      await cancelTask(bpGenerationTaskId);
+    } catch (error) {
+      setBpError(error instanceof Error ? error.message : "取消生成任务失败");
     }
   };
 
@@ -746,18 +811,19 @@ export function ProjectDetailPage() {
   };
 
   const handleConfirmBpJobs = async () => {
-    const validationError = validateBpGenerationRequest();
-    if (validationError) {
-      setBpError(validationError);
+    if (!bpGenerationTaskId || !bpPreview) {
+      setBpError("请先生成岗位矩阵预览，确认后再写入。");
       return;
     }
-    const roleCount = bpPreview?.jobCount ?? bpMinimumRoleCount;
-    const confirmed = window.confirm(`将覆盖项目 ${projectId} 当前岗位，并清空这些岗位的候选人关联。确认写入 ${roleCount} 个岗位？`);
+    const confirmed = window.confirm(
+      `将覆盖项目 ${projectId} 当前岗位，并清空这些岗位的候选人关联。确认写入 ${bpPreview.jobCount} 个岗位？`,
+    );
     if (!confirmed) return;
     setBpBusy("confirm");
     setBpError(null);
     try {
-      const initialized = await initializeProjectFromBp(projectId, bpRequest());
+      // 直接复用生成任务里的岗位矩阵，秒级写入，不再重跑 4 分钟 pipeline。
+      const initialized = await applyBpJobsTask(projectId, bpGenerationTaskId);
       setBpPreview(initialized);
       await loadProjectData(filterCriteria);
       setToast(`已写入 ${initialized.jobCount} 个岗位。`);
@@ -1328,6 +1394,51 @@ export function ProjectDetailPage() {
             </div>
           </div>
         </div>
+        {bpBusy === "preview" ? (
+          <div className="mt-3 rounded-[12px] border border-[#DBEAFE] bg-[#EFF6FF] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[13px] font-medium text-[#1D4ED8]">
+                岗位矩阵生成中 · 已用时 {Math.floor(bpElapsedSeconds / 60)}:{String(bpElapsedSeconds % 60).padStart(2, "0")}
+                （全程约 4-5 分钟，可离开当前卡片，完成后自动显示预览）
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelBpGeneration}
+                className="h-7 rounded-[8px] border border-[#BFDBFE] bg-white px-2.5 text-[12px] font-medium text-[#1D4ED8] transition hover:bg-[#F0F7FF]"
+              >
+                取消生成
+              </button>
+            </div>
+            <ol className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {bpStageProgress.map((stage, index) => (
+                <li key={stage.label} className="flex items-center gap-1.5 text-[12px]">
+                  <span
+                    className={
+                      stage.status === "done"
+                        ? "flex h-4 w-4 items-center justify-center rounded-full bg-[#16A34A] text-[10px] text-white"
+                        : stage.status === "active"
+                          ? "flex h-4 w-4 animate-pulse items-center justify-center rounded-full bg-[#2563EB] text-[10px] text-white"
+                          : "flex h-4 w-4 items-center justify-center rounded-full bg-[#D1D5DB] text-[10px] text-white"
+                    }
+                  >
+                    {stage.status === "done" ? "✓" : index + 1}
+                  </span>
+                  <span
+                    className={
+                      stage.status === "active"
+                        ? "font-medium text-[#1D4ED8]"
+                        : stage.status === "done"
+                          ? "text-[#16A34A]"
+                          : "text-[#9CA3AF]"
+                    }
+                  >
+                    {stage.label}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
         {bpError ? <div className="mt-3 text-[13px] leading-5 text-[#EF4444]">{bpError}</div> : null}
         {bpPreview ? (
           <div className="mt-4 rounded-[12px] bg-[#F9FAFB] p-4">

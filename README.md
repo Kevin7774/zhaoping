@@ -115,7 +115,7 @@ opencli weixin search ...
 | --- | --- | --- | --- |
 | 系统状态与集成 | `GET /health`、`GET /integrations/status`、`POST /integrations/env` | system | 健康检查、provider 状态、安全保存 allowlist 环境变量。 |
 | 项目工作台 | `GET/POST /projects`、`GET/PATCH/DELETE /projects/{project_id}`、`GET /projects/{project_id}/jobs`、`GET /projects/{project_id}/candidates`、`GET /projects/{project_id}/candidates/unique` | productized | 项目、岗位、候选人和统计。 |
-| BP 岗位生成 | `POST /projects/{project_id}/materials/upload`、`POST /projects/{project_id}/preview-from-bp`、`POST /projects/{project_id}/initialize-from-bp` | productized | 上传材料、预览岗位矩阵、写入岗位。 |
+| BP 岗位生成 | `POST /projects/{project_id}/materials/upload`、`POST /projects/{project_id}/bp-jobs/tasks`、`POST /projects/{project_id}/bp-jobs/apply` | productized | 上传材料；异步生成岗位矩阵（任务事件流带五阶段进度，前端实时显示）；从已完成任务秒级写入岗位（不重跑 pipeline）。同步端点 `preview-from-bp` / `initialize-from-bp` 保留给脚本调用。 |
 | 候选人入库与匹配 | `POST /projects/{project_id}/jobs/{job_id}/upload-resumes`、`POST /jobs/match` | productized | 简历解析、向量入库、岗位匹配。 |
 | 候选人搜索计划 | `GET /projects/{project_id}/candidate-search-schedules`、`PUT /projects/{project_id}/jobs/{job_id}/candidate-search-schedule` | productized | 保存岗位级自动搜候选人计划，调度器触发场景 B。 |
 | 搜索情报 watchlist | `POST /search/watchlist/run`、`GET /search/archive/recent`、`GET /search/archive/diff` | productized | watchlist 运行、归档读取与 diff。 |

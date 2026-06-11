@@ -45,6 +45,16 @@ class ProjectBpInitializeRequest(CamelModel):
     minimum_role_count: int = Field(default=1, ge=1, le=64)
 
 
+class ProjectBpJobsTaskResponse(CamelModel):
+    task_id: str
+    scenario: str
+    status: str
+
+
+class ProjectBpApplyRequest(CamelModel):
+    task_id: str = Field(min_length=1, max_length=64)
+
+
 class ProjectMaterialUploadResponse(CamelModel):
     file_name: str = Field(min_length=1, max_length=160)
     bp_file_path: str = Field(min_length=1, max_length=512)

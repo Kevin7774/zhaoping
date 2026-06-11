@@ -104,6 +104,36 @@ function integrationsPayload(overrides: Record<string, string> = {}) {
   };
 }
 
+const bpPreviewWirePayload = {
+  projectId: "project_2026_ai_team",
+  projectName: "真实后端项目",
+  promptName: "bp_pipeline_v1",
+  jobCount: 14,
+  jobs: [
+    {
+      id: "job_edge_ai_architect",
+      projectId: "project_2026_ai_team",
+      title: "边缘 AI 架构师",
+      headcount: 1,
+      status: "sourcing",
+      pipelineStatus: "sourcing",
+      candidateCount: 0,
+      averageMatchScore: 0,
+    },
+  ],
+  industryReading: "边缘 AI 项目",
+  technicalAssumptions: ["需要云边协同"],
+  coverageGaps: [],
+};
+
+const bpGenerationDoneSnapshot = {
+  task_id: "task_bp_gen",
+  scenario_id: "bp_jobs_generate",
+  status: "done",
+  result: { preview: bpPreviewWirePayload },
+  audit_events: [],
+};
+
 class MockEventSource {
   static instances: MockEventSource[] = [];
 
@@ -180,51 +210,11 @@ describe("ProjectDetailPage backend hardening", () => {
           confidence: 0.65,
         });
       }
-      if (url === "/api/projects/project_2026_ai_team/preview-from-bp") {
-        return jsonResponse({
-          projectId: "project_2026_ai_team",
-          projectName: "真实后端项目",
-          promptName: "bp_pipeline_v1",
-          jobCount: 14,
-          jobs: [
-            {
-              id: "job_edge_ai_architect",
-              projectId: "project_2026_ai_team",
-              title: "边缘 AI 架构师",
-              headcount: 1,
-              status: "sourcing",
-              pipelineStatus: "sourcing",
-              candidateCount: 0,
-              averageMatchScore: 0,
-            },
-          ],
-          industryReading: "边缘 AI 项目",
-          technicalAssumptions: ["需要云边协同"],
-          coverageGaps: [],
-        });
+      if (url === "/api/projects/project_2026_ai_team/bp-jobs/tasks") {
+        return jsonResponse({ taskId: "task_bp_gen", scenario: "bp_jobs_generate", status: "processing" });
       }
-      if (url === "/api/projects/project_2026_ai_team/initialize-from-bp") {
-        return jsonResponse({
-          projectId: "project_2026_ai_team",
-          projectName: "真实后端项目",
-          promptName: "bp_pipeline_v1",
-          jobCount: 14,
-          jobs: [
-            {
-              id: "job_edge_ai_architect",
-              projectId: "project_2026_ai_team",
-              title: "边缘 AI 架构师",
-              headcount: 1,
-              status: "sourcing",
-              pipelineStatus: "sourcing",
-              candidateCount: 0,
-              averageMatchScore: 0,
-            },
-          ],
-          industryReading: "边缘 AI 项目",
-          technicalAssumptions: ["需要云边协同"],
-          coverageGaps: [],
-        });
+      if (url === "/api/projects/project_2026_ai_team/bp-jobs/apply") {
+        return jsonResponse(bpPreviewWirePayload);
       }
       if (url === "/api/projects/project_2026_ai_team/candidate-search-schedules") {
         if (options.scheduleResponse !== undefined) return jsonResponse(options.scheduleResponse);
@@ -370,7 +360,7 @@ describe("ProjectDetailPage backend hardening", () => {
   });
 
   it("previews BP generated roles before confirming overwrite", async () => {
-    mockBackend();
+    mockBackend({ taskSnapshots: { task_bp_gen: bpGenerationDoneSnapshot } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     renderProjectPage();
@@ -378,19 +368,26 @@ describe("ProjectDetailPage backend hardening", () => {
     expect(await screen.findByRole("heading", { name: "真实后端项目" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/project_2026_ai_team/bp-jobs/tasks",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
     expect(await screen.findByText("边缘 AI 架构师")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "确认覆盖" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/projects/project_2026_ai_team/initialize-from-bp",
-        expect.objectContaining({ method: "POST" }),
+      const applyCall = fetchMock.mock.calls.find(
+        ([url]) => url === "/api/projects/project_2026_ai_team/bp-jobs/apply",
       );
+      expect(applyCall).toBeTruthy();
+      expect(JSON.parse(String(applyCall?.[1]?.body))).toMatchObject({ taskId: "task_bp_gen" });
     });
   });
 
   it("sends chat prompt context when generating project roles", async () => {
-    mockBackend();
+    mockBackend({ taskSnapshots: { task_bp_gen: bpGenerationDoneSnapshot } });
 
     renderProjectPage();
 
@@ -405,7 +402,7 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     await waitFor(() => {
-      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
+      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/bp-jobs/tasks");
       expect(previewCall).toBeTruthy();
       expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
         generationMode: "bp_plus_prompt",
@@ -416,7 +413,7 @@ describe("ProjectDetailPage backend hardening", () => {
   });
 
   it("uses a chat composer for role generation materials and prompts", async () => {
-    mockBackend();
+    mockBackend({ taskSnapshots: { task_bp_gen: bpGenerationDoneSnapshot } });
 
     renderProjectPage();
 
@@ -436,7 +433,7 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     await waitFor(() => {
-      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
+      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/bp-jobs/tasks");
       expect(previewCall).toBeTruthy();
       expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
         generationMode: "bp_plus_prompt",
@@ -446,7 +443,7 @@ describe("ProjectDetailPage backend hardening", () => {
   });
 
   it("uploads project material and uses the returned path for role generation", async () => {
-    mockBackend();
+    mockBackend({ taskSnapshots: { task_bp_gen: bpGenerationDoneSnapshot } });
 
     renderProjectPage();
 
@@ -467,7 +464,7 @@ describe("ProjectDetailPage backend hardening", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成岗位矩阵" }));
 
     await waitFor(() => {
-      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/preview-from-bp");
+      const previewCall = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_2026_ai_team/bp-jobs/tasks");
       expect(previewCall).toBeTruthy();
       expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
         bpFilePath: "data/input/projects/uploaded-bp.md",

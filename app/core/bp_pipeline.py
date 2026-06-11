@@ -21,7 +21,7 @@ import json
 import queue
 import re
 import threading
-from typing import Any
+from typing import Any, Callable
 
 from app.core.prompt_config import load_system_prompt
 
@@ -65,6 +65,22 @@ class BpNoAcceptedRolesError(BpStageOutputError):
         )
 
 
+BP_STAGE_LABELS = ["主张提取", "能力图谱", "缺口分析", "岗位设计", "证据审核"]
+
+
+def _notify_stage(
+    on_progress: Callable[[int, int, str, str], None] | None,
+    stage_index: int,
+    status: str,
+) -> None:
+    if on_progress is None:
+        return
+    try:
+        on_progress(stage_index, len(BP_STAGE_LABELS), BP_STAGE_LABELS[stage_index], status)
+    except Exception:  # noqa: BLE001 - progress reporting must never break the pipeline.
+        pass
+
+
 def run_bp_pipeline(
     llm: Any,
     *,
@@ -74,12 +90,14 @@ def run_bp_pipeline(
     max_attempts: int = 3,
     claims_max_tokens: int = 5000,
     roles_max_tokens: int = 12000,
+    on_progress: Callable[[int, int, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """Run all five stages and return a matrix compatible with the BP initialize response."""
 
     source_text = "\n\n".join(text for _, text in source_sections)
     materials = "\n\n".join(f"{label}:\n{text}" for label, text in source_sections)
 
+    _notify_stage(on_progress, 0, "start")
     claims = _run_stage(
         llm,
         CLAIMS_PROMPT,
@@ -89,6 +107,8 @@ def run_bp_pipeline(
         max_attempts=max_attempts,
         max_tokens=claims_max_tokens,
     )
+    _notify_stage(on_progress, 0, "done")
+    _notify_stage(on_progress, 1, "start")
     capability_graph = _run_stage(
         llm,
         CAPABILITY_PROMPT,
@@ -98,6 +118,8 @@ def run_bp_pipeline(
         max_attempts=max_attempts,
         max_tokens=claims_max_tokens,
     )
+    _notify_stage(on_progress, 1, "done")
+    _notify_stage(on_progress, 2, "start")
     gap_analysis = _run_stage(
         llm,
         GAP_PROMPT,
@@ -110,6 +132,7 @@ def run_bp_pipeline(
         max_attempts=max_attempts,
         max_tokens=claims_max_tokens,
     )
+    _notify_stage(on_progress, 2, "done")
 
     role_inputs = [
         ("第一阶段输出", json.dumps(claims, ensure_ascii=False)),
@@ -120,6 +143,7 @@ def run_bp_pipeline(
         ("原始输入材料（节选）", materials[:6000]),
         ("最少岗位数", str(minimum_role_count)),
     ]
+    _notify_stage(on_progress, 3, "start")
     design = _run_stage(
         llm,
         ROLE_PROMPT,
@@ -129,6 +153,8 @@ def run_bp_pipeline(
         max_attempts=max_attempts,
         max_tokens=roles_max_tokens,
     )
+    _notify_stage(on_progress, 3, "done")
+    _notify_stage(on_progress, 4, "start")
     accepted, rejected = critic_gate(design.get("roles") or [], source_text=source_text)
 
     if len(accepted) < minimum_role_count:
@@ -152,6 +178,7 @@ def run_bp_pipeline(
 
     if not accepted:
         raise BpNoAcceptedRolesError(rejected)
+    _notify_stage(on_progress, 4, "done")
 
     # minimum_role_count is a soft target: accepted roles are returned with a
     # coverage gap note instead of discarding several minutes of pipeline work.
